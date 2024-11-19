@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ant Colony Simulation</title>
+    <!-- <link rel="stylesheet" href="../shared.css"> -->
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000000;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #antCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 100;
+            min-width: 250px;
+        }
+
+        #startBtn {
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+
+        #startBtn:hover {
+            background: #45a049;
+        }
+
+        #stats {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            min-width: 200px;
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 1000;
+            pointer-events: all;
+        }
+
+        .colony-stats {
+    cursor: pointer;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    background-color: rgba(0, 0, 0, 0.7);
+    transition: background-color 0.2s;
+    position: relative;  /* Add this */
+}
+
+        .colony-stats:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Replace the :hover::after with a permanent element
+.colony-stats .view-logs-hint {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    opacity: 0;
+    font-style: italic;
+    transition: opacity 0.2s;
+    pointer-events: none;  /* Prevent it from interfering with hover */
+/* } */
+
+        .colony-stats:hover .view-logs-hint {
+            opacity: 0.7;
+        }
+
+        .view-logs-hint {
+            text-align: right;
+            font-size: 12px;
+            font-style: italic;
+            opacity: 0;
+            transition: opacity 0.2s;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.7);
+            text-align: center;
+        }
+
+
+        .colony-header {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 4px;
+        }
+
+        .stat-row {
+            margin: 4px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* .extinct-warning {
+            color: #ff4444;
+            font-weight: bold;
+            margin-top: 8px;
+            text-align: center;
+        } */
+
+        .extinct-warning {
+            color: #ff4444;
+            font-weight: bold;
+            margin-top: 8px;
+            text-align: center;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            color: white;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            line-height: 1.4;
+        }
+
+        .settings {
+            margin-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            padding-top: 15px;
+        }
+
+        .setting-group {
+            margin-bottom: 15px;
+        }
+
+        .setting-group label {
+            display: block;
+            color: white;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .sub-setting {
+            margin-left: 10px;
+            margin-bottom: 5px;
+        }
+
+        .sub-setting label {
+            display: inline-block;
+            width: 80px;
+        }
+
+        input[type="number"] {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: 60px;
+        }
+
+        #resetBtn {
+            padding: 8px 16px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        #resetBtn:hover {
+            background: #d32f2f;
+        }
+
+        .speed-controls {
+            margin: 10px 0;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .speed-controls label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .speed-controls input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        #speedDisplay {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .sub-setting input[type="checkbox"] {
+            margin-left: 10px;
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-content {
+            background-color: rgba(30, 30, 30, 0.95);
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80vh;
+            position: relative;
+            color: white;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+        }
+
+        .modal-logs {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: white;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="antCanvas"></canvas>
+        <div class="controls">
+            <button id="startBtn">Start</button>
+            <div class="speed-controls">
+                <label for="timeSpeed">Simulation Speed:</label>
+                <input type="range" id="timeSpeed" min="0.1" max="5" step="0.1" value="1">
+                <span id="speedDisplay">1x</span>
+            </div>
+            <div class="settings">
+                <div class="setting-group">
+                    <label for="colonyCount">Number of Colonies:</label>
+                    <input type="number" id="colonyCount" min="1" max="10" value="3">
+                </div>
+                <div class="setting-group">
+                    <label for="startingFood">Starting Food:</label>
+                    <input type="number" id="startingFood" min="100" max="1000" value="200">
+                </div>
+                <div class="setting-group">
+                    <label>Starting Population:</label>
+                    <div class="sub-setting">
+                        <label for="scoutCount">Scouts:</label>
+                        <input type="number" id="scoutCount" min="1" max="50" value="8">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="foragerCount">Foragers:</label>
+                        <input type="number" id="foragerCount" min="1" max="50" value="25">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="warriorCount">Warriors:</label>
+                        <input type="number" id="warriorCount" min="1" max="50" value="12">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Food Sources:</label>
+                    <div class="sub-setting">
+                        <label for="foodCount">Count:</label>
+                        <input type="number" id="foodCount" min="1" max="30" value="8">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="foodAmount">Amount:</label>
+                        <input type="number" id="foodAmount" min="50" max="500" value="150">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="foodSpawnRate">Spawn Rate:</label>
+                        <input type="number" id="foodSpawnRate" min="100" max="1000" value="300">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="maxFoodSources">Max Sources:</label>
+                        <input type="number" id="maxFoodSources" min="5" max="50" value="12">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Display Settings:</label>
+                    <div class="sub-setting">
+                        <label for="colonyColoredPheromones">Colony-colored Pheromones:</label>
+                        <input type="checkbox" id="colonyColoredPheromones">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Enemy Settings:</label>
+                    <div class="sub-setting">
+                        <label for="enableEnemies">Enable Enemies:</label>
+                        <input type="checkbox" id="enableEnemies" checked>
+                    </div>
+                    <div class="sub-setting">
+                        <label for="enemySpawnRate">Spawn Rate:</label>
+                        <input type="number" id="enemySpawnRate" min="100" max="1000" value="300">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="enemySpeed">Speed:</label>
+                        <input type="number" id="enemySpeed" min="0.5" max="3.0" value="1.5" step="0.1">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="enemyDamage">Damage:</label>
+                        <input type="number" id="enemyDamage" min="5" max="50" value="15">
+                    </div>
+                    <div class="sub-setting">
+                        <label for="enemyHealth">Health:</label>
+                        <input type="number" id="enemyHealth" min="40" max="200" value="80">
+                    </div>
+                </div>
+                <button id="resetBtn">Reset Simulation</button>
+            </div>
+        </div>
+    </div>
+    <div id="stats"></div>
+    <div id="log" class="log-container"></div>
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Colony Logs</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div id="modalLogs" class="modal-logs"></div>
+        </div>
+    </div>
+    <script src="../header.js"></script>
+    <script src="ant.js"></script>
+    <script src="colony.js"></script>
+    <script src="pheromone.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>

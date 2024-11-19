@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Color Waves</title>
+    <link rel="stylesheet" href="../shared.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+        }
+        canvas {
+            display: block;
+        }
+        #controlPanel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        .control-group label {
+            display: inline-block;
+            width: 120px;
+            margin-right: 10px;
+        }
+        input[type="range"] {
+            width: 150px;
+        }
+        .value-display {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="controlPanel">
+        <!-- Main Controls Group -->
+        <div class="control-section">
+            <h3>Main Controls</h3>
+            <div class="control-group" title="Number of particles to simulate">
+                <label>Particles:</label>
+                <input type="range" id="particleCount" min="50" max="300" value="150">
+                <span class="value-display">150</span>
+            </div>
+            <div class="control-group" title="Maximum number of particles allowed">
+                <label>Max Particles:</label>
+                <input type="range" id="maxParticles" min="100" max="1000" step="50" value="300">
+                <span class="value-display">300</span>
+            </div>
+            <div class="control-group" title="Toggle particle visibility">
+                <label>Show Particles:</label>
+                <input type="checkbox" id="showParticles" checked>
+            </div>
+        </div>
+
+        <!-- Animation Controls -->
+        <div class="control-section">
+            <h3>Animation</h3>
+            <div class="control-group" title="Speed of wave motion">
+                <label>Wave Speed:</label>
+                <input type="range" id="waveSpeed" min="0.0001" max="0.005" step="0.0001" value="0.002">
+                <span class="value-display">0.002</span>
+            </div>
+            <div class="control-group" title="Speed of color changes">
+                <label>Color Speed:</label>
+                <input type="range" id="colorSpeed" min="0.0001" max="0.005" step="0.0001" value="0.001">
+                <span class="value-display">0.001</span>
+            </div>
+            <div class="control-group" title="Speed of background fade">
+                <label>Fade Speed:</label>
+                <input type="range" id="fadeSpeed" min="0.01" max="0.2" step="0.01" value="0.08">
+                <span class="value-display">0.08</span>
+            </div>
+        </div>
+
+        <!-- Visual Effects -->
+        <div class="control-section">
+            <h3>Visual Effects</h3>
+            <div class="control-group" title="Enable particle glow effect">
+                <label>Glow Effect:</label>
+                <input type="checkbox" id="glowEffect">
+            </div>
+            <div class="control-group" title="Intensity of the glow effect (higher values impact performance)">
+                <label>Glow Strength:</label>
+                <input type="range" id="glowStrength" min="1" max="10" value="5">
+                <span class="value-display">5</span>
+            </div>
+            <div class="control-group" title="Enable size pulsing effect">
+                <label>Pulse Effect:</label>
+                <input type="checkbox" id="pulseEffect">
+            </div>
+            <div class="control-group" title="Enable particle trails">
+                <label>Trails:</label>
+                <input type="checkbox" id="showTrails">
+            </div>
+            <div class="control-group" title="Length of particle trails">
+                <label>Trail Length:</label>
+                <input type="range" id="trailLength" min="5" max="50" value="20">
+                <span class="value-display">20</span>
+            </div>
+        </div>
+
+        <!-- Particle Properties -->
+        <div class="control-section">
+            <h3>Particle Properties</h3>
+            <div class="control-group" title="Maximum size of particles">
+                <label>Max Size:</label>
+                <input type="range" id="maxParticleSize" min="4" max="20" value="10">
+                <span class="value-display">10</span>
+            </div>
+            <div class="control-group" title="Shape of the particles">
+                <label>Shape:</label>
+                <select id="particleShape">
+                    <option value="circle">Circle</option>
+                    <option value="square">Square</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="star">Star</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Behavior Controls -->
+        <div class="control-section">
+            <h3>Behavior</h3>
+            <div class="control-group" title="Movement pattern of particles">
+                <label>Behavior:</label>
+                <select id="behavior">
+                    <option value="default">Default</option>
+                    <option value="bounce">Bounce</option>
+                    <option value="orbit">Orbit</option>
+                </select>
+            </div>
+            <div class="control-group" title="Special effects for particle movement">
+                <label>Effects:</label>
+                <select id="effectType">
+                    <option value="none">None</option>
+                    <option value="fountain">Fountain</option>
+                    <option value="vortex">Vortex</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Pattern Controls -->
+        <div class="control-section">
+            <h3>Patterns</h3>
+            <div class="control-group" title="Initial arrangement of particles">
+                <label>Pattern:</label>
+                <select id="patternType">
+                    <option value="random">Random</option>
+                    <option value="spiral">Spiral</option>
+                    <option value="grid">Grid</option>
+                    <option value="mandala">Mandala</option>
+                </select>
+            </div>
+            <div class="control-group" title="Scale of the pattern">
+                <label>Pattern Scale:</label>
+                <input type="range" id="patternScale" min="0.5" max="3" step="0.1" value="1.0">
+                <span class="value-display">1.0</span>
+            </div>
+        </div>
+
+        <!-- Interaction Controls -->
+        <div class="control-section">
+            <h3>Interaction</h3>
+            <div class="control-group" title="Enable particle connections">
+                <label>Connections:</label>
+                <input type="checkbox" id="showConnections" checked>
+            </div>
+            <div class="control-group" title="Maximum distance for particle connections">
+                <label>Connect Dist:</label>
+                <input type="range" id="connectionDistance" min="50" max="200" value="100">
+                <span class="value-display">100</span>
+            </div>
+            <div class="control-group" title="Radius for neighbor detection">
+                <label>Neighbor Radius:</label>
+                <input type="range" id="neighborRadius" min="30" max="120" value="60">
+                <span class="value-display">60</span>
+            </div>
+            <div class="control-group" title="Enable flocking behavior">
+                <label>Flocking:</label>
+                <input type="checkbox" id="flockingEnabled">
+            </div>
+            <div class="control-group" title="Strength of flocking behavior">
+                <label>Flock Force:</label>
+                <input type="range" id="flockingForce" min="0.001" max="0.1" step="0.001" value="0.02">
+                <span class="value-display">0.02</span>
+            </div>
+        </div>
+
+        <!-- Presets and Stats -->
+        <div class="control-section">
+            <h3>Presets</h3>
+            <div class="control-group" title="Pre-configured settings">
+                <select id="presets">
+                    <option value="custom">Custom</option>
+                    <option value="calm">Calm</option>
+                    <option value="energetic">Energetic</option>
+                    <option value="cosmic">Cosmic</option>
+                    <option value="minimal">Minimal</option>
+                    <option value="chaos">Chaos</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <div id="stats">FPS: 0 | Particles: 0</div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="control-section">
+            <div class="button-group">
+                <button id="pauseButton" title="Pause/Resume animation">Pause</button>
+                <button id="clearCanvas" title="Clear all particles">Clear</button>
+                <div class="control-group" title="Enable emergency mode">
+                    <label>Emergency:</label>
+                    <input type="checkbox" id="emergencyEnabled">
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="patterns.js"></script>
+    <script src="app.js"></script>
+    <script src="../header.js"></script>
+</body>
+</html>
