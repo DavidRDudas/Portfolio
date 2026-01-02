@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naive Cryptographic Transformer</title>
+    <!-- <link rel="stylesheet" href="../shared.css"> -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Naive Cryptographic Transformer</h1>
+            <div class="theme-toggle">
+                <i class="fas fa-moon"></i>
+                <label class="switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider round"></span>
+                </label>
+                <i class="fas fa-sun"></i>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="encode">
+                <i class="fas fa-lock"></i> Encode
+            </button>
+            <button class="tab-btn" data-tab="decode">
+                <i class="fas fa-unlock"></i> Decode
+            </button>
+            <button class="tab-btn" data-tab="settings">
+                <i class="fas fa-cog"></i> Settings
+            </button>
+        </div>
+
+        <div class="tab-content">
+            <div id="encode" class="tab-pane active">
+                <div class="input-group">
+                    <label for="inputText">Plain Text</label>
+                    <div class="textarea-wrapper">
+                        <textarea id="inputText" placeholder="Enter text to encode..."></textarea>
+                        <div class="char-count">Characters: <span id="encodeCharCount">0</span></div>
+                    </div>
+                    <div class="button-group">
+                        <button onclick="encodeText()" class="primary-btn">
+                            <i class="fas fa-lock"></i> Encode
+                        </button>
+                        <button onclick="clearFields('encode')" class="secondary-btn">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="output-group">
+                    <div class="result-field">
+                        <label>Encoded Text</label>
+                        <div class="copy-field">
+                            <textarea id="encodedOutput" readonly></textarea>
+                            <button onclick="copyToClipboard('encodedOutput')" class="copy-btn">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="gridContainer" class="grid-container"></div>
+                <div id="gridStatus" class="grid-status"></div>
+            </div>
+
+            <div id="decode" class="tab-pane">
+                <div class="input-group">
+                    <label for="encodedInput">Encoded Text</label>
+                    <div class="textarea-wrapper">
+                        <textarea id="encodedInput" placeholder="Paste encoded text here..."></textarea>
+                        <div class="char-count">Characters: <span id="decodeCharCount">0</span></div>
+                    </div>
+                    <div class="button-group">
+                        <button onclick="decodeText()" class="primary-btn">
+                            <i class="fas fa-unlock"></i> Decode
+                        </button>
+                        <button onclick="clearFields('decode')" class="secondary-btn">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="output-group">
+                    <div class="result-field">
+                        <label>Decoded Text</label>
+                        <div class="copy-field">
+                            <textarea id="decodedOutput" readonly></textarea>
+                            <button onclick="copyToClipboard('decodedOutput')" class="copy-btn">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="gridContainer2" class="grid-container"></div>
+                <div id="gridStatus2" class="grid-status"></div>
+            </div>
+
+            <div id="settings" class="tab-pane">
+                <div class="settings-group">
+                    <div class="grid-settings">
+                        <h3>Grid Settings</h3>
+                        <div class="setting-control">
+                            <label for="gridSize">Grid Size:</label>
+                            <input type="range" id="gridSize" min="16" max="64" value="32" step="8">
+                            <span id="gridSizeValue">32 x 32</span>
+                        </div>
+                        <div class="setting-control">
+                            <label for="cellSize">Cell Size:</label>
+                            <input type="range" id="cellSize" min="15" max="40" value="25" step="5">
+                            <span id="cellSizeValue">25px</span>
+                        </div>
+                        <div class="setting-control">
+                            <label for="gridGap">Grid Gap:</label>
+                            <input type="range" id="gridGap" min="1" max="10" value="3" step="1">
+                            <span id="gridGapValue">3px</span>
+                        </div>
+                        <button onclick="applyGridSettings()" class="primary-btn">
+                            <i class="fas fa-save"></i> Apply Changes
+                        </button>
+                    </div>
+                    <div class="debug-section">
+                        <div class="checkbox-group">
+                            <label>
+                                <input type="checkbox" id="showVisualization">
+                                Show Encryption Process
+                            </label>
+                        </div>
+                        <label for="debugOutput">Debug Output:</label>
+                        <textarea id="debugOutput" readonly class="debug-output"></textarea>
+                    </div>
+                    <div class="setting-control">
+                        <input type="checkbox" id="includeGridData">
+                        <label for="includeGridData">Include grid visualization data</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toast"></div>
+    <script src="script.js"></script>
+    <script src="../header.js"></script>
+</body>
+</html>

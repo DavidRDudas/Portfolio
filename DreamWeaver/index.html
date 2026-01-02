@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dream Weaver</title>
+    <link rel="stylesheet" href="../shared.css">
+    <style>
+
+.settings-panel {
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 1rem;
+    position: relative;
+}
+
+.settings-toggle {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.settings-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.settings-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.9);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-top: 0.5rem;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.settings-content.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+}
+
+.settings-content h3 {
+    margin: 0 0 1rem 0;
+    color: #fff;
+    font-size: 1.1rem;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #fff;
+    cursor: pointer;
+}
+
+.setting-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #00ff87;
+}
+
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+            margin: auto;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin: 0;
+            background: linear-gradient(45deg, #00ff87, #60efff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-align: center;
+        }
+
+        .description {
+            text-align: center;
+            color: #a0a0a0;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        #input {
+            width: 100%;
+            max-width: 600px;
+            height: 100px;
+            padding: 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 1rem;
+            resize: vertical;
+            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+        }
+
+        #input:focus {
+            outline: none;
+            border-color: rgba(0, 255, 135, 0.5);
+            box-shadow: 0 0 20px rgba(0, 255, 135, 0.2);
+        }
+
+        #canvas {
+            width: 100%;
+            max-width: 600px;
+            height: 400px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(4px);
+            transition: all 0.3s ease;
+        }
+
+        #canvas:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .canvas-container {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+}
+
+/* Add these styles */
+.loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    min-width: 200px;
+}
+
+.loading-text {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.loading-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.loading-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #00ff87, #60efff);
+    transition: width 0.3s ease;
+}
+
+/* .loading::after {
+    content: '';
+    display: block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #fff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+} */
+
+/* @keyframes spin {
+    to { transform: rotate(360deg); }
+} */
+
+.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .container {
+                gap: 1.5rem;
+            }
+
+            #input, #canvas {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dream Weaver</h1>
+        <p class="description">
+            Transform your dreams into unique visual art. Type your dream description 
+            below and watch as it materializes into a mesmerizing pattern.
+        </p>
+        <div class="settings-panel">
+            <button class="settings-toggle" aria-label="Toggle settings">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path fill="currentColor" d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                </svg>
+            </button>
+            <div class="settings-content hidden">
+                <h3>Layer Settings</h3>
+                <div class="settings-grid">
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="texture" checked>
+                        Texture Layer
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="flowField" checked>
+                        Flow Field
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="mainShapes" checked>
+                        Main Shapes
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="details" checked>
+                        Details
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="highlights" checked>
+                        Highlights
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="noise" checked>
+                        Noise Filter
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="patterns" checked>
+                        Pattern Mesh
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="voronoi" checked>
+                        Voronoi Cells
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="particles" checked>
+                        Flow Particles
+                    </label>
+                    <label class="setting-item">
+                        <input type="checkbox" data-layer="lightRays" checked>
+                        Light Rays
+                    </label>
+                </div>
+            </div>
+        </div>
+        <textarea 
+            id="input" 
+            placeholder="Describe your dream..."
+            aria-label="Dream description input"
+        ></textarea>
+        <div class="canvas-container">
+            <svg 
+                id="canvas" 
+                viewBox="0 0 600 400"
+                width="600"
+                height="400"
+                aria-label="Generated dream visualization"
+            ></svg>
+            <div id="loading" class="loading hidden">
+                <div class="loading-text">Weaving dream... <span class="progress">0%</span></div>
+                <div class="loading-bar">
+                    <div class="loading-bar-fill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="dreamweaver.js"></script>
+    <script src="../header.js"></script>
+</body>
+</html>

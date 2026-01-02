@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Physics Particle Simulator</title>
+    <link rel="stylesheet" href="../shared.css">
+    <style>
+        body {
+            display: flex;
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        
+        #controls {
+            width: 300px;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group h3 {
+            margin: 0 0 10px 0;
+        }
+        
+        .slider-container {
+            margin: 10px 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        select, button {
+            width: 100%;
+            padding: 5px;
+            margin: 5px 0;
+        }
+        
+        canvas {
+            border: 1px solid #ccc;
+            margin-left: 20px;
+        }
+        
+        label[title] {
+            cursor: help;
+            border-bottom: 1px dotted #666;
+        }
+
+        .performance-stats {
+            background: #e0e0e0;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .performance-stats div {
+            margin: 5px 0;
+        }
+
+        /* Tooltip styling */
+        [title] {
+            position: relative;
+            display: inline-block;
+        }
+
+        [title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 5px 10px;
+            background: #333;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 1000;
+        }
+
+        .speed-presets {
+            margin-top: 10px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .speed-presets button {
+            padding: 5px 10px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .speed-presets button:hover {
+            background: #666;
+        }
+
+        .wide-slider {
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="control-group">
+            <h3>Simulation Type</h3>
+            <select id="simulationType">
+                <option value="default">Free Particles</option>
+                <option value="solarSystem">Solar System</option>
+                <option value="gasMolecules">Gas Molecules</option>
+                <option value="electricField">Electric Field</option>
+            </select>
+        </div>
+
+        <div class="particle-control">
+            <div class="control-group">
+                <h3>Physics Controls</h3>
+                <div class="slider-container">
+                    <label title="Strength of gravitational force">
+                        Gravity Strength: <span id="gravityValue">500</span>
+                    </label>
+                    <input type="range" id="gravity" min="0" max="1000" value="500">
+                </div>
+                <div class="slider-container">
+                    <label title="How bouncy particles are">
+                        Elasticity: <span id="elasticityValue">0.7</span>
+                    </label>
+                    <input type="range" id="elasticity" min="0" max="100" value="70">
+                </div>
+                <div class="slider-container">
+                    <label>Particle Mass: <span id="massValue">1</span></label>
+                    <input type="range" id="mass" min="1" max="100" value="10">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Particle Creation</h3>
+                <div class="slider-container">
+                    <label>Initial Velocity: <span id="initialVelocityValue">100</span></label>
+                    <input type="range" id="initialVelocity" min="0" max="500" value="100">
+                </div>
+            </div>
+        </div>
+
+        <div class="solar-system-control">
+            <div class="control-group">
+                <h3>Solar System Controls</h3>
+                <select id="celestialPreset">
+                    <option value="default">Normal Sun</option>
+                    <option value="blackhole">Black Hole</option>
+                    <option value="neutron">Neutron Star</option>
+                    <option value="dwarf">Dwarf Star</option>
+                    <option value="supergiant">Supergiant Star</option>
+                </select>
+
+                <div class="slider-container">
+                    <label>Central Body Size: <span id="sunRadiusValue">15</span></label>
+                    <input type="range" id="sunRadius" min="3" max="50" value="15" step="1">
+                </div>
+                <div class="slider-container">
+                    <label>Central Body Mass: <span id="sunMassValue">1000</span></label>
+                    <input type="range" id="sunMass" min="100" max="5000" value="1000" step="100">
+                </div>
+                <div class="slider-container">
+                    <label>Gravitational Strength: <span id="gravityStrengthValue">1.0</span></label>
+                    <input type="range" id="gravityStrength" min="10" max="5000" value="500" step="10">
+                </div>
+                <div class="slider-container">
+                    <label>Orbital Speed: <span id="orbitalSpeedValue">1.0</span></label>
+                    <input type="range" id="orbitalSpeed" min="50" max="2000" value="200" step="10">
+                </div>
+                <div class="speed-presets">
+                    <!-- Speed preset buttons -->
+                </div>
+            </div>
+        </div>
+
+        <div class="charge-control">
+            <div class="control-group">
+                <h3>Particle Interaction</h3>
+                <div class="slider-container">
+                    <label>Charge Strength: <span id="chargeValue">0</span></label>
+                    <input type="range" id="charge" min="-100" max="100" value="0">
+                </div>
+            </div>
+        </div>
+
+        <div class="gas-control">
+            <div class="control-group">
+                <h3>Gas Molecule Controls</h3>
+                <div class="slider-container">
+                    <label>Gas Elasticity: <span id="gasElasticityValue">0.7</span></label>
+                    <input type="range" id="gasElasticity" min="0" max="100" value="70">
+                </div>
+                <div class="slider-container">
+                    <label>Gas Initial Velocity: <span id="gasInitialVelocityValue">100</span></label>
+                    <input type="range" id="gasInitialVelocity" min="0" max="500" value="100">
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Boundary Type</h3>
+            <select id="boundaryType">
+                <option value="solid">Solid Walls</option>
+                <option value="wrap">Wrap Around</option>
+                <option value="open">Open Boundaries</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <h3>Performance & Particles</h3>
+            <div class="slider-container">
+                <label>Particles per Click: <span id="particlesPerClickValue">5</span></label>
+                <input type="range" id="particlesPerClick" min="1" max="50" value="5">
+            </div>
+            <div class="slider-container">
+                <label>Simulation Precision: <span id="precisionValue">1</span></label>
+                <input type="range" id="precision" min="1" max="10" value="1">
+            </div>
+            <div class="performance-stats">
+                <div>FPS: <span id="fpsCounter">0</span></div>
+                <div>Particles: <span id="particleCounter">0</span></div>
+            </div>
+        </div>
+
+        <button id="clearParticles">Clear All Particles</button>
+    </div>
+
+    <canvas id="simulationCanvas"></canvas>
+    <script src="src/Particle.js"></script>
+    <script src="src/SpatialGrid.js"></script>
+    <script src="src/ParticleSystem.js"></script>
+    <script src="src/main.js"></script>
+    <script src="../header.js"></script>
+    <script>
+        const canvas = document.getElementById('simulationCanvas');
+        canvas.width = window.innerWidth - 360;
+        canvas.height = window.innerHeight - 40;
+
+        const system = new ParticleSystem(canvas, {
+            gravity: 500,
+            particleSize: 10,
+            elasticity: 0.7
+        });
+
+        // Initialize the controls
+        initializeControls(system);
+        
+        // Add particles on click
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            system.createParticlesAtPoint(x, y);
+        });
+
+        // Update the animation loop
+        function animate(currentTime) {
+            const deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            system.update(deltaTime);
+            system.render();
+
+            // Update FPS display more frequently
+            document.getElementById('fpsCounter').textContent = system.fps;
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Start the animation
+        let lastTime = performance.now();
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
