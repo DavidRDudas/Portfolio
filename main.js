@@ -395,9 +395,11 @@ document.addEventListener('DOMContentLoaded', () => {
             'Creative Technologist',
             'Photographer',
             'Author',
+            'Physics Enthusiast',
             'Game Developer',
             'Full-Stack Engineer',
-            'Algorithm Enthusiast'
+            'Algorithm Designer',
+            'Computational Researcher'
         ], 2000);
     }
 
