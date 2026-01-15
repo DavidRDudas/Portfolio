@@ -112,6 +112,17 @@ const projects = [
         githubLink: null
     },
     {
+        title: "Complexity Binding Theory",
+        category: "Physics Research",
+        description: "A complete framework for galaxy dynamics without dark matter particles. Published on Zenodo.",
+        detailsTitle: "Alternative Gravity Framework – Published Research",
+        details: "Developed and published Complexity Binding Theory (CBT), a comprehensive alternative to particle dark matter for explaining galaxy dynamics, gravitational lensing, cluster behavior, and cosmological observations. The theory proposes that organized structures generate effective gravitational binding proportional to their structural complexity. Testing on 175 SPARC galaxies yields an 85% improvement over Newtonian predictions with equal galaxy-specific free parameters. The framework includes N-body simulation proof demonstrating necessity of global binding constraints (p=2.59×10⁻⁷⁵), predicts lensing masses with 104% accuracy, and explains Bullet Cluster dynamics. Five of six unique predictions are consistent with existing literature.",
+        image: "images/cbt.png",
+        techStack: ["Physics", "Astrophysics", "Python", "Data Analysis", "Research"],
+        demoLink: "https://zenodo.org/records/18262088",
+        githubLink: "https://zenodo.org/records/18262029"
+    },
+    {
         title: "NeutralHQ",
         category: "Web Platform",
         description: "A website for a startup reviewing legal neutrals using no frontend frameworks.",
