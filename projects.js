@@ -121,7 +121,7 @@ const projects = [
        "techStack": ["Physics", "Deep Learning", "Python", "Data Analysis", "Research"],
        "demoLink": "https://orcid.org/0009-0000-9348-5438",
        "githubLink": null
-    }
+    },
 
     {
         title: "NeutralHQ",
