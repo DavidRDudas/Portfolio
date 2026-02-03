@@ -112,16 +112,17 @@ const projects = [
         githubLink: null
     },
     {
-        title: "Complexity Binding Theory",
-        category: "Physics Research",
-        description: "A complete framework for galaxy dynamics without dark matter particles. Published on Zenodo.",
-        detailsTitle: "Alternative Gravity Framework – Published Research",
-        details: "Developed and published Complexity Binding Theory (CBT), a zero-parameter alternative to particle dark matter. All coefficients are derived from fundamental constants (e and π) — no curve-fitting. A single derived constant β = 2e unifies seven independent domains: galaxy rotation (92% success on 171 SPARC galaxies), gravitational lensing, galaxy clusters (3% error), CMB matter density (99.3% match to Planck), MOND acceleration scale (0.4% match), Freeman surface density (98% match), and cosmic baryon fraction (0.7% match). The theory suggests 'dark matter' may be binding energy maintaining organized structure against entropy, not invisible particles. Includes N-body simulations (p = 2.59×10⁻⁷⁵) and reproducible validation code.",
-        image: "images/cbt.png",
-        techStack: ["Physics", "Astrophysics", "Python", "Data Analysis", "Research"],
-        demoLink: "https://zenodo.org/records/18422001",
-        githubLink: "https://zenodo.org/records/18262029"
-    },
+       "title": "Physics & Deep Learning Research",
+       "category": "Theoretical Physics & AI Alignment",
+       "description": "Research on fundamental galaxy dynamics and the 'Grokking' phenomenon in neural networks.",
+       "detailsTitle": "Published Research & Investigations",
+       "details": "A dual-focus research portfolio available on ORCID:\n\n1. **Complexity Binding Theory (Physics):** A zero-parameter framework unifying galaxy rotation curves, gravitational lensing, and cosmic structure without dark matter. All coefficients derived from e and π.\n\n2. **Grokking (AI/ML):** Investigating phase transitions in neural network generalization, analyzing how models shift from memorization to understanding (grokking) and its implications for interpretable AI.",
+       "image": "images/cbt.png",
+       "techStack": ["Physics", "Deep Learning", "Python", "Data Analysis", "Research"],
+       "demoLink": "https://orcid.org/0009-0000-9348-5438",
+       "githubLink": null
+    }
+
     {
         title: "NeutralHQ",
         category: "Web Platform",
