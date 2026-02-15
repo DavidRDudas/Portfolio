@@ -271,7 +271,7 @@ class ProjectCarousel {
         setTimeout(() => {
             currentItem.classList.remove('slide-left', 'slide-right');
             this.isTransitioning = false;
-        }, 500);
+        }, 250);
     }
 
     nextSlide() {
@@ -383,10 +383,345 @@ function initThemeToggle() {
     }
 }
 
+// Custom magnetic cursor
+function initCustomCursor() {
+    const dot = document.getElementById('cursorDot');
+    const ring = document.getElementById('cursorRing');
+    if (!dot || !ring) return;
+
+    // Check for touch device — skip cursor
+    if ('ontouchstart' in window) return;
+
+    let mouseX = 0, mouseY = 0;
+    let ringX = 0, ringY = 0;
+    document.body.style.cursor = 'none';
+
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        dot.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%)`;
+    });
+
+    // Smooth ring follow with lerp — snappy but still trails
+    function animateRing() {
+        ringX += (mouseX - ringX) * 0.22;
+        ringY += (mouseY - ringY) * 0.22;
+        ring.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
+        requestAnimationFrame(animateRing);
+    }
+    animateRing();
+
+    // Hover detection on interactive elements
+    const interactives = 'a, button, .project-link, .tech-tag, .carousel-button, .carousel-dot, .theme-toggle, .btn, .contact-link, .info-button';
+    document.addEventListener('mouseover', (e) => {
+        if (e.target.closest(interactives)) {
+            dot.classList.add('hover');
+            ring.classList.add('hover');
+        }
+    });
+    document.addEventListener('mouseout', (e) => {
+        if (e.target.closest(interactives)) {
+            dot.classList.remove('hover');
+            ring.classList.remove('hover');
+        }
+    });
+
+    // Click feedback
+    document.addEventListener('mousedown', () => {
+        dot.classList.add('clicking');
+        ring.classList.add('clicking');
+    });
+    document.addEventListener('mouseup', () => {
+        dot.classList.remove('clicking');
+        ring.classList.remove('clicking');
+    });
+
+    // Hide cursor on all interactive elements
+    document.querySelectorAll(interactives).forEach(el => {
+        el.style.cursor = 'none';
+    });
+    // Also handle dynamically-created elements
+    const observer = new MutationObserver(() => {
+        document.querySelectorAll(interactives).forEach(el => {
+            el.style.cursor = 'none';
+        });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+// Scroll progress bar
+function initScrollProgress() {
+    const bar = document.getElementById('scrollProgress');
+    if (!bar) return;
+
+    window.addEventListener('scroll', () => {
+        const scrollTop = window.scrollY;
+        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+        const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+        bar.style.width = progress + '%';
+    }, { passive: true });
+}
+
+// Scroll-triggered section reveals
+function initScrollReveals() {
+    const reveals = document.querySelectorAll('.reveal');
+    if (!reveals.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('revealed');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    });
+
+    reveals.forEach(el => observer.observe(el));
+}
+
+// 3D tilt effect on project cards
+function initCardTilt() {
+    document.addEventListener('mousemove', (e) => {
+        const cards = document.querySelectorAll('.project-item.active');
+        cards.forEach(card => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+
+            // Only apply if mouse is near the card
+            if (x < -50 || x > rect.width + 50 || y < -50 || y > rect.height + 50) {
+                card.style.transform = '';
+                return;
+            }
+
+            const rotateX = ((y - centerY) / centerY) * -4;
+            const rotateY = ((x - centerX) / centerX) * 4;
+
+            card.style.transform = `perspective(1200px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+
+            // Update light position for shine effect
+            const percentX = ((x / rect.width) * 100);
+            const percentY = ((y / rect.height) * 100);
+            card.style.setProperty('--mouse-x', percentX + '%');
+            card.style.setProperty('--mouse-y', percentY + '%');
+        });
+    });
+
+    // Reset on mouse leave
+    document.addEventListener('mouseleave', () => {
+        document.querySelectorAll('.project-item').forEach(card => {
+            card.style.transform = '';
+        });
+    });
+}
+
+// Loading screen
+function initLoader() {
+    const loader = document.getElementById('loader');
+    if (!loader) return;
+
+    setTimeout(() => {
+        loader.classList.add('loader-exit');
+        // Remove from DOM after transition
+        setTimeout(() => {
+            loader.remove();
+        }, 700);
+    }, 1400);
+}
+
+// Split text animation — wraps each letter in a span with staggered delay
+function initSplitText() {
+    const lines = document.querySelectorAll('.title-line');
+    let globalDelay = 0;
+
+    lines.forEach(line => {
+        // Skip lines that contain the typed-text (it has its own animation)
+        if (line.querySelector('.typed-text')) return;
+
+        // Collect all text nodes using TreeWalker
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT, null);
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+            textNodes.push(node);
+        }
+
+        let letterIndex = 0;
+        textNodes.forEach(textNode => {
+            const text = textNode.textContent;
+            if (!text.trim()) return;
+
+            // Skip text inside .highlight — it uses background-clip: text
+            // which breaks when split into individual spans
+            if (textNode.parentNode.closest('.highlight')) {
+                const highlightEl = textNode.parentNode.closest('.highlight');
+                if (!highlightEl.dataset.revealed) {
+                    highlightEl.dataset.revealed = '1';
+                    const delay = (1.5 + globalDelay + letterIndex * 0.03).toFixed(3);
+                    // Combine reveal + gradient animations so neither overrides
+                    highlightEl.style.opacity = '0';
+                    highlightEl.style.transform = 'translateY(30px) rotateX(-40deg)';
+                    highlightEl.style.display = 'inline-block';
+                    highlightEl.style.animation = `letterReveal 0.5s cubic-bezier(0.16,1,0.3,1) ${delay}s forwards, gradientShift 4s ease-in-out infinite`;
+                    letterIndex += text.length;
+                }
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === ' ') {
+                    const sp = document.createElement('span');
+                    sp.className = 'split-space';
+                    fragment.appendChild(sp);
+                } else {
+                    const span = document.createElement('span');
+                    span.className = 'split-letter';
+                    span.textContent = char;
+                    const delay = (1.5 + globalDelay + letterIndex * 0.03).toFixed(3);
+                    span.style.animationDelay = delay + 's';
+                    fragment.appendChild(span);
+                    letterIndex++;
+                }
+            }
+            textNode.parentNode.replaceChild(fragment, textNode);
+        });
+
+        globalDelay += letterIndex * 0.03 + 0.1;
+    });
+}
+
+// Magnetic buttons — buttons pull toward cursor
+function initMagneticButtons() {
+    const buttons = document.querySelectorAll('.btn');
+    const magnetDistance = 150;
+
+    buttons.forEach(btn => {
+        btn.addEventListener('mousemove', (e) => {
+            const rect = btn.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = e.clientX - cx;
+            const dy = e.clientY - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < magnetDistance) {
+                const pull = (1 - dist / magnetDistance) * 0.3;
+                btn.style.transform = `translate(${dx * pull}px, ${dy * pull}px)`;
+                btn.classList.add('magnetic-active');
+            }
+        });
+
+        btn.addEventListener('mouseleave', () => {
+            btn.style.transform = '';
+            btn.classList.remove('magnetic-active');
+        });
+    });
+}
+
+// Parallax depth on scroll — hero elements move at different speeds
+function initParallax() {
+    const heroTitle = document.querySelector('.hero-title');
+    const heroDesc = document.querySelector('.hero-description');
+    const heroStats = document.querySelector('.hero-stats');
+    const heroCta = document.querySelector('.hero-cta');
+    const heroBadge = document.querySelector('.hero-badge');
+
+    if (!heroTitle) return;
+
+    const scrollIndicator = document.querySelector('.scroll-indicator');
+    const backToTop = document.getElementById('backToTop');
+
+    // Back to top click handler
+    if (backToTop) {
+        backToTop.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
+    window.addEventListener('scroll', () => {
+        const scrollY = window.scrollY;
+        const vh = window.innerHeight;
+
+        // Fade out scroll indicator quickly
+        if (scrollIndicator) {
+            scrollIndicator.style.opacity = Math.max(0, 1 - scrollY / (vh * 0.3));
+        }
+
+        // Show/hide back to top button
+        if (backToTop) {
+            if (scrollY > vh * 0.5) {
+                backToTop.classList.add('visible');
+            } else {
+                backToTop.classList.remove('visible');
+            }
+        }
+
+        // Only apply parallax in the hero section viewport
+        if (scrollY > vh * 1.2) return;
+
+        const factor = scrollY / vh;
+
+        if (heroBadge) heroBadge.style.transform = `translateY(${factor * -20}px)`;
+        heroTitle.style.transform = `translateY(${factor * -40}px)`;
+        if (heroDesc) heroDesc.style.transform = `translateY(${factor * -25}px)`;
+        if (heroStats) heroStats.style.transform = `translateY(${factor * -15}px)`;
+        if (heroCta) heroCta.style.transform = `translateY(${factor * -10}px)`;
+    }, { passive: true });
+}
+
+// Film grain — animated noise overlay
+function initFilmGrain() {
+    const canvas = document.getElementById('filmGrain');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+
+    function resize() {
+        // Use lower resolution for performance
+        canvas.width = window.innerWidth / 4;
+        canvas.height = window.innerHeight / 4;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function renderGrain() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const imageData = ctx.createImageData(w, h);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const v = (Math.random() * 255) | 0;
+            data[i] = v;
+            data[i + 1] = v;
+            data[i + 2] = v;
+            data[i + 3] = 25; // very low alpha
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        setTimeout(() => requestAnimationFrame(renderGrain), 80); // ~12fps
+    }
+
+    renderGrain();
+}
+
 // Initialize everything when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    // Init loader immediately
+    initLoader();
+
     // Init theme toggle first
     initThemeToggle();
+
+    // Init split text (before typing starts, but after loader starts)
+    initSplitText();
 
     // Init typing effect
     const typedElement = document.querySelector('.typed-text');
@@ -397,6 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'Author',
             'Physics Enthusiast',
             'Game Developer',
+            'Math Enthusiast',
             'Full-Stack Engineer',
             'Algorithm Designer',
             'Computational Researcher'
@@ -417,4 +753,201 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Init mobile menu
     initMobileMenu();
+
+    // Round 1 enhancements
+    initCustomCursor();
+    initScrollProgress();
+    initScrollReveals();
+    initCardTilt();
+
+    // Round 2 enhancements
+    initMagneticButtons();
+    initParallax();
+    initFilmGrain();
+    initAsciiCube();
 });
+
+// ASCII Rotating Cube — Cognition-style wireframe cube
+function initAsciiCube() {
+    const el = document.getElementById('asciiCube');
+    if (!el) return;
+
+    const W = 56;
+    const H = 28;
+    const CHARS = ' .·:;+*#%@';  // luminance ramp
+    const EDGE_CHARS = '░▒▓█';
+
+    // 4D Tesseract vertices (16 vertices of a hypercube)
+    const verts4D = [];
+    for (let i = 0; i < 16; i++) {
+        verts4D.push([
+            (i & 1) ? 1 : -1,
+            (i & 2) ? 1 : -1,
+            (i & 4) ? 1 : -1,
+            (i & 8) ? 1 : -1
+        ]);
+    }
+
+    // Edges: connect vertices that differ in exactly one coordinate
+    const edges = [];
+    for (let i = 0; i < 16; i++) {
+        for (let j = i + 1; j < 16; j++) {
+            let diff = 0;
+            for (let k = 0; k < 4; k++) {
+                if (verts4D[i][k] !== verts4D[j][k]) diff++;
+            }
+            if (diff === 1) edges.push([i, j]);
+        }
+    }
+
+    let aXY = 0, aXZ = 0, aXW = 0, aYZ = 0;
+    let animId = null;
+    let isVisible = false;
+    let time = 0;
+
+    function rotate4D(v) {
+        let [x, y, z, w] = v;
+
+        // Rotate in XW plane
+        let c = Math.cos(aXW), s = Math.sin(aXW);
+        [x, w] = [x * c - w * s, x * s + w * c];
+
+        // Rotate in YZ plane
+        c = Math.cos(aYZ); s = Math.sin(aYZ);
+        [y, z] = [y * c - z * s, y * s + z * c];
+
+        // Rotate in XZ plane
+        c = Math.cos(aXZ); s = Math.sin(aXZ);
+        [x, z] = [x * c - z * s, x * s + z * c];
+
+        // Rotate in XY plane
+        c = Math.cos(aXY); s = Math.sin(aXY);
+        [x, y] = [x * c - y * s, x * s + y * c];
+
+        return [x, y, z, w];
+    }
+
+    function project(v4) {
+        const [x, y, z, w] = rotate4D(v4);
+
+        // 4D → 3D stereographic-ish projection
+        const pw = 2.5 / (2.5 + w);
+        const x3 = x * pw, y3 = y * pw, z3 = z * pw;
+
+        // 3D → 2D perspective
+        const p3 = 4 / (4 + z3);
+        const sx = W / 2 + x3 * 5.5 * p3;
+        const sy = H / 2 - y3 * 3 * p3;
+        const depth = z3 + w * 0.5; // combined depth
+
+        return { sx, sy, depth };
+    }
+
+    function drawLine(grid, zbuf, p0, p1) {
+        const steps = Math.max(
+            Math.abs(Math.round(p1.sx) - Math.round(p0.sx)),
+            Math.abs(Math.round(p1.sy) - Math.round(p0.sy))
+        ) || 1;
+
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const x = Math.round(p0.sx + (p1.sx - p0.sx) * t);
+            const y = Math.round(p0.sy + (p1.sy - p0.sy) * t);
+            const depth = p0.depth + (p1.depth - p0.depth) * t;
+
+            if (x >= 0 && x < W && y >= 0 && y < H) {
+                // Depth-based character
+                const brightness = Math.max(0, Math.min(1, (depth + 3) / 6));
+                const charIdx = Math.floor(brightness * (EDGE_CHARS.length - 1));
+                if (depth < zbuf[y][x] || zbuf[y][x] === 999) {
+                    grid[y][x] = EDGE_CHARS[charIdx];
+                    zbuf[y][x] = depth;
+                }
+            }
+        }
+    }
+
+    function render() {
+        const grid = [];
+        const zbuf = [];
+        for (let r = 0; r < H; r++) {
+            grid[r] = [];
+            zbuf[r] = [];
+            for (let c = 0; c < W; c++) {
+                grid[r][c] = ' ';
+                zbuf[r][c] = 999;
+            }
+        }
+
+        // Project all vertices
+        const projected = verts4D.map(v => project(v));
+
+        // Draw edges with depth-based shading
+        for (const [a, b] of edges) {
+            drawLine(grid, zbuf, projected[a], projected[b]);
+        }
+
+        // Draw orbiting particles around the tesseract
+        for (let i = 0; i < 6; i++) {
+            const angle = time * 0.02 + i * Math.PI / 3;
+            const r = 1.8;
+            const particle = project([
+                r * Math.cos(angle),
+                r * Math.sin(angle * 0.7),
+                r * Math.sin(angle),
+                r * Math.cos(angle * 0.5)
+            ]);
+            const px = Math.round(particle.sx);
+            const py = Math.round(particle.sy);
+            if (px >= 0 && px < W && py >= 0 && py < H) {
+                grid[py][px] = '✦';
+                // Small glow around particle
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const gx = px + dx, gy = py + dy;
+                        if (gx >= 0 && gx < W && gy >= 0 && gy < H && grid[gy][gx] === ' ') {
+                            grid[gy][gx] = '·';
+                        }
+                    }
+                }
+            }
+        }
+
+        // Draw vertices last (on top)
+        for (const p of projected) {
+            const x = Math.round(p.sx), y = Math.round(p.sy);
+            if (x >= 0 && x < W && y >= 0 && y < H) {
+                grid[y][x] = p.depth < 0 ? '◈' : '◇';
+            }
+        }
+
+        el.textContent = grid.map(row => row.join('')).join('\n');
+
+        // Smooth multi-axis rotation at different speeds
+        aXY += 0.008;
+        aXZ += 0.012;
+        aXW += 0.006;
+        aYZ += 0.01;
+        time++;
+
+        if (isVisible) {
+            animId = requestAnimationFrame(render);
+        }
+    }
+
+    // Only animate when visible
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            isVisible = entry.isIntersecting;
+            if (isVisible && !animId) {
+                animId = requestAnimationFrame(render);
+            } else if (!isVisible && animId) {
+                cancelAnimationFrame(animId);
+                animId = null;
+            }
+        });
+    }, { threshold: 0.1 });
+
+    observer.observe(el);
+}
