@@ -7,6 +7,9 @@ class BackgroundEffect {
         this.mouse = { x: -9999, y: -9999 };
         this.dpr = 1;
 
+        // Mobile detection for performance scaling
+        this.isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+
         // Grid config (for background ambient effects only)
         this.cellSize = 14;
         this.cols = 0;
@@ -58,11 +61,12 @@ class BackgroundEffect {
         this.galaxyStars = [];
         this.galaxyDust = [];
 
-        const numArms = 5;
-        const armStars = 1200;
-        const coreStars = 1200;
-        const haloStars = 300;
-        const dustParticles = 1500;
+        const mob = this.isMobile;
+        const numArms = mob ? 4 : 5;
+        const armStars = mob ? 400 : 1200;
+        const coreStars = mob ? 400 : 1200;
+        const haloStars = mob ? 100 : 300;
+        const dustParticles = mob ? 500 : 1500;
 
         // --- Spiral arm stars ---
         for (let arm = 0; arm < numArms; arm++) {
@@ -144,7 +148,8 @@ class BackgroundEffect {
         }
 
         // --- Inter-arm fill stars (smooth out the gaps) ---
-        for (let i = 0; i < 800; i++) {
+        const fillStars = this.isMobile ? 250 : 800;
+        for (let i = 0; i < fillStars; i++) {
             const r = Math.pow(Math.random(), 0.7) * 1.0;
             const angle = Math.random() * Math.PI * 2;
             const z = (Math.random() - 0.5) * 0.06;
@@ -446,14 +451,21 @@ class BackgroundEffect {
         this._updateBlackHolePhase();
         this.galaxyAngle += 0.0015 + this.bhSpinBoost;
 
-        // Compute fractal only every 3 frames (it morphs very slowly)
-        if (this.frameCount % 3 === 0) {
+        // Compute fractal less often on mobile
+        const fractalInterval = this.isMobile ? 6 : 3;
+        if (this.frameCount % fractalInterval === 0) {
             this._computeFractal();
         }
         this.frameCount++;
 
-        // Draw layers
-        this._drawGridLines(ctx, isDark);
+        // On mobile, skip rendering every other frame for better performance
+        if (this.isMobile && this.frameCount % 2 !== 0) {
+            requestAnimationFrame(() => this.animate());
+            return;
+        }
+
+        // Draw layers (skip grid on mobile for perf)
+        if (!this.isMobile) this._drawGridLines(ctx, isDark);
         this._drawGalaxy(ctx, isDark);
 
         // Draw black hole effects over galaxy
@@ -832,10 +844,11 @@ class BackgroundEffect {
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'center';
 
-            for (let i = 0; i < 180; i++) {
+            const diskParticleCount = this.isMobile ? 60 : 180;
+            for (let i = 0; i < diskParticleCount; i++) {
                 // Orbital angle — visibly rotates over time
                 const orbitalSpeed = diskSpeed * (0.8 + (i % 3) * 0.15);
-                const angle = (i / 180) * Math.PI * 2 + orbitalSpeed;
+                const angle = (i / diskParticleCount) * Math.PI * 2 + orbitalSpeed;
                 const rRatio = 0.08 + ((i * 7 + i * i) % 100) / 100 * 0.92;
                 const r = ehR * 1.3 + (diskW - ehR * 1.3) * rRatio;
 
@@ -967,8 +980,9 @@ class BackgroundEffect {
             const ringR = ehR * 1.12; // orbit radius on the ring
             const ringSquash = 0.95;  // match ring squash
 
-            for (let i = 0; i < 60; i++) {
-                const orbAngle = (i / 60) * Math.PI * 2 + diskSpeed * 1.2;
+            const ringParticleCount = this.isMobile ? 20 : 60;
+            for (let i = 0; i < ringParticleCount; i++) {
+                const orbAngle = (i / ringParticleCount) * Math.PI * 2 + diskSpeed * 1.2;
                 // Project onto the nearly-circular tilted ring
                 const ox = Math.cos(orbAngle) * ringR;
                 const oy = Math.sin(orbAngle) * ringR * ringSquash;
