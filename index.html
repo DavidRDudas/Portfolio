@@ -29,6 +29,33 @@
 </head>
 
 <body>
+    <!-- Loading Screen -->
+    <div class="loader" id="loader">
+        <div class="loader-content">
+            <div class="loader-logo">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+            </div>
+            <div class="loader-name">David Dudas</div>
+            <div class="loader-bar">
+                <div class="loader-bar-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Film Grain Overlay -->
+    <canvas class="film-grain" id="filmGrain"></canvas>
+
+    <!-- Custom Cursor -->
+    <div class="cursor-dot" id="cursorDot"></div>
+    <div class="cursor-ring" id="cursorRing"></div>
+
+    <!-- Scroll Progress Bar -->
+    <div class="scroll-progress" id="scrollProgress"></div>
+
     <!-- Floating Orbs Background -->
     <div class="floating-orbs">
         <div class="orb orb-1"></div>
@@ -137,8 +164,23 @@
             </div>
         </section>
 
+        <!-- Section Divider: Hero → Projects -->
+        <div class="section-divider">
+            <div class="divider-symbols">
+                <span class="divider-sym" style="--i:0">∫</span>
+                <span class="divider-sym" style="--i:1">∇</span>
+                <span class="divider-sym" style="--i:2">π</span>
+                <span class="divider-sym" style="--i:3">∂</span>
+                <span class="divider-sym" style="--i:4">φ</span>
+                <span class="divider-sym" style="--i:5">Σ</span>
+                <span class="divider-sym" style="--i:6">∞</span>
+                <span class="divider-sym" style="--i:7">λ</span>
+            </div>
+            <div class="divider-line"></div>
+        </div>
+
         <!-- Projects Section -->
-        <section class="projects-section" id="projects">
+        <section class="projects-section reveal" id="projects">
             <div class="section-header">
                 <span class="section-label">Portfolio</span>
                 <h2 class="section-title">Featured Projects</h2>
@@ -171,12 +213,30 @@
             </div>
         </section>
 
+        <!-- Section Divider: Projects → Contact -->
+        <div class="section-divider">
+            <div class="divider-symbols">
+                <span class="divider-sym" style="--i:0">ħ</span>
+                <span class="divider-sym" style="--i:1">Δ</span>
+                <span class="divider-sym" style="--i:2">ψ</span>
+                <span class="divider-sym" style="--i:3">⊗</span>
+                <span class="divider-sym" style="--i:4">α</span>
+                <span class="divider-sym" style="--i:5">θ</span>
+                <span class="divider-sym" style="--i:6">Ω</span>
+                <span class="divider-sym" style="--i:7">μ</span>
+            </div>
+            <div class="divider-line"></div>
+        </div>
+
         <!-- Contact Section -->
-        <section class="contact-section" id="contact">
+        <section class="contact-section reveal" id="contact">
             <div class="contact-content">
+                <div class="ascii-cube-container">
+                    <pre class="ascii-cube" id="asciiCube"></pre>
+                </div>
                 <span class="section-label">Contact</span>
-                <h2 class="contact-title">Let's Build Something Amazing</h2>
-                <p class="contact-description">Have a project in mind or just want to connect? I'm always open to
+                <h2 class="contact-title">Let's Connect</h2>
+                <p class="contact-description">I'm always open to
                     discussing new opportunities and creative ideas.</p>
                 <div class="contact-links">
                     <a href="mailto:daviddudas@hotmail.com" class="contact-link">
@@ -231,6 +291,12 @@
             </div>
         </div>
     </div>
+    <!-- Back to Top Button -->
+    <button class="back-to-top" id="backToTop" aria-label="Back to top">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M18 15l-6-6-6 6" />
+        </svg>
+    </button>
 
     <script src="projects.js"></script>
     <script src="background.js"></script>
