@@ -112,6 +112,16 @@ const projects = [
         githubLink: null
     },
     {
+        title: "The Geometry of Everything",
+        category: "Literature",
+        description: "The geometry of structure: Mapping how Complexity Binding Theory governs entropic decay.",
+        details: null,
+        image: "images/thegeometryofeverything.png",
+        techStack: ["Writing", "Publishing", "Physics", "Math"],
+        demoLink: "https://www.amazon.com/dp/B0GNJM2STZ",
+        githubLink: null
+    },
+    {
        "title": "Physics & Deep Learning Research",
        "category": "Theoretical Physics & AI Alignment",
        "description": "Research on fundamental galaxy dynamics and the 'Grokking' phenomenon in neural networks.",
