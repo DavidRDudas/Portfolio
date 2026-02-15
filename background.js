@@ -48,6 +48,7 @@ class BackgroundEffect {
         this.bhTime = 0;        // cycle timer
         this.bhSpinBoost = 0;   // extra spin from angular momentum conservation
 
+
         this._createGalaxy();
         this.resize();
         this._bindEvents();
@@ -302,11 +303,13 @@ class BackgroundEffect {
 
     resize() {
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-        this.canvas.width = window.innerWidth * this.dpr;
-        this.canvas.height = window.innerHeight * this.dpr;
+        // On mobile, render at half resolution for massive perf gain
+        const renderScale = this.isMobile ? this.dpr * 0.5 : this.dpr;
+        this.canvas.width = window.innerWidth * renderScale;
+        this.canvas.height = window.innerHeight * renderScale;
         this.canvas.style.width = window.innerWidth + 'px';
         this.canvas.style.height = window.innerHeight + 'px';
-        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        this.ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
         this.width = window.innerWidth;
         this.height = window.innerHeight;
         this._buildGrid();
@@ -1054,46 +1057,48 @@ class BackgroundEffect {
         ctx.fillStyle = coreGrad;
         ctx.fillRect(gcx - coreRadius, gcy - coreRadius, coreRadius * 2, coreRadius * 2);
 
-        // --- Draw nebulae (soft colored blobs) ---
-        for (let i = 0; i < this.galaxyNebulae.length; i++) {
-            const neb = this.galaxyNebulae[i];
+        // --- Draw nebulae (soft colored blobs) — skip on mobile for perf ---
+        if (!this.isMobile) {
+            for (let i = 0; i < this.galaxyNebulae.length; i++) {
+                const neb = this.galaxyNebulae[i];
 
-            let sx = neb.x * cosSpin - neb.y * sinSpin;
-            let sy = neb.x * sinSpin + neb.y * cosSpin;
+                let sx = neb.x * cosSpin - neb.y * sinSpin;
+                let sy = neb.x * sinSpin + neb.y * cosSpin;
 
-            // Black hole: compress radially
-            if (bh > 0.01) {
-                const nr = Math.sqrt(sx * sx + sy * sy);
-                if (nr > 0.001) {
-                    const cr = nr * radialScale;
-                    if (cr < eventHorizonR) continue;
-                    sx *= cr / nr;
-                    sy *= cr / nr;
+                // Black hole: compress radially
+                if (bh > 0.01) {
+                    const nr = Math.sqrt(sx * sx + sy * sy);
+                    if (nr > 0.001) {
+                        const cr = nr * radialScale;
+                        if (cr < eventHorizonR) continue;
+                        sx *= cr / nr;
+                        sy *= cr / nr;
+                    }
                 }
+
+                const ty2 = sy * cosTilt - neb.z * sinTilt;
+                const tz2 = sy * sinTilt + neb.z * cosTilt;
+
+                const ooz2 = 1 / (tz2 + K);
+                if (ooz2 < 0) continue;
+
+                const nx = gcx + sx * scale * ooz2;
+                const ny = gcy - ty2 * scale * ooz2;
+
+                if (nx < -60 || nx > w + 60 || ny < -60 || ny > h + 60) continue;
+
+                const nebRadius = neb.radius * ooz2 * K * 0.5;
+                if (nebRadius < 3) continue;
+
+                const nebGrad = ctx.createRadialGradient(nx, ny, 0, nx, ny, nebRadius);
+                const alpha = neb.brightness * (isDark ? 1 : 0.5);
+                nebGrad.addColorStop(0, `hsla(${neb.hue | 0}, 60%, 50%, ${alpha})`);
+                nebGrad.addColorStop(0.5, `hsla(${neb.hue | 0}, 50%, 40%, ${alpha * 0.4})`);
+                nebGrad.addColorStop(1, `hsla(${neb.hue | 0}, 40%, 30%, 0)`);
+                ctx.fillStyle = nebGrad;
+                ctx.fillRect(nx - nebRadius, ny - nebRadius, nebRadius * 2, nebRadius * 2);
             }
-
-            const ty2 = sy * cosTilt - neb.z * sinTilt;
-            const tz2 = sy * sinTilt + neb.z * cosTilt;
-
-            const ooz2 = 1 / (tz2 + K);
-            if (ooz2 < 0) continue;
-
-            const nx = gcx + sx * scale * ooz2;
-            const ny = gcy - ty2 * scale * ooz2;
-
-            if (nx < -60 || nx > w + 60 || ny < -60 || ny > h + 60) continue;
-
-            const nebRadius = neb.radius * ooz2 * K * 0.5;
-            if (nebRadius < 3) continue;
-
-            const nebGrad = ctx.createRadialGradient(nx, ny, 0, nx, ny, nebRadius);
-            const alpha = neb.brightness * (isDark ? 1 : 0.5);
-            nebGrad.addColorStop(0, `hsla(${neb.hue | 0}, 60%, 50%, ${alpha})`);
-            nebGrad.addColorStop(0.5, `hsla(${neb.hue | 0}, 50%, 40%, ${alpha * 0.4})`);
-            nebGrad.addColorStop(1, `hsla(${neb.hue | 0}, 40%, 30%, 0)`);
-            ctx.fillStyle = nebGrad;
-            ctx.fillRect(nx - nebRadius, ny - nebRadius, nebRadius * 2, nebRadius * 2);
-        }
+        } // end nebulae skip on mobile
 
         // --- Draw dust (background layer) — batched by font size ---
         const dustBuckets = new Map();
@@ -1140,11 +1145,18 @@ class BackgroundEffect {
         }
 
         for (const [fontSize, items] of dustBuckets) {
-            ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
-            for (let i = 0; i < items.length; i++) {
-                const s = items[i];
-                ctx.fillStyle = s.fillStyle;
-                ctx.fillText(s.char, s.screenX, s.screenY);
+            if (fontSize <= 4) {
+                // Tiny dust: fillRect is ~5x faster than fillText
+                for (let i = 0; i < items.length; i++) {
+                    ctx.fillStyle = items[i].fillStyle;
+                    ctx.fillRect(items[i].screenX - 1, items[i].screenY - 1, fontSize * 0.6, fontSize * 0.6);
+                }
+            } else {
+                ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
+                for (let i = 0; i < items.length; i++) {
+                    ctx.fillStyle = items[i].fillStyle;
+                    ctx.fillText(items[i].char, items[i].screenX, items[i].screenY);
+                }
             }
         }
 
@@ -1248,11 +1260,20 @@ class BackgroundEffect {
 
         // Draw all stars batched by font size
         for (const [fontSize, items] of starBuckets) {
-            ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
-            for (let i = 0; i < items.length; i++) {
-                const s = items[i];
-                ctx.fillStyle = s.fillStyle;
-                ctx.fillText(s.char, s.screenX, s.screenY);
+            if (fontSize <= 4) {
+                // Tiny stars: fillRect is much faster than fillText
+                for (let i = 0; i < items.length; i++) {
+                    const s = items[i];
+                    ctx.fillStyle = s.fillStyle;
+                    ctx.fillRect(s.screenX - 1, s.screenY - 1, fontSize * 0.5, fontSize * 0.5);
+                }
+            } else {
+                ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
+                for (let i = 0; i < items.length; i++) {
+                    const s = items[i];
+                    ctx.fillStyle = s.fillStyle;
+                    ctx.fillText(s.char, s.screenX, s.screenY);
+                }
             }
         }
     }
