@@ -122,15 +122,15 @@ const projects = [
         githubLink: null
     },
     {
-       "title": "Physics & Deep Learning Research",
-       "category": "Theoretical Physics & AI Alignment",
-       "description": "Research on fundamental galaxy dynamics and the 'Grokking' phenomenon in neural networks.",
-       "detailsTitle": "Published Research & Investigations",
-       "details": "A dual-focus research portfolio available on ORCID:\n\n1. **Complexity Binding Theory (Physics):** A zero-parameter framework unifying galaxy rotation curves, gravitational lensing, and cosmic structure without dark matter. All coefficients derived from e and π.\n\n2. **Grokking (AI/ML):** Investigating phase transitions in neural network generalization, analyzing how models shift from memorization to understanding (grokking) and its implications for interpretable AI.",
-       "image": "images/cbt.png",
-       "techStack": ["Physics", "Deep Learning", "Python", "Data Analysis", "Research"],
-       "demoLink": "https://orcid.org/0009-0000-9348-5438",
-       "githubLink": null
+        "title": "Physics & Deep Learning Research",
+        "category": "Theoretical Physics & AI Alignment",
+        "description": "Research on theoretical physics, AI alignment, neuroscience, and more.",
+        "detailsTitle": "Published Research & Investigations",
+        "details": null,
+        "image": "images/cbt.png",
+        "techStack": ["Physics", "Deep Learning", "Python", "Data Analysis", "Research"],
+        "demoLink": "https://orcid.org/0009-0000-9348-5438",
+        "githubLink": null
     },
 
     {
