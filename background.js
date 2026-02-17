@@ -1,7 +1,7 @@
 class BackgroundEffect {
     constructor() {
         this.canvas = document.getElementById('backgroundCanvas');
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: false });
         this.theme = document.documentElement.getAttribute('data-theme') || 'dark';
         this.time = 0;
         this.mouse = { x: -9999, y: -9999 };
@@ -9,9 +9,14 @@ class BackgroundEffect {
 
         // Mobile detection for performance scaling
         this.isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+        // Safari detection — its Canvas fillText() is ~3x slower than Chrome
+        const ua = navigator.userAgent;
+        this.isSafari = ua.includes('Safari') && !ua.includes('Chrome') && !ua.includes('Chromium');
+        this.isSlowDevice = this.isMobile || this.isSafari;
+        console.log(`[BG] isSafari=${this.isSafari}, isMobile=${this.isMobile}, isSlowDevice=${this.isSlowDevice}, UA=${ua.substring(0, 80)}`);
 
         // Grid config (for background ambient effects only)
-        this.cellSize = 14;
+        this.cellSize = this.isSlowDevice ? 24 : 14;
         this.cols = 0;
         this.rows = 0;
         this.nodes = [];
@@ -28,6 +33,7 @@ class BackgroundEffect {
         this.fractalBuffer = null;
         this.fractalChars = ' .·:;~=+*#%@$';
         this.frameCount = 0;
+        this._lastFrameTime = 0; // for FPS throttling
 
         // Click waves
         this.waves = [];
@@ -63,11 +69,13 @@ class BackgroundEffect {
         this.galaxyDust = [];
 
         const mob = this.isMobile;
-        const numArms = mob ? 4 : 5;
-        const armStars = mob ? 400 : 1200;
-        const coreStars = mob ? 400 : 1200;
-        const haloStars = mob ? 100 : 300;
-        const dustParticles = mob ? 500 : 1500;
+        const saf = this.isSafari && !mob;
+        const slow = this.isSlowDevice;
+        const numArms = slow ? 4 : 5;
+        const armStars = mob ? 400 : saf ? 400 : 700;
+        const coreStars = mob ? 400 : saf ? 400 : 700;
+        const haloStars = slow ? 100 : 200;
+        const dustParticles = mob ? 500 : saf ? 500 : 900;
 
         // --- Spiral arm stars ---
         for (let arm = 0; arm < numArms; arm++) {
@@ -149,7 +157,7 @@ class BackgroundEffect {
         }
 
         // --- Inter-arm fill stars (smooth out the gaps) ---
-        const fillStars = this.isMobile ? 250 : 800;
+        const fillStars = this.isSlowDevice ? 250 : 500;
         for (let i = 0; i < fillStars; i++) {
             const r = Math.pow(Math.random(), 0.7) * 1.0;
             const angle = Math.random() * Math.PI * 2;
@@ -241,7 +249,7 @@ class BackgroundEffect {
 
     _initSparkles() {
         this.sparkles = [];
-        const count = 60;
+        const count = this.isSlowDevice ? 25 : 60;
         for (let i = 0; i < count; i++) {
             this.sparkles.push({
                 x: Math.random() * (this.width || 1920),
@@ -303,8 +311,8 @@ class BackgroundEffect {
 
     resize() {
         this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-        // On mobile, render at half resolution for massive perf gain
-        const renderScale = this.isMobile ? this.dpr * 0.5 : this.dpr;
+        // On slow devices, render at lower resolution for massive perf gain
+        const renderScale = this.isSlowDevice ? this.dpr * 0.4 : this.dpr;
         this.canvas.width = window.innerWidth * renderScale;
         this.canvas.height = window.innerHeight * renderScale;
         this.canvas.style.width = window.innerWidth + 'px';
@@ -430,6 +438,16 @@ class BackgroundEffect {
         const ctx = this.ctx;
         const isDark = this.theme !== 'light';
 
+        // FPS throttle: cap at 30fps on mobile and Safari
+        if (this.isSlowDevice) {
+            const now = performance.now();
+            if (now - this._lastFrameTime < 30) {
+                requestAnimationFrame(() => this.animate());
+                return;
+            }
+            this._lastFrameTime = now;
+        }
+
         ctx.clearRect(0, 0, this.width, this.height);
 
         this._updateParallax();
@@ -448,27 +466,25 @@ class BackgroundEffect {
         }
         this.mouseTrail = this.mouseTrail.filter(p => this.time - p.birth < 1.2);
 
-        this._updateNodes();
+        // On slow devices, skip node physics on odd frames
+        if (!this.isSlowDevice || this.frameCount % 2 === 0) {
+            this._updateNodes();
+        }
 
         // Galaxy spin (with black hole spin boost)
         this._updateBlackHolePhase();
         this.galaxyAngle += 0.0015 + this.bhSpinBoost;
 
-        // Compute fractal less often on mobile
-        const fractalInterval = this.isMobile ? 6 : 3;
-        if (this.frameCount % fractalInterval === 0) {
+        // Compute fractal — skip on slow devices when not interacting
+        const fractalInterval = this.isMobile ? 8 : 5;
+        const shouldComputeFractal = !this.isSlowDevice || (this.mouse.x > -999 || this.waves.length > 0);
+        if (shouldComputeFractal && this.frameCount % fractalInterval === 0) {
             this._computeFractal();
         }
         this.frameCount++;
 
-        // On mobile, skip rendering every other frame for better performance
-        if (this.isMobile && this.frameCount % 2 !== 0) {
-            requestAnimationFrame(() => this.animate());
-            return;
-        }
-
         // Draw layers (skip grid on mobile for perf)
-        if (!this.isMobile) this._drawGridLines(ctx, isDark);
+        if (!this.isSlowDevice) this._drawGridLines(ctx, isDark);
         this._drawGalaxy(ctx, isDark);
 
         // Draw black hole effects over galaxy
@@ -477,7 +493,11 @@ class BackgroundEffect {
         const bhScale = Math.min(this.width, this.height) * 0.85;
         this._drawBlackHole(ctx, isDark, bhGcx, bhGcy, bhScale);
 
-        this._drawASCIINodes(ctx, isDark);
+        // On slow devices, only draw ASCII nodes when there's interaction
+        const hasInteraction = this.mouse.x > -999 || this.waves.length > 0;
+        if (!this.isSlowDevice || hasInteraction) {
+            this._drawASCIINodes(ctx, isDark);
+        }
         this._updateAndDrawSparkles(ctx, isDark);
 
         requestAnimationFrame(() => this.animate());
@@ -520,7 +540,7 @@ class BackgroundEffect {
         }
         this.fractalBuffer.fill(-1);
 
-        const maxIter = 25;
+        const maxIter = this.isSlowDevice ? 15 : 25;
 
         // --- Phase cycling: Julia → Mandelbrot → Burning Ship ---
         // Each phase lasts ~20s, with 5s crossfade between them
@@ -847,7 +867,7 @@ class BackgroundEffect {
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'center';
 
-            const diskParticleCount = this.isMobile ? 60 : 180;
+            const diskParticleCount = this.isMobile ? 60 : this.isSafari ? 90 : 180;
             for (let i = 0; i < diskParticleCount; i++) {
                 // Orbital angle — visibly rotates over time
                 const orbitalSpeed = diskSpeed * (0.8 + (i % 3) * 0.15);
@@ -870,11 +890,18 @@ class BackgroundEffect {
                 const chars = '·:;+*#';
                 const charIdx = Math.min(chars.length - 1, Math.floor(heat * chars.length));
 
-                ctx.font = `${fontSize | 0}px 'JetBrains Mono', monospace`;
-                ctx.fillStyle = isDark
-                    ? `hsla(${25 + rRatio * 15}, ${35 + heat * 35}%, ${70 + heat * 25}%, ${alpha})`
-                    : `hsla(${25 + rRatio * 15}, ${20 + heat * 25}%, ${55 + heat * 15}%, ${alpha * 0.5})`;
-                ctx.fillText(chars[charIdx], px, py);
+                if (this.isSlowDevice) {
+                    ctx.fillStyle = isDark
+                        ? `hsla(${25 + rRatio * 15}, ${35 + heat * 35}%, ${70 + heat * 25}%, ${alpha})`
+                        : `hsla(${25 + rRatio * 15}, ${20 + heat * 25}%, ${55 + heat * 15}%, ${alpha * 0.5})`;
+                    ctx.fillRect(px - 1, py - 1, fontSize * 0.5, fontSize * 0.5);
+                } else {
+                    ctx.font = `${fontSize | 0}px 'JetBrains Mono', monospace`;
+                    ctx.fillStyle = isDark
+                        ? `hsla(${25 + rRatio * 15}, ${35 + heat * 35}%, ${70 + heat * 25}%, ${alpha})`
+                        : `hsla(${25 + rRatio * 15}, ${20 + heat * 25}%, ${55 + heat * 15}%, ${alpha * 0.5})`;
+                    ctx.fillText(chars[charIdx], px, py);
+                }
             }
             ctx.restore();
         };
@@ -915,67 +942,71 @@ class BackgroundEffect {
         if (phase > 0.25) {
             const ga = Math.min(1, (phase - 0.25) * 2);
 
-            // Outer warm glow ring — nearly circular
-            ctx.save();
-            ctx.translate(gcx, gcy);
-            ctx.rotate(tilt);
-            ctx.scale(1, 0.95); // nearly circular
+            // Outer warm glow ring — skip on slow devices
+            if (!this.isSlowDevice) {
+                ctx.save();
+                ctx.translate(gcx, gcy);
+                ctx.rotate(tilt);
+                ctx.scale(1, 0.95); // nearly circular
 
-            const innerR = ehR * 0.9;
-            const outerR = ehR * 1.45;
+                const innerR = ehR * 0.9;
+                const outerR = ehR * 1.45;
 
-            const ringGrad = ctx.createRadialGradient(0, 0, innerR, 0, 0, outerR);
-            ringGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-            ringGrad.addColorStop(0.15, isDark
-                ? `hsla(28, 55%, 65%, ${ga * 0.25})`
-                : `hsla(28, 40%, 50%, ${ga * 0.12})`);
-            ringGrad.addColorStop(0.35, isDark
-                ? `hsla(30, 65%, 78%, ${ga * 0.7})`
-                : `hsla(30, 50%, 60%, ${ga * 0.3})`);
-            ringGrad.addColorStop(0.5, isDark
-                ? `hsla(28, 60%, 88%, ${ga * 0.85})`
-                : `hsla(28, 45%, 70%, ${ga * 0.4})`);
-            ringGrad.addColorStop(0.65, isDark
-                ? `hsla(30, 55%, 72%, ${ga * 0.5})`
-                : `hsla(30, 42%, 58%, ${ga * 0.2})`);
-            ringGrad.addColorStop(0.82, isDark
-                ? `hsla(25, 48%, 50%, ${ga * 0.15})`
-                : `hsla(25, 35%, 40%, ${ga * 0.07})`);
-            ringGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                const ringGrad = ctx.createRadialGradient(0, 0, innerR, 0, 0, outerR);
+                ringGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                ringGrad.addColorStop(0.15, isDark
+                    ? `hsla(28, 55%, 65%, ${ga * 0.25})`
+                    : `hsla(28, 40%, 50%, ${ga * 0.12})`);
+                ringGrad.addColorStop(0.35, isDark
+                    ? `hsla(30, 65%, 78%, ${ga * 0.7})`
+                    : `hsla(30, 50%, 60%, ${ga * 0.3})`);
+                ringGrad.addColorStop(0.5, isDark
+                    ? `hsla(28, 60%, 88%, ${ga * 0.85})`
+                    : `hsla(28, 45%, 70%, ${ga * 0.4})`);
+                ringGrad.addColorStop(0.65, isDark
+                    ? `hsla(30, 55%, 72%, ${ga * 0.5})`
+                    : `hsla(30, 42%, 58%, ${ga * 0.2})`);
+                ringGrad.addColorStop(0.82, isDark
+                    ? `hsla(25, 48%, 50%, ${ga * 0.15})`
+                    : `hsla(25, 35%, 40%, ${ga * 0.07})`);
+                ringGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
-            ctx.fillStyle = ringGrad;
-            ctx.beginPath();
-            ctx.arc(0, 0, outerR, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
+                ctx.fillStyle = ringGrad;
+                ctx.beginPath();
+                ctx.arc(0, 0, outerR, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } // end skip lensing ring
 
-            // Tight bright photon ring right at event horizon edge
-            ctx.save();
-            ctx.translate(gcx, gcy);
-            ctx.rotate(tilt);
-            ctx.scale(1, 0.96);
+            // Tight bright photon ring — skip on slow devices
+            if (!this.isSlowDevice) {
+                ctx.save();
+                ctx.translate(gcx, gcy);
+                ctx.rotate(tilt);
+                ctx.scale(1, 0.96);
 
-            const prInner = ehR * 0.96;
-            const prOuter = ehR * 1.22;
+                const prInner = ehR * 0.96;
+                const prOuter = ehR * 1.22;
 
-            const prGrad = ctx.createRadialGradient(0, 0, prInner, 0, 0, prOuter);
-            prGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-            prGrad.addColorStop(0.25, isDark
-                ? `hsla(30, 45%, 88%, ${ga * 0.55})`
-                : `hsla(30, 35%, 72%, ${ga * 0.25})`);
-            prGrad.addColorStop(0.45, isDark
-                ? `hsla(28, 38%, 95%, ${ga * 0.75})`
-                : `hsla(28, 28%, 82%, ${ga * 0.35})`);
-            prGrad.addColorStop(0.65, isDark
-                ? `hsla(30, 42%, 82%, ${ga * 0.4})`
-                : `hsla(30, 32%, 68%, ${ga * 0.18})`);
-            prGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                const prGrad = ctx.createRadialGradient(0, 0, prInner, 0, 0, prOuter);
+                prGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                prGrad.addColorStop(0.25, isDark
+                    ? `hsla(30, 45%, 88%, ${ga * 0.55})`
+                    : `hsla(30, 35%, 72%, ${ga * 0.25})`);
+                prGrad.addColorStop(0.45, isDark
+                    ? `hsla(28, 38%, 95%, ${ga * 0.75})`
+                    : `hsla(28, 28%, 82%, ${ga * 0.35})`);
+                prGrad.addColorStop(0.65, isDark
+                    ? `hsla(30, 42%, 82%, ${ga * 0.4})`
+                    : `hsla(30, 32%, 68%, ${ga * 0.18})`);
+                prGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
-            ctx.fillStyle = prGrad;
-            ctx.beginPath();
-            ctx.arc(0, 0, prOuter, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
+                ctx.fillStyle = prGrad;
+                ctx.beginPath();
+                ctx.arc(0, 0, prOuter, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } // end skip photon ring
 
             // --- Orbiting ASCII particles around the lensing ring ---
             ctx.textBaseline = 'middle';
@@ -983,7 +1014,7 @@ class BackgroundEffect {
             const ringR = ehR * 1.12; // orbit radius on the ring
             const ringSquash = 0.95;  // match ring squash
 
-            const ringParticleCount = this.isMobile ? 20 : 60;
+            const ringParticleCount = this.isMobile ? 20 : this.isSafari ? 30 : 60;
             for (let i = 0; i < ringParticleCount; i++) {
                 const orbAngle = (i / ringParticleCount) * Math.PI * 2 + diskSpeed * 1.2;
                 // Project onto the nearly-circular tilted ring
@@ -1004,11 +1035,18 @@ class BackgroundEffect {
                 const chars = '·:;+*#';
                 const charIdx = Math.min(chars.length - 1, Math.floor(flicker * chars.length));
 
-                ctx.font = `${fontSize | 0}px 'JetBrains Mono', monospace`;
-                ctx.fillStyle = isDark
-                    ? `hsla(${28 + flicker * 8}, ${40 + flicker * 30}%, ${75 + flicker * 20}%, ${alpha})`
-                    : `hsla(${28 + flicker * 8}, ${30 + flicker * 20}%, ${55 + flicker * 15}%, ${alpha * 0.5})`;
-                ctx.fillText(chars[charIdx], px, py);
+                if (this.isSlowDevice) {
+                    ctx.fillStyle = isDark
+                        ? `hsla(${28 + flicker * 8}, ${40 + flicker * 30}%, ${75 + flicker * 20}%, ${alpha})`
+                        : `hsla(${28 + flicker * 8}, ${30 + flicker * 20}%, ${55 + flicker * 15}%, ${alpha * 0.5})`;
+                    ctx.fillRect(px - 1, py - 1, fontSize * 0.5, fontSize * 0.5);
+                } else {
+                    ctx.font = `${fontSize | 0}px 'JetBrains Mono', monospace`;
+                    ctx.fillStyle = isDark
+                        ? `hsla(${28 + flicker * 8}, ${40 + flicker * 30}%, ${75 + flicker * 20}%, ${alpha})`
+                        : `hsla(${28 + flicker * 8}, ${30 + flicker * 20}%, ${55 + flicker * 15}%, ${alpha * 0.5})`;
+                    ctx.fillText(chars[charIdx], px, py);
+                }
             }
         }
 
@@ -1057,8 +1095,8 @@ class BackgroundEffect {
         ctx.fillStyle = coreGrad;
         ctx.fillRect(gcx - coreRadius, gcy - coreRadius, coreRadius * 2, coreRadius * 2);
 
-        // --- Draw nebulae (soft colored blobs) — skip on mobile for perf ---
-        if (!this.isMobile) {
+        // --- Draw nebulae (soft colored blobs) — skip on slow devices for perf ---
+        if (!this.isSlowDevice) {
             for (let i = 0; i < this.galaxyNebulae.length; i++) {
                 const neb = this.galaxyNebulae[i];
 
@@ -1144,12 +1182,14 @@ class BackgroundEffect {
             bucket.push({ screenX, screenY, char: d.char, fillStyle });
         }
 
+        const useDotsOnly = this.isSlowDevice;
         for (const [fontSize, items] of dustBuckets) {
-            if (fontSize <= 4) {
-                // Tiny dust: fillRect is ~5x faster than fillText
+            if (useDotsOnly || fontSize <= 8) {
+                // Colored dots — no fillText overhead
+                const dotSize = Math.max(1, fontSize * 0.6);
                 for (let i = 0; i < items.length; i++) {
                     ctx.fillStyle = items[i].fillStyle;
-                    ctx.fillRect(items[i].screenX - 1, items[i].screenY - 1, fontSize * 0.6, fontSize * 0.6);
+                    ctx.fillRect(items[i].screenX - 1, items[i].screenY - 1, dotSize, dotSize);
                 }
             } else {
                 ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
@@ -1260,12 +1300,13 @@ class BackgroundEffect {
 
         // Draw all stars batched by font size
         for (const [fontSize, items] of starBuckets) {
-            if (fontSize <= 4) {
-                // Tiny stars: fillRect is much faster than fillText
+            if (useDotsOnly || fontSize <= 8) {
+                // Colored dots — fast path
+                const dotSize = Math.max(1, fontSize * 0.5);
                 for (let i = 0; i < items.length; i++) {
                     const s = items[i];
                     ctx.fillStyle = s.fillStyle;
-                    ctx.fillRect(s.screenX - 1, s.screenY - 1, fontSize * 0.5, fontSize * 0.5);
+                    ctx.fillRect(s.screenX - 1, s.screenY - 1, dotSize, dotSize);
                 }
             } else {
                 ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
