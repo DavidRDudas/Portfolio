@@ -120,18 +120,18 @@ const projects = [
      //   techStack: ["Writing", "Publishing", "Physics", "Math"],
      //   demoLink: "https://www.amazon.com/dp/B0GNJM2STZ",
      //   githubLink: null
-  //  },
-   // {
-    //    "title": "Physics & Deep Learning Research",
-     //   "category": "Theoretical Physics & AI Alignment",
-     //   "description": "Research on theoretical physics, AI alignment, neuroscience, and more.",
-       // "detailsTitle": "Published Research & Investigations",
-       // "details": null,
-      //  "image": "images/cbt.png",
-      //  "techStack": ["Physics", "Deep Learning", "Python", "Data Analysis", "Research"],
-        //"demoLink": "https://orcid.org/0009-0000-9348-5438",
+    },
+    {
+          "title": "Physics & Deep Learning Research",
+          "category": "Theoretical Physics & AI Alignment",
+          "description": "Research on theoretical physics, AI alignment, neuroscience, and more.",
+          "detailsTitle": "Published Research & Investigations",
+          "details": null,
+          "image": "images/cbt.png",
+          "techStack": ["Physics", "Deep Learning", "Python", "Data Analysis", "Research"],
+          "demoLink": "https://orcid.org/0009-0000-9348-5438",
         //"githubLink": null
-   // },
+    },
 
     {
         title: "NeutralHQ",
