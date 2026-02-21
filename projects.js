@@ -120,7 +120,7 @@ const projects = [
      //   techStack: ["Writing", "Publishing", "Physics", "Math"],
      //   demoLink: "https://www.amazon.com/dp/B0GNJM2STZ",
      //   githubLink: null
-    },
+   // },
     {
           "title": "Physics & Deep Learning Research",
           "category": "Theoretical Physics & AI Alignment",
