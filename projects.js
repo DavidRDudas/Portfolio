@@ -118,7 +118,7 @@ const projects = [
         details: null,
         image: "images/thewheel.png",
         techStack: ["Writing", "Publishing", "Satire"],
-        demoLink: "https://www.amazon.com/stores/David-R.-Dudas/author/B0GD8HKZTC",
+        demoLink: "https://www.amazon.com/dp/B0GWYSGDX9",
         githubLink: null
     },
     //{
