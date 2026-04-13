@@ -117,7 +117,7 @@ const projects = [
         description: "A Kafkaesque fable about compliance, manufactured purpose, and the animals who keep running. Available on Amazon.",
         details: null,
         image: "images/thewheel.png",
-        techStack: ["Writing", "Publishing", "Literature"],
+        techStack: ["Writing", "Publishing", "Satire"],
         demoLink: "https://www.amazon.com/stores/David-R.-Dudas/author/B0GD8HKZTC",
         githubLink: null
     },
