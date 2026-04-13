@@ -111,6 +111,16 @@ const projects = [
         demoLink: "https://www.amazon.com/Cognitive-Blindspot-Consciousness-Emerges-Knowing-ebook/dp/B0FYQT5LSX",
         githubLink: null
     },
+    {
+        title: "The Wheel",
+        category: "Literature",
+        description: "A Kafkaesque fable about compliance, manufactured purpose, and the animals who keep running. Available on Amazon.",
+        details: null,
+        image: "images/thewheel.png",
+        techStack: ["Writing", "Publishing", "Literature"],
+        demoLink: "https://www.amazon.com/stores/David-R.-Dudas/author/B0GD8HKZTC",
+        githubLink: null
+    },
     //{
      //   title: "The Geometry of Everything",
       //  category: "Literature",
