@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>David Dudas — Portfolio</title>
+<meta name="description" content="David Dudas — software architect, creator, and PhD student in Computer Science at Mississippi State University. Selected work across systems, simulations, games, writing, and research." />
+<meta property="og:title" content="David Dudas — Portfolio" />
+<meta property="og:description" content="Software Architect · Creator · PhD Student (Computer Science, Mississippi State University). Selected work in systems, simulations, and computational art." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="favicon.ico" />
+
+<!-- Typeface: academic serif + monospace metadata -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,400..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- KaTeX for the math/physics typesetting accents -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" referrerpolicy="no-referrer" />
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" referrerpolicy="no-referrer"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" referrerpolicy="no-referrer"></script>
+
+<style>
+  :root{
+    --bg:#fbfaf7; --ink:#1b1a17; --muted:#6c675e; --faint:#938c80;
+    --rule:#e6e1d6; --rule-strong:#d3ccbd; --accent:#1f3a6d; --accent-soft:rgba(31,58,109,.07);
+    --maxw:780px;
+  }
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Source Serif 4", Charter, Georgia, "Times New Roman", serif;
+    font-size:18px; line-height:1.62; font-weight:380;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .mono{ font-family:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace; }
+  a{ color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(31,58,109,.30); transition:background .15s, border-color .15s; }
+  a:hover{ background:var(--accent-soft); border-bottom-color:var(--accent); }
+  .wrap{ max-width:var(--maxw); margin:0 auto; padding:0 30px; }
+
+  /* top utility bar */
+  .topbar{ border-bottom:1px solid var(--rule); }
+  .topbar .wrap{ display:flex; align-items:center; justify-content:space-between; height:50px; }
+  .topbar .id{ font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); border:0; }
+  .topnav{ display:flex; gap:20px; font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.04em; }
+  .topnav a{ border:0; color:var(--muted); }
+  .topnav a:hover{ color:var(--accent); background:none; }
+
+  /* header */
+  header.site{ padding:78px 0 34px; }
+  .kicker{ font-family:"JetBrains Mono", monospace; font-size:11.5px; letter-spacing:.26em; text-transform:uppercase; color:var(--faint); }
+  h1.name{ font-size:clamp(40px,7vw,52px); line-height:1.02; margin:.28em 0 .12em; font-weight:600; letter-spacing:-.012em; }
+  .roles{ font-size:18.5px; color:var(--muted); font-style:italic; }
+  .roles strong{ color:var(--ink); font-weight:600; font-style:normal; }
+  .bio{ margin-top:24px; font-size:19px; max-width:64ch; }
+  .bio em{ font-style:italic; }
+
+  /* equation motif strip */
+  .eqstrip{ margin-top:26px; padding:14px 0; border-top:1px solid var(--rule); border-bottom:1px solid var(--rule);
+    display:flex; flex-wrap:wrap; gap:10px 26px; align-items:center; color:var(--muted); }
+  .eqstrip .lab{ font-family:"JetBrains Mono", monospace; font-size:10.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--faint); }
+  .eqstrip .katex{ font-size:1.02em; color:#403b33; }
+
+  /* contacts */
+  .contacts{ margin-top:24px; display:flex; flex-wrap:wrap; gap:9px 22px; font-family:"JetBrains Mono", monospace; font-size:13px; }
+  .contacts a{ border:0; color:var(--ink); display:inline-flex; align-items:center; gap:8px; }
+  .contacts a:hover{ color:var(--accent); background:none; }
+  .contacts svg{ width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.7; opacity:.8; }
+
+  /* sections */
+  section.sec{ padding:46px 0; border-top:1px solid var(--rule); }
+  .sec-head{ display:flex; align-items:baseline; gap:13px; margin-bottom:4px; }
+  .sec-num{ font-family:"JetBrains Mono", monospace; font-size:12px; color:var(--accent); letter-spacing:.06em; }
+  .sec-title{ font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); font-weight:500; }
+  .sec-blurb{ color:var(--muted); font-size:16.5px; margin:0 0 18px; max-width:62ch; }
+  .sec-eq{ margin:2px 0 20px; color:var(--muted); }
+  .sec-eq .katex{ font-size:1.05em; color:#403b33; }
+
+  /* project entry */
+  .proj{ display:grid; grid-template-columns:118px 1fr; gap:22px; padding:20px 0; border-top:1px dotted var(--rule-strong); }
+  .proj:first-of-type{ border-top:0; padding-top:6px; }
+  .thumb{ width:118px; height:80px; object-fit:cover; border:1px solid var(--rule-strong); border-radius:2px;
+    background:#efeae0; filter:saturate(.9) contrast(.98); }
+  .pbody h3{ margin:0; font-size:20.5px; font-weight:600; line-height:1.25; letter-spacing:-.005em; }
+  .pbody h3 a{ border:0; }
+  .pbody h3 a:hover{ background:none; border-bottom:1px solid var(--accent); }
+  .pbody h3 .ext{ font-family:"JetBrains Mono", monospace; font-size:11px; color:var(--faint); margin-left:7px; font-weight:400; letter-spacing:0; }
+  .pbody .cat{ font-family:"JetBrains Mono", monospace; font-size:11.5px; color:var(--faint); text-transform:uppercase; letter-spacing:.07em; margin-top:3px; }
+  .pbody p{ margin:.55em 0 .6em; font-size:16.5px; color:#332f29; max-width:64ch; }
+  .tags{ display:flex; flex-wrap:wrap; gap:6px; }
+  .tag{ font-family:"JetBrains Mono", monospace; font-size:11px; color:var(--muted); border:1px solid var(--rule-strong); border-radius:999px; padding:2px 9px; line-height:1.5; }
+
+  /* footer */
+  footer.site{ border-top:1px solid var(--rule); padding:34px 0 80px; color:var(--faint);
+    font-family:"JetBrains Mono", monospace; font-size:12.5px; line-height:1.9; }
+  footer.site a{ color:var(--muted); border:0; }
+  footer.site a:hover{ color:var(--accent); background:none; }
+  .foot-row{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px 24px; }
+
+  @media (max-width:560px){
+    body{ font-size:17px; }
+    .proj{ grid-template-columns:1fr; gap:12px; }
+    .thumb{ width:100%; height:160px; }
+    header.site{ padding:54px 0 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <a class="id" href="index.html">David&nbsp;Dudas</a>
+    <nav class="topnav">
+      <a href="world.html">3D&nbsp;World&nbsp;↗</a>
+      <a href="index.html">Menu</a>
+    </nav>
+  </div>
+</div>
+
+<header class="site">
+  <div class="wrap">
+    <div class="kicker">Portfolio · 2026</div>
+    <h1 class="name">David Dudas</h1>
+    <div class="roles"><strong>Software Architect</strong> · <strong>Creator</strong> · <strong>PhD Student</strong>, Computer Science — Mississippi State University</div>
+
+    <p class="bio">
+      I build high-performance systems and computational tools, and study problems at the
+      intersection of <em>theoretical physics</em>, <em>deep learning</em>, and <em>theoretical
+      computer science</em>. My work spans enterprise real-time platforms, research and
+      simulation, game development, and published writing — a habit of taking ideas from first
+      principles all the way to shipped product.
+    </p>
+
+    <div class="eqstrip" aria-hidden="true">
+      <span class="lab">Interests</span>
+      <span>\( \delta S = 0 \)</span>
+      <span>\( i\hbar\,\partial_t \psi = \hat{H}\psi \)</span>
+      <span>\( \nabla_\theta\, \mathcal{L}(\theta) \)</span>
+      <span>\( \mathsf{P} \overset{?}{=} \mathsf{NP} \)</span>
+    </div>
+
+    <div class="contacts">
+      <a href="mailto:daviddudas@hotmail.com">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>
+        Email
+      </a>
+      <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        GitHub
+      </a>
+      <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M9 8.5h.01"/></svg>
+        ORCID
+      </a>
+      <a href="world.html">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 22V12"/></svg>
+        Interactive 3D
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="content"></main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-row">
+      <span>© 2026 David Dudas — <a href="https://dudas.io">dudas.io</a></span>
+      <span>
+        <a href="mailto:daviddudas@hotmail.com">Email</a> ·
+        <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">GitHub</a> ·
+        <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">ORCID</a> ·
+        <a href="world.html">3D World</a>
+      </span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ----- Catalogue: every project from the interactive site, grouped ----- */
+const SECTIONS = [
+  {
+    title: "Systems & Enterprise",
+    blurb: "Production platforms engineered for performance, reliability, and scale.",
+    items: [
+      { title:"Hokku", cat:"Enterprise · Real-time Systems", img:"hokku.png",
+        desc:"High-performance, ultra-low-latency ticketing platform for high-volume enterprise operations — optimized data pipelines, real-time updates, and reliability patterns engineered for mission-critical workloads.",
+        tech:["Enterprise Architecture","High Performance","Real-time Systems"], link:"https://hokku.app" },
+      { title:"NeutralHQ", cat:"Web Platform · MEN Stack", img:"neutralhq.png",
+        desc:"Backend-heavy review platform for legal neutrals: MongoDB + Express + Node with EJS server-side rendering, Passport.js auth, Stripe subscriptions, a moderated review/rating system, Cloudinary uploads, SendGrid email, Helmet/CSP/CORS hardening, and a custom MVC architecture.",
+        tech:["MongoDB","Express.js","Node.js","EJS","Stripe","Passport.js"], link:"https://hidden-refuge-77075.herokuapp.com/" },
+      { title:"Opin.Ink", cat:"Web Platform", img:"opinink.png",
+        desc:"Full-stack writing platform for journaling and sharing thoughts — NLP-powered content moderation via WordNet, Stripe payments, email verification, and a quarterly content-ranking system.",
+        tech:["Vue.js","Express","MongoDB","NLP","Stripe"], link:"https://opin.ink" },
+      { title:"Resource Management Software", cat:"Enterprise Software", img:"rmp.png",
+        desc:"Web-based resource management with an interactive calendar, employee/PTO tracking, color-coded project assignments, conflict detection, and JSON backup/restore.",
+        tech:["JavaScript","Node.js","Database"], link:"https://watermarg.in" },
+    ]
+  },
+  {
+    title: "Simulations & Computational Art",
+    blurb: "Interactive engines exploring physics, emergence, and the structure of code.",
+    eq: "\\[ \\frac{d\\mathbf{x}_i}{dt} \\;=\\; \\sum_{j\\neq i} \\mathbf{f}_{ij}(\\mathbf{x}_i,\\mathbf{x}_j) \\]",
+    items: [
+      { title:"Particle Physics Simulator", cat:"Interactive Simulation", img:"particlephysics.png",
+        desc:"Particle-physics engine with multiple modes — gravitational systems, electric fields, gas molecules, celestial bodies. Spatial-grid collision detection, real-time parameter tuning, and smooth performance with hundreds of particles.",
+        tech:["JavaScript","Physics","Optimization"], link:"./ParticleApplication/index.html" },
+      { title:"Ant Colony Optimization", cat:"Interactive Simulation", img:"aco.png",
+        desc:"Multiple competing colonies with distinct ant types (queens, scouts, foragers, warriors) and pheromone-based emergent behavior. Real-time stats and fully customizable parameters.",
+        tech:["JavaScript","Emergent Behavior","Algorithms"], link:"./ACO/index.html" },
+      { title:"Code Constellation", cat:"Creative Technology", img:"codeuniverse.png",
+        desc:"Transforms JavaScript source into an interactive cosmic simulation — functions become stars with gravitational fields, variables orbit as planets, and code complexity weaves dynamic nebulae.",
+        tech:["JavaScript","Generative Art","AST Parsing"], link:"./CodeConstellation/index.html" },
+      { title:"Color Wave Patterns", cat:"Creative Technology", img:"colorwave.png",
+        desc:"Color-wave visualization with flocking, orbital mechanics, and fluid-dynamics-style emergent behavior — particle trails, glow effects, dynamic connections, and presets across spiral, mandala, and grid generators.",
+        tech:["JavaScript","WebGL","Mathematics"], link:"./ColorSimulator/index.html" },
+      { title:"Dream Weaver", cat:"Creative Technology", img:"dreamweaver.png",
+        desc:"Text-to-art generator built on JavaScript and SVG — ten procedural layers including flow fields, Voronoi tessellation, geometric patterns, and particle systems composing into multi-layered abstract visualizations.",
+        tech:["JavaScript","SVG","Generative Art"], link:"./DreamWeaver/index.html" },
+      { title:"Naive Cryptography", cat:"Educational", img:"naivecryptography.png",
+        desc:"Visual grid-based encryption with an interactive pattern designer, real-time complexity analysis, and a dual-pane encode/decode interface.",
+        tech:["JavaScript","Cryptography"], link:"./NaiveCryptography/index.html" },
+    ]
+  },
+  {
+    title: "Games",
+    blurb: "Original titles spanning design, art, music, AI, and engine work.",
+    items: [
+      { title:"Prism", cat:"Indie Game · In Development", img:"prism.png",
+        desc:"An indie game I lead on art, music, design, and tech. A* pathfinding, complex AI decision-making, and a custom random-generation algorithm spawning up to 220 unique characters in a novel grid-based positioning system. Coming to PlayStation, Xbox, and PC.",
+        tech:["Unity","C#","Game Design","AI","Console Dev"], link:null },
+      { title:"Indie Game Development", cat:"Game Development · Multiple Titles", img:"indiegames.png",
+        desc:"A collection of complete game projects across genres — an enhanced Tetris with progressive scaling, a horizontal-scrolling space shooter with homing missiles and time manipulation, and a full FPS with intelligent enemy AI and modular weapons.",
+        tech:["Unity","C#","AI","Procedural Generation"], link:null },
+      { title:"LimitShift", cat:"Game Studio", img:"limitshift.png",
+        desc:"My indie game studio — home to game projects in development.",
+        tech:["Game Development","Web Design"], link:"https://www.limitshift.com" },
+    ]
+  },
+  {
+    title: "Ventures",
+    blurb: "Companies and studios I build and run.",
+    items: [
+      { title:"Ursavus", cat:"Software Company", img:"ursavus.png",
+        desc:"My software company — building software products and tools.",
+        tech:["Software","Product","Company"], link:"https://ursavus.com" },
+      { title:"Dudas Engineering", cat:"Civil & Environmental Engineering", img:"dudasengineering.png",
+        desc:"Business platform for a civil and environmental engineering firm.",
+        tech:["Web Design","Business"], link:"https://dudasengineering.com" },
+    ]
+  },
+  {
+    title: "Applications",
+    blurb: "Shipped consumer software.",
+    items: [
+      { title:"CompressLite", cat:"iOS App", img:"compresslite.png",
+        desc:"iOS app for intelligent image compression and storage management — three modes (Standard, Aggressive, Extreme), batch processing, side-by-side comparisons, and safe undo via Recently Deleted.",
+        tech:["Swift","iOS","UIKit","Image Processing"], link:null },
+    ]
+  },
+  {
+    title: "Writing",
+    blurb: "Published books across fable, philosophy, and children's literature.",
+    items: [
+      { title:"The Wheel", cat:"Satire · Fable", img:"thewheel.png",
+        desc:"A Kafkaesque fable about compliance, manufactured purpose, and the animals who keep running. Available on Amazon.",
+        tech:["Writing","Publishing","Satire"], link:"https://www.amazon.com/dp/B0GWYSGDX9" },
+      { title:"Cognitive Blindspot", cat:"Philosophy · Consciousness", img:"cognitiveblindspot.png",
+        desc:"An exploration of how consciousness emerges from knowing. Available on Amazon.",
+        tech:["Writing","Publishing","Philosophy"], link:"https://www.amazon.com/Cognitive-Blindspot-Consciousness-Emerges-Knowing-ebook/dp/B0FYQT5LSX" },
+      { title:"Charlie & Pip", cat:"Children's Book", img:"charlieandpip.png",
+        desc:"A heartwarming, published children's book. Available on Amazon.",
+        tech:["Writing","Publishing"], link:"https://www.amazon.com/Charlie-Pip-David-R-Dudas/dp/B0DJM8YJVT" },
+    ]
+  },
+  {
+    title: "Photography",
+    blurb: "Personal visual work.",
+    items: [
+      { title:"Photography", cat:"Personal Portfolio", img:"photography.png",
+        desc:"Personal photography portfolio.",
+        tech:["Photography","Web Design"], link:"https://dudas.photography" },
+    ]
+  },
+  {
+    title: "Research Interests",
+    blurb: "Areas I actively explore — independent and ongoing.",
+    eq: "\\[ \\mathcal{L}(\\theta) \\;=\\; -\\,\\mathbb{E}_{x\\sim\\mathcal{D}}\\big[\\log p_\\theta(x)\\big] \\]",
+    items: [
+      { title:"Research & Exploration", cat:"Independent · Ongoing", img:"cbt.png",
+        desc:"Ongoing independent explorations across AI and deep learning, computer graphics, sim-to-real transfer, and robotics — alongside theoretical physics and the theoretical computer science underneath. Ideas in progress rather than finished, published results.",
+        tech:["AI","Deep Learning","Graphics","Sim-to-Real","Robotics","Physics","Theory"], link:null },
+    ]
+  },
+];
+
+/* ----- Render ----- */
+const roman = ["0","I","II","III","IV","V","VI","VII","VIII","IX","X"];
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function host(url){
+  try { return new URL(url).hostname.replace(/^www\./,""); } catch(e){ return ""; }
+}
+
+function projHTML(p){
+  const ext = p.link && /^https?:/.test(p.link);
+  const titleInner = ext
+    ? `<a href="${esc(p.link)}" target="_blank" rel="noopener noreferrer">${esc(p.title)}<span class="ext">${esc(host(p.link))} ↗</span></a>`
+    : (p.link
+        ? `<a href="${esc(p.link)}" target="_blank" rel="noopener noreferrer">${esc(p.title)}<span class="ext">live demo ↗</span></a>`
+        : `${esc(p.title)}`);
+  const tags = (p.tech||[]).map(t => `<span class="tag">${esc(t)}</span>`).join("");
+  const thumb = p.img
+    ? `<img class="thumb" src="images/${esc(p.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
+    : `<div class="thumb"></div>`;
+  return `<article class="proj">
+    ${thumb}
+    <div class="pbody">
+      <h3>${titleInner}</h3>
+      <div class="cat">${esc(p.cat)}</div>
+      <p>${esc(p.desc)}</p>
+      <div class="tags">${tags}</div>
+    </div>
+  </article>`;
+}
+
+const main = document.getElementById("content");
+main.innerHTML = SECTIONS.map((s, i) => `
+  <section class="sec" id="sec-${i+1}">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-num">§${i+1}</span>
+        <span class="sec-title">${esc(s.title)}</span>
+      </div>
+      ${s.blurb ? `<p class="sec-blurb">${esc(s.blurb)}</p>` : ""}
+      ${s.eq ? `<div class="sec-eq">${s.eq}</div>` : ""}
+      ${s.items.map(projHTML).join("")}
+    </div>
+  </section>
+`).join("");
+
+/* ----- Typeset the math accents once KaTeX is ready ----- */
+function typeset(){
+  if (window.renderMathInElement){
+    renderMathInElement(document.body, {
+      delimiters: [
+        { left:"\\[", right:"\\]", display:true },
+        { left:"\\(", right:"\\)", display:false }
+      ],
+      throwOnError:false
+    });
+  } else {
+    setTimeout(typeset, 60);
+  }
+}
+window.addEventListener("load", typeset);
+</script>
+</body>
+</html>

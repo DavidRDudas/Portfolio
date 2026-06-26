@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0b1020" />
+<title>Endless Hills</title>
+<style>
+  :root { --ui: rgba(255,255,255,0.85); }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#8fc7ef; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; touch-action:none; overscroll-behavior:none; }
+  #scene { position:fixed; inset:0; display:block; touch-action:none; }
+
+  /* ---- Start overlay ---- */
+  #start {
+    position:fixed; inset:0; z-index:30;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:linear-gradient(180deg,#bfe0fb 0%, #9ecdf5 45%, #d9eecb 100%);
+    color:#3a4a55; text-align:center; padding:24px; gap:18px;
+    transition:opacity .8s ease;
+  }
+  #start h1 { font-weight:600; font-size:clamp(28px,8vw,52px); letter-spacing:.04em; text-shadow:0 1px 0 rgba(255,255,255,.5); }
+  #start p { font-size:clamp(14px,4vw,18px); max-width:540px; line-height:1.5; opacity:.85; }
+  #start p.warn { font-style:italic; opacity:.7; max-width:460px; }
+  #start .play {
+    margin-top:8px; padding:16px 44px; border:none; border-radius:999px;
+    background:#5a8f3c; color:#fff; font-size:clamp(16px,4.5vw,20px); font-weight:600;
+    box-shadow:0 8px 24px rgba(60,100,40,.35); cursor:pointer; letter-spacing:.05em;
+  }
+  #start .play:active { transform:translateY(2px); }
+  #start small { opacity:.6; font-size:12px; margin-top:10px; }
+
+  /* ---- HUD / touch controls ---- */
+  #hud { position:fixed; inset:0; z-index:10; pointer-events:none; opacity:0; transition:opacity 1s ease; }
+  #hud.on { opacity:1; }
+
+  /* left joystick */
+  #stick {
+    position:absolute; left:max(24px,env(safe-area-inset-left)); bottom:max(36px,env(safe-area-inset-bottom));
+    width:140px; height:140px; border-radius:50%;
+    background:rgba(255,255,255,0.12); border:2px solid rgba(255,255,255,0.4);
+    pointer-events:auto; touch-action:none;
+  }
+  #stick .nub {
+    position:absolute; left:50%; top:50%; width:62px; height:62px; margin:-31px 0 0 -31px;
+    border-radius:50%; background:rgba(255,255,255,0.7); box-shadow:0 2px 10px rgba(0,0,0,.2);
+  }
+  #hint {
+    position:absolute; right:max(20px,env(safe-area-inset-right)); bottom:max(40px,env(safe-area-inset-bottom));
+    color:var(--ui); font-size:13px; text-align:right; text-shadow:0 1px 3px rgba(0,0,0,.45); max-width:190px;
+  }
+  #sound {
+    position:absolute; top:max(16px,env(safe-area-inset-top)); right:max(16px,env(safe-area-inset-right));
+    width:46px; height:46px; border-radius:50%; pointer-events:auto;
+    background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.45);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  #fade { position:fixed; inset:0; z-index:20; background:#dff0cf; pointer-events:none; opacity:0; transition:opacity 1.2s ease; }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="fade"></div>
+
+  <div id="hud">
+    <div id="stick"><div class="nub"></div></div>
+    <div id="hint">Click to look · WASD / arrows to move</div>
+    <div id="sound" title="Toggle sound">♪</div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ============================================================
+   Endless Hills — a calm, eerie first-person mobile walking sim.
+   Infinite procedural terrain & grass, a living day/night sky,
+   cinematic post-processing, generative ambient sound, and a
+   house at the end of the lane that creeps closer when unwatched.
+   ============================================================ */
+
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // OutputPass applies this (linear -> display)
+renderer.toneMappingExposure = 1.06;   // brighter, sunnier exposure
+
+const scene = new THREE.Scene();
+const FOG_COLOR = new THREE.Color(0xc8e6f7);
+scene.fog = new THREE.Fog(FOG_COLOR.getHex(), 30, 108);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 3000);
+const EYE = 2.6;
+
+const smoothstep = (a,b,x)=>{ const t=THREE.MathUtils.clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
+const WHITE = new THREE.Color(0xffffff);
+
+/* ---------- Lighting (driven by the day/night cycle) ---------- */
+const hemi = new THREE.HemisphereLight(0xdff1ff, 0x5b8a3a, 0.95);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff6e0, 1.1);
+scene.add(sun);
+const moon = new THREE.DirectionalLight(0x9db4ff, 0.0);
+scene.add(moon);
+
+/* ============================================================
+   Procedural height field — gentle rolling hills.
+   ============================================================ */
+function hash(ix, iz){
+  let n = Math.sin(ix*127.1 + iz*311.7) * 43758.5453;
+  return (n - Math.floor(n));
+}
+function valueNoise(x, z){
+  const ix = Math.floor(x), iz = Math.floor(z);
+  const fx = x - ix, fz = z - iz;
+  const ux = fx*fx*(3-2*fx), uz = fz*fz*(3-2*fz);
+  const a = hash(ix, iz),     b = hash(ix+1, iz);
+  const c = hash(ix, iz+1),   d = hash(ix+1, iz+1);
+  return a*(1-ux)*(1-uz) + b*ux*(1-uz) + c*(1-ux)*uz + d*ux*uz;
+}
+function terrainHeight(x, z){
+  let h = 0;
+  h += 7.5 * valueNoise(x*0.018, z*0.018);
+  h += 2.6 * valueNoise(x*0.055, z*0.05);
+  h += 0.7 * valueNoise(x*0.16,  z*0.15);
+  return h - 5.0;
+}
+
+/* ============================================================
+   Terrain mesh — recenters on the player every frame.
+   ============================================================ */
+const TERRAIN_SIZE = 340, TERRAIN_SEG = 170;   // larger so the fog can sit further out (less foggy)
+const terrainGeo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEG, TERRAIN_SEG);
+terrainGeo.rotateX(-Math.PI/2);
+// procedural, tileable grass texture so the ground reads as grass, not flat green
+function makeGroundTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=512;
+  const g=c.getContext('2d');
+  g.fillStyle='#6fb24a'; g.fillRect(0,0,512,512);
+  for(let i=0;i<70;i++){                      // soft lighter / darker patches
+    const x=Math.random()*512, y=Math.random()*512, r=26+Math.random()*90;
+    const grd=g.createRadialGradient(x,y,0,x,y,r);
+    grd.addColorStop(0, Math.random()<0.5?'rgba(158,206,102,0.30)':'rgba(62,130,50,0.30)');
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=grd; g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill();
+  }
+  for(let i=0;i<3000;i++){                     // tiny grass blades
+    const x=Math.random()*512, y=Math.random()*512;
+    const h=3+Math.random()*7, lean=Math.random()*4-2;
+    const s=92+Math.floor(Math.random()*86);
+    g.strokeStyle=`rgb(${s-44},${s+40},${s-32})`;
+    g.lineWidth=1+Math.random(); g.lineCap='round';
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+lean,y-h); g.stroke();
+  }
+  const tex=new THREE.CanvasTexture(c);
+  tex.colorSpace=THREE.SRGBColorSpace;
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.anisotropy=4;
+  return tex;
+}
+const groundTex = makeGroundTexture();
+const terrainMat = new THREE.MeshStandardMaterial({ map:groundTex, color:0xffffff, roughness:1, metalness:0 });
+const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+terrain.frustumCulled = false;
+scene.add(terrain);
+
+const tPos = terrainGeo.attributes.position;
+const tUV  = terrainGeo.attributes.uv;
+const UV_SCALE = 0.18;   // grass texture tiles ~every 5–6 world units
+
+let lastTOX = Infinity, lastTOZ = Infinity;
+function updateTerrain(px, pz){
+  const step = TERRAIN_SIZE / TERRAIN_SEG;
+  const ox = Math.round(px/step)*step;
+  const oz = Math.round(pz/step)*step;
+  terrain.position.set(ox, 0, oz);
+  if (ox === lastTOX && oz === lastTOZ) return;  // only rebuild when the mesh recenters
+  lastTOX = ox; lastTOZ = oz;
+  for (let i=0; i<tPos.count; i++){
+    const lx = tPos.getX(i), lz = tPos.getZ(i);
+    const wx = lx+ox, wz = lz+oz;
+    tPos.setY(i, terrainHeight(wx, wz));
+    tUV.setXY(i, wx*UV_SCALE, wz*UV_SCALE);   // world-locked UVs → grass won't swim as the mesh recenters
+  }
+  tPos.needsUpdate = true;
+  tUV.needsUpdate = true;
+  terrainGeo.computeVertexNormals();
+}
+
+/* ============================================================
+   Geometry merge helper (position + uv + index).
+   ============================================================ */
+function mergeGeoms(geos){
+  let vc=0, ic=0;
+  geos.forEach(g=>{ vc+=g.attributes.position.count; ic+=g.index.count; });
+  const pos=new Float32Array(vc*3), uv=new Float32Array(vc*2), idx=new Uint16Array(ic);
+  let vo=0, io=0, base=0;
+  geos.forEach(g=>{
+    pos.set(g.attributes.position.array, vo*3);
+    uv.set(g.attributes.uv.array, vo*2);
+    const gi=g.index.array;
+    for(let i=0;i<gi.length;i++) idx[io+i]=gi[i]+base;
+    base+=g.attributes.position.count; vo+=g.attributes.position.count; io+=gi.length;
+  });
+  const m=new THREE.BufferGeometry();
+  m.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  m.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+  m.setIndex(new THREE.BufferAttribute(idx,1));
+  return m;
+}
+
+/* ============================================================
+   Grass — instanced crossed quads on a world lattice, bent by
+   wind: a fine gust plus a big rolling wave that sweeps across
+   the field and darkens the grass at its crest.
+   ============================================================ */
+function makeBladeTexture(){
+  const c = document.createElement('canvas'); c.width=c.height=64;
+  const g = c.getContext('2d'); g.clearRect(0,0,64,64);
+  for (let i=0;i<9;i++){                  // many thin blades per clump (finer, wheat-like)
+    const x = 5 + i*6.6 + (Math.random()*2.4-1.2);
+    const tipX = x + (Math.random()*4-2);
+    g.beginPath(); g.moveTo(x, 64);
+    g.quadraticCurveTo(x + (Math.random()*8-4), 26, tipX, 6);
+    g.lineWidth = 1.6;
+    const shade = 150 + Math.floor(Math.random()*70);          // brighter blades
+    g.strokeStyle = `rgb(${shade-20},${shade+45},${shade-10})`; // light, fresh green
+    g.lineCap = 'round'; g.stroke();
+    // small green seed head at the tip — just a touch brighter than the blade
+    const hs = 165 + Math.floor(Math.random()*55);
+    g.fillStyle = `rgb(${hs-18},${hs+48},${hs-26})`;
+    g.beginPath(); g.ellipse(tipX, 5, 0.95, 2.4, (Math.random()*0.4-0.2), 0, Math.PI*2); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+const bladeTex = makeBladeTexture();
+const quad = new THREE.PlaneGeometry(1.4, 0.82); quad.translate(0, 0.41, 0);  // wide, shorter clumps that overlap their neighbours
+const quad2 = quad.clone(); quad2.rotateY(Math.PI/2);
+const bladeGeo = mergeGeoms([quad, quad2]); bladeGeo.computeVertexNormals();
+
+const grassMat = new THREE.MeshStandardMaterial({
+  map:bladeTex, alphaTest:0.4, side:THREE.DoubleSide, roughness:1, metalness:0, color:0xc8ed96
+});
+let grassUniforms = null;
+grassMat.onBeforeCompile = (shader)=>{
+  shader.uniforms.uTime = { value:0 };
+  grassUniforms = shader.uniforms;
+  shader.vertexShader = 'uniform float uTime;\nvarying float vGust;\nvarying float vTip;\n' + shader.vertexShader;
+  shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `
+    vec4 mvPosition = vec4( transformed, 1.0 );
+    float iphase = 0.0, iamp = 1.0, gustGain = 0.6;
+    #ifdef USE_INSTANCING
+      mvPosition = instanceMatrix * mvPosition;
+      // stable pseudo-random per clump (from its world position) so every tuft
+      // has its own phase, base strength and gust-susceptibility — neighbours
+      // never move in lockstep, and strong gusts whip some far harder.
+      vec2 iorg = instanceMatrix[3].xz;
+      float h = fract(sin(dot(iorg, vec2(12.9898, 78.233))) * 43758.5453);
+      iphase = h * 6.2831;
+      iamp = 0.6 + h * 0.9;
+      gustGain = 0.2 + 1.0 * fract(h * 97.13);   // how hard this clump reacts to gusts
+    #endif
+    float bladeH = max(position.y, 0.0);
+    vTip = clamp(bladeH * 1.25, 0.0, 1.0);          // 0 at the base, 1 at the seed-head tip
+    float bend = bladeH * bladeH * 1.2;
+    vec2 wdir = vec2(0.82, 0.57);                    // wind direction; gusts travel along it
+    float along = mvPosition.x * wdir.x + mvPosition.z * wdir.y;
+    // perpendicular axis (across the wind) so gust fronts can wobble and break up
+    float perp = -mvPosition.x * wdir.y + mvPosition.z * wdir.x;
+    // gentle, ever-present breeze (calm between gusts)
+    float w1 = sin(along * 0.11 - uTime * 0.5 + iphase * 0.2);
+    float w2 = sin(along * 0.30 - uTime * 1.0 + iphase * 0.7);
+    float breeze = 0.30 + 0.20 * w1 + 0.12 * w2;
+    // STRONG gusts: a BROKEN, wavy front — its phase wobbles across the field and
+    // is summed with cross-waves, so gusts read as irregular moving blotches, not
+    // a clean arc. gustGain whips some clumps far harder than others.
+    float frontPhase = along * 0.085 - uTime * 1.0 + sin(perp * 0.20 + uTime * 0.25) * 1.7;
+    float front = sin(frontPhase)
+                + 0.7 * sin(along * 0.05 - uTime * 0.6 + perp * 0.14 + 2.0)
+                + 0.4 * sin(perp * 0.17 - uTime * 0.38);
+    float gustEnv = smoothstep(0.85, 1.7, front);    // only the strong, scattered crests
+    float whip = gustEnv * (0.5 + gustGain) * (0.85 + 0.4 * sin(uTime * 2.0 + iphase * 3.0));
+    // some patches naturally shelter the wind, so the gust visibly SKIPS them —
+    // static spots a few metres across (folds in the ground / denser grass).
+    float sN = sin(mvPosition.x * 0.43 + 1.3) * sin(mvPosition.z * 0.37 - 0.7)
+             + 0.6 * sin(mvPosition.x * 0.19 - mvPosition.z * 0.24 + 2.1);
+    float shelter = clamp(1.0 - 0.85 * smoothstep(0.15, 1.0, sN), 0.15, 1.0);
+    whip *= shelter;
+    float sway = (breeze + whip) * bend * iamp;
+    // the light shimmer rides the broken gust, so the pattern is irregular, not a band
+    vGust = clamp(smoothstep(0.4, 0.95, w2) * 0.25 + gustEnv * 0.9, 0.0, 1.0);
+    mvPosition.x += wdir.x * sway * 0.6;
+    mvPosition.z += wdir.y * sway * 0.6;
+    // slow per-clump flutter so it isn't perfectly uniform (no fast jitter)
+    float flut = sin(uTime * 1.3 + iphase * 1.5) * bend * 0.04 * iamp;
+    mvPosition.x += -wdir.y * flut;
+    mvPosition.z +=  wdir.x * flut;
+    mvPosition = modelViewMatrix * mvPosition;
+    gl_Position = projectionMatrix * mvPosition;
+  `);
+  shader.fragmentShader = 'varying float vGust;\nvarying float vTip;\n' + shader.fragmentShader;
+  shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', `
+    // wind illusion: a pale, silvery wave rolls through the grass — the tops
+    // (seed-heads) shimmer lighter as each gust passes, then settle back.
+    float sh = vGust * (0.2 + 0.8 * vTip);       // bands, strongest at the seed-heads
+    vec3 crest = vec3(0.62, 0.82, 0.40);         // a brighter GREEN (grass family), not white
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, crest, sh * 0.35);
+    #include <dithering_fragment>
+  `);
+};
+// dense field: each instance is a wide, crossed multi-blade clump, so ~19k
+// clumps overlap into a near-solid field with little ground showing. We only
+// rebuild the ring of instances when the player crosses a coarse cell.
+const GRASS_SPACING = 0.42, GRASS_HALF = 38;
+const GRASS_DIM = Math.floor((GRASS_HALF*2)/GRASS_SPACING);   // ~180 → ~32k clumps (packed tight)
+const GRASS_REBUILD = 3.0;                                    // world units between rebuilds
+const grass = new THREE.InstancedMesh(bladeGeo, grassMat, GRASS_DIM*GRASS_DIM);
+grass.frustumCulled = false;
+grass.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(grass);
+
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(),
+      _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
+let lastGrassCellX = Infinity, lastGrassCellZ = Infinity;
+function updateGrass(px, pz){
+  const cellX = Math.round(px/GRASS_REBUILD), cellZ = Math.round(pz/GRASS_REBUILD);
+  if (cellX===lastGrassCellX && cellZ===lastGrassCellZ) return;
+  lastGrassCellX=cellX; lastGrassCellZ=cellZ;
+  // centre the field on the player's coarse cell, snapped to the blade lattice
+  const baseI = Math.round((cellX*GRASS_REBUILD)/GRASS_SPACING);
+  const baseJ = Math.round((cellZ*GRASS_REBUILD)/GRASS_SPACING);
+  let i=0; const half = Math.floor(GRASS_DIM/2);
+  for (let gx=-half; gx<half; gx++) for (let gz=-half; gz<half; gz++){
+    const lxi = baseI+gx, lzi = baseJ+gz;
+    const jx = (hash(lxi*1.3, lzi*7.7)-0.5)*GRASS_SPACING;
+    const jz = (hash(lxi*5.1, lzi*2.9)-0.5)*GRASS_SPACING;
+    const wx = lxi*GRASS_SPACING + jx, wz = lzi*GRASS_SPACING + jz;
+    const sc = 0.6 + hash(lxi*9.2, lzi*4.4)*0.7;   // varied heights
+    // grass inside the lane (between the picket fences at x = ±FENCE_HALF) is
+    // mowed short, like a cut path; the meadow outside stays tall. Lane clumps
+    // are made WIDER so the short blades overlap into a dense lawn, not bald patches.
+    const inLane = Math.abs(wx) < FENCE_HALF;
+    const sX = inLane ? sc * 1.6 : sc;
+    const sY = inLane ? sc * 0.30 : sc;
+    _p.set(wx, terrainHeight(wx, wz), wz);
+    _e.set(0, hash(lxi*3.7, lzi*8.1)*Math.PI*2, 0); _q.setFromEuler(_e);
+    _s.set(sX, sY, sX); _m.compose(_p,_q,_s);
+    grass.setMatrixAt(i++, _m);
+  }
+  grass.count = i; grass.instanceMatrix.needsUpdate = true;
+}
+
+/* ============================================================
+   Living sky — gradient dome with sun, moon, and stars, all
+   driven by a slow day -> dusk -> night -> dawn cycle.
+   ============================================================ */
+const skyU = {
+  top:{value:new THREE.Color()}, horizon:{value:new THREE.Color()},
+  sunDir:{value:new THREE.Vector3()}, moonDir:{value:new THREE.Vector3()},
+  sunTint:{value:new THREE.Color()}, nightF:{value:0}, uTime:{value:0}
+};
+const skyMat = new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false, uniforms:skyU,
+  vertexShader:`varying vec3 vDir; void main(){ vDir=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    varying vec3 vDir;
+    uniform vec3 top, horizon, sunDir, moonDir, sunTint; uniform float nightF, uTime;
+    float h21(vec2 p){ p=fract(p*vec2(123.34,345.45)); p+=dot(p,p+34.345); return fract(p.x*p.y); }
+    float stars(vec3 d){
+      vec2 uv = vec2(atan(d.z,d.x), acos(clamp(d.y,-1.0,1.0))) * 60.0;
+      vec2 g=floor(uv), f=fract(uv)-0.5;
+      float r=h21(g);
+      float present=step(0.93, r);
+      vec2 c=(vec2(h21(g+1.7), h21(g+4.3))-0.5)*0.7;
+      float br=present*smoothstep(0.16,0.0,length(f-c));
+      float tw=0.6+0.4*sin(uTime*3.0 + r*42.0);
+      return br*tw*(0.4+0.6*h21(g+7.1));
+    }
+    void main(){
+      vec3 d=normalize(vDir);
+      float t=pow(clamp(d.y*1.1,0.0,1.0),0.6);
+      vec3 col=mix(horizon, top, t);
+      float sd=max(dot(d, normalize(sunDir)),0.0);
+      col += sunTint * (pow(sd,10.0)*0.10 + pow(sd,180.0)*0.7);
+      col += vec3(1.0,0.92,0.74) * smoothstep(0.9994,0.99975,sd) * 4.0;     // sun disc -> bloom
+      float md=max(dot(d, normalize(moonDir)),0.0);
+      col += vec3(0.6,0.7,1.0) * pow(md,60.0) * 0.3 * nightF;
+      col += vec3(0.95,0.97,1.1) * smoothstep(0.9992,0.99965,md) * 2.6 * nightF; // moon disc
+      if(d.y>0.0) col += vec3(0.9,0.95,1.0) * stars(d) * nightF;
+      gl_FragColor=vec4(col,1.0);
+    }`
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(1200, 40, 20), skyMat);
+sky.frustumCulled = false; scene.add(sky);
+
+// palette keyframes
+const dayTop=new THREE.Color(0x2f7fd6), dayHor=new THREE.Color(0xbfe6ff);
+const duskTop=new THREE.Color(0x33356e), duskHor=new THREE.Color(0xff7e3d);
+const nightTop=new THREE.Color(0x04060e), nightHor=new THREE.Color(0x0d1430);
+const sunDayTint=new THREE.Color(0xfff3d0), sunDuskTint=new THREE.Color(0xff7320);
+const hemiSkyDay=new THREE.Color(0xbfe1ff), hemiSkyNight=new THREE.Color(0x141a2e);
+const hemiGndDay=new THREE.Color(0x6b8f4a), hemiGndNight=new THREE.Color(0x0a1410);
+const cloudDay=new THREE.Color(0xffffff), cloudDusk=new THREE.Color(0xff9d6b), cloudNight=new THREE.Color(0x2a3242);
+const sunDirVec=new THREE.Vector3(), moonDirVec=new THREE.Vector3();
+const topC=new THREE.Color(), horC=new THREE.Color(), sunTintC=new THREE.Color(), cloudC=new THREE.Color();
+const CYCLE = 280;                 // seconds for a full day
+let skyNightF = 0;
+
+function updateSky(t){
+  const ang = 1.1;                               // PINNED: permanent bright, sunny day
+  const e = Math.sin(ang);                       // sun elevation -1..1
+  sunDirVec.set(Math.cos(ang)*0.5, e, 0.32).normalize();
+  moonDirVec.copy(sunDirVec).multiplyScalar(-1);
+  const dayF = smoothstep(-0.08, 0.32, e);
+  const nightF = 1 - dayF;
+  const duskF = THREE.MathUtils.clamp(1 - Math.abs(e)/0.25, 0, 1);
+  skyNightF = nightF;
+
+  topC.copy(nightTop).lerp(dayTop, dayF).lerp(duskTop, duskF*0.6);
+  horC.copy(nightHor).lerp(dayHor, dayF).lerp(duskHor, duskF*0.85);
+  sunTintC.copy(sunDayTint).lerp(sunDuskTint, duskF);
+
+  skyU.top.value.copy(topC); skyU.horizon.value.copy(horC);
+  skyU.sunDir.value.copy(sunDirVec); skyU.moonDir.value.copy(moonDirVec);
+  skyU.sunTint.value.copy(sunTintC); skyU.nightF.value=nightF; skyU.uTime.value=t;
+
+  hemi.color.copy(hemiSkyNight).lerp(hemiSkyDay, dayF);
+  hemi.groundColor.copy(hemiGndNight).lerp(hemiGndDay, dayF);
+  hemi.intensity = 0.45 + 1.0*dayF;
+  sun.position.copy(sunDirVec).multiplyScalar(140);
+  sun.intensity = 1.7*Math.max(0, dayF);
+  sun.color.copy(WHITE).lerp(sunDuskTint, duskF*0.85);
+  moon.position.copy(moonDirVec).multiplyScalar(140);
+  moon.intensity = 0.45*nightF;
+
+  scene.fog.color.copy(horC).multiplyScalar(0.98);  // near sky colour — light, sunny haze
+  scene.fog.near = 80 + 20*dayF;    // much less foggy: clear out to ~100 units
+  scene.fog.far  = 130 + 40*dayF;   // gentle haze fades the far hills (≈ terrain edge)
+
+  cloudC.copy(cloudDay).lerp(cloudNight, nightF*0.8).lerp(cloudDusk, duskF*0.5);
+  cloudMat.color.copy(cloudC);
+  cloudMat.opacity = 0.9 - 0.4*nightF;   // bright white clouds by day
+  ffMat.opacity = 0.16 + 0.7*nightF;   // motes -> fireflies after dark
+  ffMat.size    = 0.32 + 0.55*nightF;
+}
+
+/* ---------- drifting fluffy clouds ---------- */
+function makeCloudTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=256;
+  const g=c.getContext('2d'); g.clearRect(0,0,256,256);
+  for(let i=0;i<22;i++){
+    const a=Math.random()*Math.PI*2, r=Math.random()*70;
+    const x=128+Math.cos(a)*r, y=130+Math.sin(a)*r*0.5;
+    const rad=34+Math.random()*46;
+    const grd=g.createRadialGradient(x,y,0,x,y,rad);
+    grd.addColorStop(0,'rgba(255,255,255,0.95)');
+    grd.addColorStop(0.6,'rgba(255,255,255,0.5)');
+    grd.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=grd; g.beginPath(); g.arc(x,y,rad,0,Math.PI*2); g.fill();
+  }
+  const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; return tex;
+}
+const cloudTex=makeCloudTexture();
+const clouds=[];
+const cloudMat=new THREE.MeshBasicMaterial({map:cloudTex, transparent:true, depthWrite:false, opacity:0.85, fog:false});
+for(let i=0;i<26;i++){
+  const sz=60+Math.random()*120;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(sz, sz*0.6), cloudMat);
+  m.position.set((Math.random()-0.5)*900, 130+Math.random()*90, (Math.random()-0.5)*900);
+  m.userData.drift = 1.5+Math.random()*2.5; m.userData.bob = Math.random()*Math.PI*2;
+  clouds.push(m); scene.add(m);
+}
+
+/* ============================================================
+   Fireflies / pollen motes drifting around the player.
+   ============================================================ */
+function makeDotTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=32; const g=c.getContext('2d');
+  const grd=g.createRadialGradient(16,16,0,16,16,16);
+  grd.addColorStop(0,'rgba(255,255,255,1)');
+  grd.addColorStop(0.3,'rgba(255,240,180,0.9)');
+  grd.addColorStop(1,'rgba(255,200,80,0)');
+  g.fillStyle=grd; g.fillRect(0,0,32,32);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+const FF=170;
+const ffGeo=new THREE.BufferGeometry();
+const ffArr=new Float32Array(FF*3), ffBase=new Float32Array(FF*3), ffPh=new Float32Array(FF);
+for(let i=0;i<FF;i++){
+  ffBase[i*3]=(Math.random()-0.5)*46; ffBase[i*3+1]=0.4+Math.random()*5.5; ffBase[i*3+2]=(Math.random()-0.5)*46;
+  ffPh[i]=Math.random()*6.28;
+}
+ffGeo.setAttribute('position', new THREE.BufferAttribute(ffArr,3));
+const ffMat=new THREE.PointsMaterial({ size:0.4, map:makeDotTexture(), transparent:true,
+  blending:THREE.AdditiveBlending, depthWrite:false, color:0xffd27a, sizeAttenuation:true, opacity:0.4 });
+const fireflies=new THREE.Points(ffGeo, ffMat); fireflies.frustumCulled=false; scene.add(fireflies);
+function updateFireflies(t){
+  for(let i=0;i<FF;i++){
+    const p=ffPh[i];
+    ffArr[i*3]  =ffBase[i*3]  + Math.sin(t*0.6+p)*1.6;
+    ffArr[i*3+1]=ffBase[i*3+1]+ Math.sin(t*0.9+p*1.7)*0.7;
+    ffArr[i*3+2]=ffBase[i*3+2]+ Math.cos(t*0.5+p*1.3)*1.6;
+  }
+  ffGeo.attributes.position.needsUpdate=true;
+  fireflies.position.set(player.x, terrainHeight(player.x, player.z), player.z);
+}
+
+/* ============================================================
+   A distant, slowly circling flock of crows.
+   ============================================================ */
+function makeCrowTexture(){
+  const c=document.createElement('canvas'); c.width=64; c.height=32; const g=c.getContext('2d');
+  g.clearRect(0,0,64,32);
+  g.strokeStyle='#000'; g.lineWidth=5; g.lineCap='round';
+  g.beginPath(); g.moveTo(6,22); g.quadraticCurveTo(22,6,32,16); g.quadraticCurveTo(42,6,58,22); g.stroke();
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+const crowMat=new THREE.MeshBasicMaterial({ map:makeCrowTexture(), transparent:true, alphaTest:0.4,
+  depthWrite:false, color:0x0e0e12, side:THREE.DoubleSide });
+const crowGeo=new THREE.PlaneGeometry(1.7, 0.85);
+const crows=[];
+for(let i=0;i<9;i++){
+  const m=new THREE.Mesh(crowGeo, crowMat);
+  m.userData={ ang:Math.random()*6.28, sp:0.6+Math.random()*0.6, ph:Math.random()*6.28 };
+  crows.push(m); scene.add(m);
+}
+function updateCrows(t){
+  const cx=player.x-18, cz=player.z-40, cy=terrainHeight(player.x, player.z)+46;
+  for(const m of crows){
+    const u=m.userData; const a=u.ang + t*0.22*u.sp;
+    m.position.set(cx+Math.cos(a)*24, cy+Math.sin(t*0.8+u.ph)*3.0, cz+Math.sin(a)*16);
+    m.lookAt(camera.position);
+    m.scale.y = 0.5 + 0.55*Math.abs(Math.sin(t*7*u.sp + u.ph));   // wing flap
+  }
+}
+
+/* ============================================================
+   Two parallel picket fences (a walkable lane) + a gate.
+   ============================================================ */
+const FENCE_SEG = 2.2, FENCE_HALF = 4.0;
+const FENCE_XS = [-FENCE_HALF, FENCE_HALF];
+const FENCE_SECTIONS = 96;
+const fenceMat = new THREE.MeshStandardMaterial({ color:0xeee9dd, roughness:0.85, metalness:0 });
+
+function buildFenceSection(){
+  const parts = [];
+  const rail = new THREE.BoxGeometry(0.08, 0.11, FENCE_SEG);
+  const r1 = rail.clone(); r1.translate(0, 0.55, 0);
+  const r2 = rail.clone(); r2.translate(0, 0.95, 0);
+  parts.push(r1, r2);
+  const n = Math.max(2, Math.round(FENCE_SEG/0.34));
+  for(let i=0;i<n;i++){
+    const z = -FENCE_SEG/2 + (i+0.5)*(FENCE_SEG/n);
+    const slat = new THREE.BoxGeometry(0.10, 1.1, 0.045); slat.translate(0, 0.55, z);
+    const tip = new THREE.ConeGeometry(0.085, 0.18, 4); tip.rotateY(Math.PI/4); tip.translate(0, 1.19, z);
+    parts.push(slat, tip);
+  }
+  const g = mergeGeoms(parts); g.computeVertexNormals(); return g;
+}
+function buildFencePanel(len){
+  const parts = [];
+  const rail = new THREE.BoxGeometry(len, 0.09, 0.05);
+  const r1 = rail.clone(); r1.translate(len/2, 0.50, 0);
+  const r2 = rail.clone(); r2.translate(len/2, 0.85, 0);
+  parts.push(r1, r2);
+  const n = Math.max(2, Math.round(len/0.28));
+  for(let i=0;i<n;i++){
+    const x = (i+0.5)*(len/n);
+    const slat = new THREE.BoxGeometry(0.06, 1.0, 0.045); slat.translate(x, 0.50, 0);
+    const tip = new THREE.ConeGeometry(0.055, 0.14, 4); tip.rotateY(Math.PI/4); tip.translate(x, 1.04, 0);
+    parts.push(slat, tip);
+  }
+  const g = mergeGeoms(parts); g.computeVertexNormals(); return g;
+}
+const fence = new THREE.InstancedMesh(buildFenceSection(), fenceMat, FENCE_SECTIONS*FENCE_XS.length);
+fence.frustumCulled = false; fence.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(fence);
+let lastFenceCell = Infinity;
+function updateFence(pz){
+  const cell = Math.round(pz/FENCE_SEG);
+  if(cell===lastFenceCell) return;
+  lastFenceCell = cell;
+  const half = Math.floor(FENCE_SECTIONS/2); let i=0;
+  for(let s=-half; s<half; s++){
+    const z = (cell+s)*FENCE_SEG;
+    const zA = z - FENCE_SEG/2, zB = z + FENCE_SEG/2;   // this section's two ends
+    for(const fx of FENCE_XS){
+      // pitch each section to span the terrain between its ends, so consecutive
+      // sections meet at the same ground points and the rail follows the hills
+      // continuously instead of stair-stepping.
+      const hA = terrainHeight(fx, zA), hB = terrainHeight(fx, zB);
+      const pitch = -Math.atan2(hB - hA, FENCE_SEG);
+      _p.set(fx, (hA + hB) * 0.5, z);
+      _e.set(pitch, 0, 0); _q.setFromEuler(_e);
+      _s.set(1, 1, 1);
+      _m.compose(_p,_q,_s); fence.setMatrixAt(i++, _m);
+    }
+  }
+  fence.count = i; fence.instanceMatrix.needsUpdate = true;
+}
+const GATE_Z = 3.0;
+(function buildGate(){
+  const gate = new THREE.Group(); const OA = 1.15;
+  const postH = 4.4, postW = 0.32;
+  const hL = terrainHeight(-FENCE_HALF, GATE_Z);
+  const hR = terrainHeight( FENCE_HALF, GATE_Z);
+  // tall posts that sit on the ground at each side (bottom slightly buried)
+  const pL = new THREE.Mesh(new THREE.BoxGeometry(postW, postH, postW), fenceMat);
+  pL.position.set(-FENCE_HALF, hL + postH/2 - 0.15, 0); gate.add(pL);
+  const pR = new THREE.Mesh(new THREE.BoxGeometry(postW, postH, postW), fenceMat);
+  pR.position.set( FENCE_HALF, hR + postH/2 - 0.15, 0); gate.add(pR);
+  // tall arch beam across the top + a lower cross-rail
+  const topY = Math.max(hL, hR) + postH - 0.45;
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(FENCE_HALF*2 + 0.7, 0.32, 0.32), fenceMat);
+  beam.position.set(0, topY, 0); gate.add(beam);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(FENCE_HALF*2 + 0.2, 0.12, 0.12), fenceMat);
+  rail.position.set(0, topY - 0.5, 0); gate.add(rail);
+  // gate leaves, hinged at each post, sitting on the ground (not buried)
+  const leafGeo = buildFencePanel(FENCE_HALF - 0.4);
+  const left = new THREE.Mesh(leafGeo, fenceMat);  left.position.set(-FENCE_HALF, hL, 0);  left.rotation.y = -OA;
+  const right = new THREE.Mesh(leafGeo, fenceMat); right.position.set( FENCE_HALF, hR, 0);  right.rotation.y = Math.PI + OA;
+  gate.add(left, right);
+  gate.position.set(0, 0, GATE_Z);
+  scene.add(gate);
+})();
+
+// a small mailbox just outside the gate
+(function buildMailbox(){
+  const mb = new THREE.Group();
+  const postMat = new THREE.MeshStandardMaterial({ color:0x5a3c26, roughness:0.9 });
+  const boxMat  = new THREE.MeshStandardMaterial({ color:0x3a4f6b, roughness:0.55, metalness:0.2 });
+  const flagMat = new THREE.MeshStandardMaterial({ color:0xc0392b, roughness:0.7 });
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.0, 0.08), postMat); post.position.y = 0.5; mb.add(post);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.20, 0.36), boxMat); body.position.y = 1.02; mb.add(body);
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.36, 14), boxMat);
+  roof.rotation.x = Math.PI/2; roof.position.y = 1.12; mb.add(roof);
+  const fpole = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.02), flagMat); fpole.position.set(0.12, 1.10, 0.15); mb.add(fpole);
+  const flag  = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.09, 0.10), flagMat); flag.position.set(0.12, 1.15, 0.10); mb.add(flag);
+  const gx = FENCE_HALF + 0.9, gz = GATE_Z - 0.6;
+  mb.position.set(gx, terrainHeight(gx, gz), gz);
+  scene.add(mb);
+})();
+
+/* ============================================================
+   The house at the end of the lane. Pinned due north of the
+   player, it always stays exactly the same distance ahead, so
+   no matter how far you walk it never comes any closer.
+   ============================================================ */
+const HOUSE_DIST = 85, GROUND_SINK = 5.0;
+const house = new THREE.Group();
+const moundR = 16, moundTop = moundR*0.5;
+const moundTex = groundTex.clone(); moundTex.needsUpdate = true; moundTex.repeat.set(5, 3);
+const mound = new THREE.Mesh(
+  new THREE.SphereGeometry(moundR, 32, 16, 0, Math.PI*2, 0, Math.PI*0.5),
+  new THREE.MeshStandardMaterial({ map:moundTex, color:0xffffff, roughness:1 }));
+mound.scale.y = 0.5; house.add(mound);
+
+const wallMat = new THREE.MeshStandardMaterial({ color:0xe9e4d6, roughness:0.9 });
+const body = new THREE.Mesh(new THREE.BoxGeometry(7, 5, 6), wallMat); body.position.y = moundTop + 2.5; house.add(body);
+const roof = new THREE.Mesh(new THREE.ConeGeometry(5.7, 3.4, 4),
+  new THREE.MeshStandardMaterial({ color:0x7c3a2c, roughness:0.85 }));
+roof.rotation.y = Math.PI/4; roof.position.y = moundTop + 6.7; house.add(roof);
+const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.3, 0.8),
+  new THREE.MeshStandardMaterial({ color:0x6a4636, roughness:1 }));
+chimney.position.set(1.9, moundTop + 5.6, 0.6); house.add(chimney);
+const door = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.3),
+  new THREE.MeshStandardMaterial({ color:0x37271f, roughness:1, side:THREE.DoubleSide }));
+door.position.set(0, moundTop + 1.15, 3.01); house.add(door);
+const winMat = new THREE.MeshStandardMaterial({ color:0xffe6a6, emissive:0xffcc66, emissiveIntensity:0.5, roughness:0.6 });
+for(const x of [-2.1, 2.1]){
+  const w = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), winMat);
+  w.position.set(x, moundTop + 3.2, 3.01); house.add(w);
+}
+scene.add(house);
+function updateHouse(){
+  const hz = player.z - HOUSE_DIST;                // always the same distance ahead — never closer
+  house.position.set(player.x, terrainHeight(player.x, hz) - GROUND_SINK, hz);
+  winMat.emissiveIntensity = 0.5 + 2.2*skyNightF;  // windows glow brighter after dark
+}
+
+/* ============================================================
+   Player + controls (Pointer Events: independent move & look).
+   ============================================================ */
+const player = new THREE.Vector3(0, 0, 0);
+let yaw = 0, pitch = -0.05;
+const move = { x:0, y:0 };
+const keys = {};
+const SPEED = 7.5;
+
+let lookId=null, lastLX=0, lastLY=0;
+const stick=document.getElementById('stick');
+const nub=stick.querySelector('.nub');
+let stickId=null, stickCX=0, stickCY=0;
+function updateStick(x,y){
+  let dx=x-stickCX, dy=y-stickCY; const max=52, len=Math.hypot(dx,dy);
+  if(len>max){ dx*=max/len; dy*=max/len; }
+  nub.style.transform=`translate(${dx}px,${dy}px)`; move.x=dx/max; move.y=dy/max;
+}
+function inStick(x,y){ const r=stick.getBoundingClientRect(); return x>=r.left-24 && x<=r.right+24 && y>=r.top-24 && y<=r.bottom+24; }
+window.addEventListener('pointerdown', e=>{
+  if(!started) return;
+  if(e.target===soundBtn) return;
+  if(stickId===null && inStick(e.clientX,e.clientY)){
+    stickId=e.pointerId; const r=stick.getBoundingClientRect();
+    stickCX=r.left+r.width/2; stickCY=r.top+r.height/2; updateStick(e.clientX,e.clientY);
+  } else if(e.pointerType==='touch' && lookId===null){ // touch: drag to look
+    lookId=e.pointerId; lastLX=e.clientX; lastLY=e.clientY;
+  }
+});
+window.addEventListener('pointermove', e=>{
+  if(e.pointerId===stickId){ updateStick(e.clientX,e.clientY); }
+  else if(e.pointerId===lookId){
+    yaw -= (e.clientX-lastLX)*0.0045; pitch -= (e.clientY-lastLY)*0.0045;
+    pitch = THREE.MathUtils.clamp(pitch, -1.2, 1.0); lastLX=e.clientX; lastLY=e.clientY;
+  }
+});
+
+// DESKTOP: pointer-lock mouse-look — move the mouse to look (same as the cabin).
+// One click captures the mouse (and resumes audio); after that it's delta-based,
+// no clicking-and-holding.
+canvas.addEventListener('click', ()=>{
+  if(!started) return;
+  if(actx && actx.state==='suspended') actx.resume();
+  if(document.pointerLockElement!==canvas && canvas.requestPointerLock) canvas.requestPointerLock();
+});
+document.addEventListener('mousemove', e=>{
+  if(document.pointerLockElement!==canvas) return;
+  yaw   -= (e.movementX||0)*0.0022;
+  pitch -= (e.movementY||0)*0.0022;
+  pitch  = THREE.MathUtils.clamp(pitch, -1.2, 1.0);
+});
+function endPointer(e){
+  if(e.pointerId===stickId){ stickId=null; move.x=0; move.y=0; nub.style.transform='translate(0,0)'; }
+  if(e.pointerId===lookId){ lookId=null; }
+}
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
+window.addEventListener('keydown', e=>keys[e.code]=true);
+window.addEventListener('keyup',   e=>keys[e.code]=false);
+// Esc returns to the cabin when this game is embedded in the Prism TV overlay
+window.addEventListener('keydown', e=>{ if(e.key==='Escape') parent.postMessage({type:'prism-exit'},'*'); });
+
+/* ============================================================
+   Generative eerie ambient sound + SFX (Web Audio API).
+   ============================================================ */
+let actx=null, master=null, fxDelay=null, noiseBuf=null, musicOn=true;
+function startAudio(){
+  if(actx) return;
+  actx = new (window.AudioContext||window.webkitAudioContext)();
+  master = actx.createGain(); master.gain.value=0.0; master.connect(actx.destination);
+  master.gain.linearRampToValueAtTime(0.32, actx.currentTime+4);
+
+  fxDelay=actx.createDelay(2.0); fxDelay.delayTime.value=0.55;
+  const fb=actx.createGain(); fb.gain.value=0.45;
+  const echoWet=actx.createGain(); echoWet.gain.value=0.5;
+  fxDelay.connect(fb); fb.connect(fxDelay); fxDelay.connect(echoWet); echoWet.connect(master);
+
+  const droneFilter=actx.createBiquadFilter(); droneFilter.type='lowpass'; droneFilter.frequency.value=420; droneFilter.Q.value=4;
+  droneFilter.connect(master);
+  const lfo=actx.createOscillator(); lfo.frequency.value=0.05;
+  const lfoGain=actx.createGain(); lfoGain.gain.value=240; lfo.connect(lfoGain); lfoGain.connect(droneFilter.frequency); lfo.start();
+  [55, 82.41, 110, 164.81].forEach((f,i)=>{
+    const o=actx.createOscillator(); o.type = i%2 ? 'sine':'triangle'; o.frequency.value=f; o.detune.value=(Math.random()*10-5);
+    const g=actx.createGain(); g.gain.value=0.16/(i+1); o.connect(g); g.connect(droneFilter);
+    const blfo=actx.createOscillator(); blfo.frequency.value=0.03+Math.random()*0.04;
+    const bg=actx.createGain(); bg.gain.value=0.06; blfo.connect(bg); bg.connect(g.gain); blfo.start(); o.start();
+  });
+
+  noiseBuf=actx.createBuffer(1, actx.sampleRate*3, actx.sampleRate);
+  const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const noise=actx.createBufferSource(); noise.buffer=noiseBuf; noise.loop=true;
+  const nf=actx.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=500; nf.Q.value=0.6;
+  const ng=actx.createGain(); ng.gain.value=0.05; noise.connect(nf); nf.connect(ng); ng.connect(master);
+  const nlfo=actx.createOscillator(); nlfo.frequency.value=0.07;
+  const nlg=actx.createGain(); nlg.gain.value=0.035; nlfo.connect(nlg); nlg.connect(ng.gain); nlfo.start(); noise.start();
+
+  const scale=[220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33];
+  (function ping(){
+    if(actx && musicOn){
+      const f=scale[Math.floor(Math.random()*scale.length)] * (Math.random()<0.5?1:2);
+      const o=actx.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g=actx.createGain(); const t=actx.currentTime;
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.12, t+0.04); g.gain.exponentialRampToValueAtTime(0.0008, t+3.5);
+      o.connect(g); g.connect(master); g.connect(fxDelay); o.start(t); o.stop(t+3.8);
+    }
+    setTimeout(ping, 2500 + Math.random()*6000);
+  })();
+  setTimeout(caw, 6000 + Math.random()*8000);
+}
+function footstep(){
+  if(!actx) return;
+  const t=actx.currentTime;
+  const src=actx.createBufferSource(); src.buffer=noiseBuf;
+  const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=400+Math.random()*180;
+  const g=actx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.10, t+0.01); g.gain.exponentialRampToValueAtTime(0.001, t+0.18);
+  src.connect(lp); lp.connect(g); g.connect(master); src.start(t); src.stop(t+0.2);
+}
+function caw(){
+  if(actx){
+    const t=actx.currentTime; const pan=actx.createStereoPanner(); pan.pan.value=(Math.random()*2-1)*0.7; pan.connect(master);
+    for(let k=0;k<2;k++){
+      const o=actx.createOscillator(); o.type='sawtooth'; o.frequency.value=420+Math.random()*120;
+      const bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1200; bp.Q.value=3;
+      const g=actx.createGain(); const st=t+k*0.16;
+      g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(0.05, st+0.02); g.gain.exponentialRampToValueAtTime(0.001, st+0.14);
+      o.connect(bp); bp.connect(g); g.connect(pan); o.start(st); o.stop(st+0.16);
+    }
+  }
+  setTimeout(caw, 9000 + Math.random()*16000);
+}
+const soundBtn=document.getElementById('sound');
+soundBtn.addEventListener('click', ()=>{
+  musicOn=!musicOn;
+  if(master) master.gain.linearRampToValueAtTime(musicOn?0.32:0.0, actx.currentTime+0.6);
+  soundBtn.textContent = musicOn ? '♪' : '·';
+});
+
+/* ============================================================
+   Post-processing: bloom + color grade / vignette / film grain.
+   ============================================================ */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// gentle bloom: only genuinely bright things (sun/moon discs, lit windows, fireflies) glow
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.45, 0.88);
+composer.addPass(bloom);
+const GradeShader = {
+  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uVig:{value:1.15} },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform sampler2D tDiffuse; uniform float uTime, uVig; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+    void main(){
+      vec3 c=texture2D(tDiffuse, vUv).rgb;
+      c = mix(c, c*vec3(0.96,1.0,1.05), 0.5);                 // gentle cool grade
+      vec2 q=vUv-0.5; float v=smoothstep(0.92,0.25,length(q)*uVig);
+      c *= mix(0.5, 1.0, v);                                  // vignette
+      c += (h(vUv*vec2(1920.0,1080.0)+uTime)-0.5)*0.025;      // film grain
+      gl_FragColor=vec4(c,1.0);
+    }`
+};
+const grade = new ShaderPass(GradeShader);
+composer.addPass(grade);
+composer.addPass(new OutputPass());
+
+/* ============================================================
+   Game loop
+   ============================================================ */
+let started=false, stepAccum=1.9;
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(), 0.05);
+  const t=clock.elapsedTime;
+  if(grassUniforms) grassUniforms.uTime.value = t;
+  grade.uniforms.uTime.value = t;
+
+  // movement
+  let mx=move.x, mz=move.y;
+  if(keys['KeyW']||keys['ArrowUp']) mz-=1;
+  if(keys['KeyS']||keys['ArrowDown']) mz+=1;
+  if(keys['KeyA']||keys['ArrowLeft']) mx-=1;
+  if(keys['KeyD']||keys['ArrowRight']) mx+=1;
+  const len=Math.hypot(mx,mz);
+  if(len>1){ mx/=len; mz/=len; }
+  if(len>0.001){
+    const sin=Math.sin(yaw), cos=Math.cos(yaw);
+    player.x += ((-sin)*(-mz) + ( cos)*mx) * SPEED * dt;
+    player.z += ((-cos)*(-mz) + (-sin)*mx) * SPEED * dt;
+  }
+  // footstep cadence
+  if(started && len>0.05){ stepAccum += SPEED*dt*Math.min(len,1); if(stepAccum>1.9){ stepAccum-=1.9; footstep(); } }
+  else stepAccum=1.9;
+
+  updateSky(t);
+  updateTerrain(player.x, player.z);
+  updateGrass(player.x, player.z);
+  updateFence(player.z);
+  updateHouse();
+  updateFireflies(t);
+  updateCrows(t);
+
+  const ground=terrainHeight(player.x, player.z);
+  const bob = (len>0.01) ? Math.sin(t*9)*0.06 : 0;
+  camera.position.set(player.x, ground+EYE+bob, player.z);
+  _e.set(pitch, yaw, 0, 'YXZ'); camera.quaternion.setFromEuler(_e);
+
+  sky.position.copy(camera.position);
+  for(const c of clouds){
+    c.position.x += c.userData.drift*dt;
+    c.position.y += Math.sin(t*0.2 + c.userData.bob)*0.02;
+    const rx=c.position.x-camera.position.x, rz=c.position.z-camera.position.z;
+    if(rx>500) c.position.x-=1000; if(rx<-500) c.position.x+=1000;
+    if(rz>500) c.position.z-=1000; if(rz<-500) c.position.z+=1000;
+    c.lookAt(camera.position.x, c.position.y, camera.position.z);
+  }
+
+  composer.render();
+}
+
+/* ---------- boot ---------- */
+function resize(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+}
+window.addEventListener('resize', resize);
+
+updateSky(0);
+updateTerrain(0,0); updateGrass(0,0); updateFence(0); updateHouse();
+animate();
+
+const hud=document.getElementById('hud');
+const fade=document.getElementById('fade');
+function beginGame(){
+  if(started) return; started=true;
+  startAudio();
+  fade.style.opacity='1';
+  setTimeout(()=>{ fade.style.opacity='0'; hud.classList.add('on'); }, 600);
+}
+// No intro screen — drop straight into the world. (First click captures the
+// mouse for look and resumes audio, per browser autoplay rules.)
+beginGame();
+</script>
+</body>
+</html>

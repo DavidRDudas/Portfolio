@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>David Dudas</title>
+<meta name="description" content="David Dudas — software architect, creator, and PhD student in Computer Science. Choose an interactive 3D portfolio or a fast, readable project index." />
+<meta property="og:title" content="David Dudas" />
+<meta property="og:description" content="Software Architect · Creator · PhD Student. Enter the interactive 3D world, or read the portfolio." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="favicon.ico" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,400..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --bg:#fbfaf7; --ink:#1b1a17; --muted:#6c675e; --faint:#938c80;
+    --rule:#e6e1d6; --rule-strong:#d3ccbd; --accent:#1f3a6d; --accent-soft:rgba(31,58,109,.06);
+    --card:#ffffff;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:
+      radial-gradient(1200px 700px at 50% -10%, #ffffff 0%, rgba(255,255,255,0) 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Source Serif 4", Charter, Georgia, serif;
+    font-size:18px; line-height:1.6; font-weight:380;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  .mono{ font-family:"JetBrains Mono", ui-monospace, Menlo, monospace; }
+  a{ color:var(--accent); text-decoration:none; }
+  .wrap{ width:100%; max-width:860px; margin:0 auto; padding:0 28px; }
+
+  main{ flex:1 0 auto; display:flex; flex-direction:column; justify-content:center; padding:56px 0 40px; }
+
+  .hero{ text-align:center; margin-bottom:42px; }
+  .kicker{ font-family:"JetBrains Mono", monospace; font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:var(--faint); }
+  h1{ font-size:clamp(42px,8vw,60px); line-height:1; margin:.32em 0 .18em; font-weight:600; letter-spacing:-.015em; }
+  .roles{ font-size:17px; color:var(--muted); font-style:italic; }
+  .roles strong{ color:var(--ink); font-weight:600; font-style:normal; }
+  .eqline{ margin-top:18px; color:var(--faint); font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.04em; }
+  .eqline span{ margin:0 9px; white-space:nowrap; }
+
+  .prompt{ text-align:center; font-family:"JetBrains Mono", monospace; font-size:11.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--faint); margin-bottom:18px; }
+
+  .cards{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .card{
+    position:relative; display:flex; flex-direction:column; gap:14px;
+    background:var(--card); border:1px solid var(--rule-strong); border-radius:10px;
+    padding:30px 28px 26px; color:var(--ink);
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    box-shadow:0 1px 0 rgba(27,26,23,.02);
+  }
+  .card:hover{ transform:translateY(-4px); border-color:var(--accent); box-shadow:0 18px 40px -22px rgba(31,58,109,.45); }
+  .card .art{ height:96px; display:flex; align-items:center; justify-content:center; }
+  .card .art svg{ width:96px; height:96px; }
+  .card h2{ margin:0; font-size:24px; font-weight:600; letter-spacing:-.01em; }
+  .card .tagrow{ font-family:"JetBrains Mono", monospace; font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); }
+  .card p{ margin:0; font-size:16px; color:#403b33; flex:1 0 auto; }
+  .card .go{ font-family:"JetBrains Mono", monospace; font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:8px; }
+  .card:hover .go{ color:var(--accent); }
+  .card .go .arrow{ transition:transform .18s ease; }
+  .card:hover .go .arrow{ transform:translateX(5px); }
+  .card .badge{ position:absolute; top:16px; right:16px; font-family:"JetBrains Mono", monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); border:1px solid var(--rule-strong); border-radius:999px; padding:3px 8px; }
+
+  footer{ flex-shrink:0; text-align:center; padding:22px 0 34px; color:var(--faint);
+    font-family:"JetBrains Mono", monospace; font-size:12px; letter-spacing:.03em; }
+  footer a{ color:var(--muted); }
+  footer a:hover{ color:var(--accent); }
+  footer .dot{ margin:0 8px; opacity:.5; }
+
+  @media (max-width:600px){
+    .cards{ grid-template-columns:1fr; }
+    main{ padding:34px 0 24px; }
+    .card .art{ height:78px; } .card .art svg{ width:78px; height:78px; }
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <div class="wrap">
+    <div class="hero">
+      <div class="kicker">David R. Dudas</div>
+      <h1>David Dudas</h1>
+      <div class="roles"><strong>Software Architect</strong> · <strong>Creator</strong> · <strong>PhD Student</strong>, Computer Science</div>
+      <div class="eqline" aria-hidden="true">
+        <span>&delta;S = 0</span>·<span>&nabla;<sub>&theta;</sub>&#8466;</span>·<span>P &#8799; NP</span>
+      </div>
+    </div>
+
+    <div class="prompt">Choose how to explore</div>
+
+    <div class="cards">
+      <!-- Interactive 3D -->
+      <a class="card" href="world.html">
+        <span class="badge">Best on desktop</span>
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#1f3a6d" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M50 14 86 33 86 67 50 86 14 67 14 33Z" opacity="0.9"/>
+            <path d="M50 14 50 50 86 33M50 50 50 86M50 50 14 33" opacity="0.55"/>
+            <path d="M33 58 L50 67 L67 58" stroke-width="1.6" opacity="0.5"/>
+          </svg>
+        </div>
+        <div class="tagrow">Interactive</div>
+        <h2>The 3D World</h2>
+        <p>Step inside a hand-built cabin and explore every project in space. Walk around in first person, control the time of day and weather, and find the hidden easter eggs.</p>
+        <span class="go">Enter the room <span class="arrow">→</span></span>
+      </a>
+
+      <!-- Static portfolio -->
+      <a class="card" href="portfolio.html">
+        <span class="badge">Fast &amp; readable</span>
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#1f3a6d" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+            <rect x="24" y="16" width="52" height="68" rx="4" opacity="0.9"/>
+            <path d="M34 33h32M34 45h32M34 57h22" stroke-width="1.8" opacity="0.6"/>
+            <path d="M34 69h14" stroke-width="1.8" opacity="0.6"/>
+          </svg>
+        </div>
+        <div class="tagrow">Professional</div>
+        <h2>The Portfolio</h2>
+        <p>Every project, categorized — research, enterprise systems, simulations, games, and published writing. A clean, paper-style index built for reading and for employers.</p>
+        <span class="go">Read the work <span class="arrow">→</span></span>
+      </a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <a href="mailto:daviddudas@hotmail.com">Email</a><span class="dot">·</span>
+  <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">GitHub</a><span class="dot">·</span>
+  <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">ORCID</a><span class="dot">·</span>
+  <span>© 2026 dudas.io</span>
+</footer>
+
+</body>
+</html>
