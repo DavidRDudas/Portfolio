@@ -345,7 +345,7 @@
 
 <div id="info" class="ui-panel">
   <h1>Hi, I'm David.</h1>
-  <div class="role">Software Architect &amp; Creator</div>
+  <div class="role">Software Architect, Creator, &amp;  PhD Student</div>
   <p>I craft digital experiences that blend cutting-edge technology with creative innovation. From interactive simulations to full-stack applications, I bring ideas to life with clean code and thoughtful design.</p>
   <p>Step into the room — click any object to explore the project behind it.</p>
 
@@ -549,7 +549,7 @@
     <span id="sfx-status">— off —</span>
   </div>
   <div id="sfx-toggle-row">
-    <button id="sfx-toggle" class="on" type="button" aria-label="Toggle ambient sound">ENABLED</button>
+    <button id="sfx-toggle" type="button" aria-label="Toggle ambient sound">DISABLED</button>
   </div>
   <div id="sfx-volume">
     <button class="vol-btn" id="sfx-mute" type="button" aria-label="Mute ambient">
@@ -705,6 +705,14 @@ const PROJECTS = {
     tech: ["Writing", "Publishing", "Satire"],
     image: "./images/thewheel.png",
     link: "https://www.amazon.com/dp/B0GWYSGDX9"
+  },
+  bearUrsavus: {
+    title: "Ursavus",
+    category: "Software Company",
+    desc: "My software company. Building software products and tools.",
+    tech: ["Software", "Product", "Company"],
+    image: "./images/ursavus.png",
+    link: "https://ursavus.com"
   },
   camera: {
     title: "Photography",
@@ -4251,6 +4259,77 @@ const tvAnim = tvScreenTexture();
     shelf.add(b);
   }
 
+  // URSAVUS BEAR — small teddy on the bottom shelf, clickable to ursavus.com
+  {
+    const bear = new THREE.Group();
+    const furMat = matStandard(0x7a4a2a, 0.92);   // medium brown
+    const tanMat = matStandard(0xd9b378, 0.92);   // tan belly/snout/inner ears
+    const darkMat = matStandard(0x141008, 0.5);   // eyes/nose
+
+    // body — slightly squashed sphere
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 12), furMat);
+    body.position.set(0, 0.12, 0);
+    body.scale.set(1.0, 0.95, 0.85);
+    body.castShadow = true;
+    bear.add(body);
+    // belly patch
+    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.078, 14, 12), tanMat);
+    belly.position.set(0, 0.115, 0.06);
+    belly.scale.set(1.0, 0.95, 0.55);
+    bear.add(belly);
+    // head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 12), furMat);
+    head.position.set(0, 0.275, 0.025);
+    head.castShadow = true;
+    bear.add(head);
+    // ears
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), furMat);
+      ear.position.set(sx * 0.058, 0.335, 0.015);
+      bear.add(ear);
+      const inner = new THREE.Mesh(new THREE.SphereGeometry(0.015, 10, 8), tanMat);
+      inner.position.set(sx * 0.058, 0.337, 0.030);
+      bear.add(inner);
+    }
+    // snout
+    const snout = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 10), tanMat);
+    snout.position.set(0, 0.255, 0.092);
+    snout.scale.set(1.0, 0.7, 1.0);
+    bear.add(snout);
+    // nose
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), darkMat);
+    nose.position.set(0, 0.27, 0.122);
+    bear.add(nose);
+    // eyes
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 8), darkMat);
+      eye.position.set(sx * 0.032, 0.298, 0.085);
+      bear.add(eye);
+    }
+    // arms
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), furMat);
+      arm.position.set(sx * 0.105, 0.14, 0.03);
+      arm.scale.set(1, 1.25, 1);
+      arm.castShadow = true;
+      bear.add(arm);
+    }
+    // legs
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 8), furMat);
+      leg.position.set(sx * 0.065, 0.045, 0.018);
+      leg.scale.set(1, 0.9, 1.15);
+      leg.castShadow = true;
+      bear.add(leg);
+    }
+    // make the body the click target — largest mesh, gets the hover glow
+    makeInteractive(body, 'bearUrsavus', 'Ursavus');
+
+    // sit on the bottom shelf (shelves[0]), centered, facing out of the shelf
+    bear.position.set(0, shelves[0] + 0.04, 0.05);
+    shelf.add(bear);
+  }
+
   shelf.position.set(-ROOM.w / 2 + 0.3, 0, -1.5);
   shelf.rotation.y = Math.PI / 2;
   root.add(shelf);
@@ -5452,6 +5531,58 @@ function ensureAudio() {
   } catch (e) { audioCtx = null; }
   return audioCtx;
 }
+
+// iOS Safari ignores writes to HTMLAudioElement.volume — the property is
+// read-only there for security reasons, so the volume slider does nothing.
+// Workaround: route each audio element through a Web Audio GainNode and
+// intercept .volume / .muted setters so every existing audio.volume = x
+// call drives the gain instead. On desktop this behaves identically.
+function wrapAudioWithGain(audioEl) {
+  if (!audioEl || audioEl._gainAttached) return audioEl && audioEl._gainNode;
+  const ctx = ensureAudio();
+  if (!ctx) return null;
+  let g;
+  try {
+    const src = ctx.createMediaElementSource(audioEl);
+    g = ctx.createGain();
+    src.connect(g);
+    g.connect(ctx.destination);
+  } catch (_) {
+    audioEl._gainAttached = true; // don't retry
+    return null;
+  }
+  let _vol = audioEl.volume;
+  let _muted = audioEl.muted;
+  g.gain.value = _muted ? 0 : _vol;
+  Object.defineProperty(audioEl, 'volume', {
+    configurable: true,
+    get() { return _vol; },
+    set(v) {
+      _vol = Math.max(0, Math.min(1, +v || 0));
+      g.gain.value = _muted ? 0 : _vol;
+    }
+  });
+  Object.defineProperty(audioEl, 'muted', {
+    configurable: true,
+    get() { return _muted; },
+    set(v) {
+      _muted = !!v;
+      g.gain.value = _muted ? 0 : _vol;
+    }
+  });
+  audioEl._gainAttached = true;
+  audioEl._gainNode = g;
+  return g;
+}
+// iOS / mobile Safari starts the AudioContext suspended; the first user
+// gesture is required to resume it before any sound will play.
+function resumeAudioCtx() {
+  const ctx = ensureAudio();
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+}
+['pointerdown', 'touchstart', 'keydown', 'click'].forEach(ev =>
+  window.addEventListener(ev, resumeAudioCtx, { passive: true })
+);
 function playThunder() {
   const ctx = ensureAudio();
   if (!ctx) return;
@@ -5530,6 +5661,8 @@ const MUSIC_TRACKS = [
   const audio = new Audio();
   audio.preload = 'metadata';
   audio.volume = 0.6;
+  audio.muted = true; // muted by default — user opts in via the music popover
+  wrapAudioWithGain(audio); // iOS Safari volume-control workaround
   let currentTrack = 0;
   let userIsPlaying = false;          // intent — separate from audio.paused
                                        // because some browsers require user
@@ -5703,7 +5836,7 @@ const THUNDER_FILES = [
 const SFX_TRACK_GAIN = {
   birds: 1.0, crickets: 1.0, lightRain: 1.0, heavyRain: 1.0, wind: 0.4,
 };
-let sfxEnabled = true;
+let sfxEnabled = false; // disabled by default — user opts in via the toggle
 let sfxVolume = 0.4;
 let sfxLastNonZeroVol = 0.4;
 let sfxMuted = false;
@@ -5712,6 +5845,7 @@ const ambientAudio = new Audio();
 ambientAudio.loop = true;
 ambientAudio.preload = 'auto';
 ambientAudio.volume = 0;
+wrapAudioWithGain(ambientAudio);
 ambientAudio.addEventListener('error', () => {
   // can't play this file — silently bail without breaking the engine
 });
@@ -5724,6 +5858,7 @@ const thunderClips = THUNDER_FILES.map(src => {
   a.src = src;
   a.dataset.available = 'true';
   a.addEventListener('error', () => { a.dataset.available = 'false'; });
+  wrapAudioWithGain(a);
   return a;
 });
 
@@ -5734,6 +5869,7 @@ fireplaceAudio.loop = true;
 fireplaceAudio.preload = 'auto';
 fireplaceAudio.src = SFX_FILES.fireplace;
 fireplaceAudio.volume = 0;
+wrapAudioWithGain(fireplaceAudio);
 let fireplaceAvailable = true;
 fireplaceAudio.addEventListener('error', () => { fireplaceAvailable = false; });
 let fireplaceStarted = false;
@@ -5742,6 +5878,7 @@ let fireplaceStarted = false;
 const fireworksAudio = new Audio();
 fireworksAudio.preload = 'auto';
 fireworksAudio.src = SFX_FILES.fireworks;
+wrapAudioWithGain(fireworksAudio);
 let fireworksAvailable = true;
 fireworksAudio.addEventListener('error', () => { fireworksAvailable = false; });
 
