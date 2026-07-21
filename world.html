@@ -750,14 +750,6 @@ const PROJECTS = {
     image: "./images/indiegames.png",
     link: null
   },
-  gameCase: {
-    title: "LimitShift",
-    category: "Game Studio",
-    desc: "My indie game studio site — home to game projects in development.",
-    tech: ["Game Development", "Web Design"],
-    image: "./images/limitshift.png",
-    link: "https://www.limitshift.com"
-  },
   bookCharlie: {
     title: "Charlie & Pip",
     category: "Children's Book",
@@ -784,9 +776,9 @@ const PROJECTS = {
   },
   bearUrsavus: {
     title: "Ursavus",
-    category: "Software Company",
-    desc: "My software company. Building software products and tools.",
-    tech: ["Software", "Product", "Company"],
+    category: "Video Game Studio",
+    desc: "My video game studio — home to game projects in development. Formerly LimitShift.",
+    tech: ["Game Development", "Software", "Company"],
     image: "./images/ursavus.png",
     link: "https://ursavus.com"
   },
@@ -4375,7 +4367,8 @@ const tvAnim = tvScreenTexture();
 
   makeInteractive(body, 'console', 'Console · Indie Games');
 
-  // cartridge case stack (separate object for LimitShift)
+  // cartridge case stack — shares the teddy bear's 'bearUrsavus' key, so
+  // the discovery counter treats both objects as one Ursavus find
   const caseStack = new THREE.Group();
   const colors = [0xff7e51, 0x6b8fc2, 0x9c6bc2];
   for (let i = 0; i < 3; i++) {
@@ -4396,7 +4389,7 @@ const tvAnim = tvScreenTexture();
   // (which starts at x = 3.15).
   caseStack.position.set(-0.9, 0, 0.5);
   caseStack.rotation.y = -0.3;
-  makeInteractive(caseStack.children[2], 'gameCase', 'Game Cases · LimitShift');
+  makeInteractive(caseStack.children[2], 'bearUrsavus', 'Game Cases · Ursavus');
   grp.add(caseStack);
 
   // floor placement just in front of the TV stand on the right wall —
@@ -8229,8 +8222,13 @@ function loadDiscoveries() {
     if (!raw) return;
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return;
+    // drop keys that no longer exist in the scene (renamed/removed objects,
+    // e.g. the old 'gameCase' LimitShift entry) — stale keys would inflate
+    // the counter and could mark the world complete without finding it all
+    const valid = new Set();
+    for (const m of interactives) if (m.userData.key) valid.add(m.userData.key);
     for (const key of arr) {
-      if (key === 'door') continue;
+      if (key === 'door' || !valid.has(key)) continue;
       discoveredKeys.add(key);
       muteIconForKey(key);
     }
