@@ -91,6 +91,11 @@
   .tags{ display:flex; flex-wrap:wrap; gap:6px; }
   .tag{ font-family:"JetBrains Mono", monospace; font-size:11px; color:var(--muted); border:1px solid var(--rule-strong); border-radius:999px; padding:2px 9px; line-height:1.5; }
 
+  /* muted entries — retired brands kept on the record */
+  .proj.muted{ opacity:.5; transition:opacity .2s; }
+  .proj.muted:hover{ opacity:.78; }
+  .proj.muted .thumb{ filter:saturate(.1) contrast(.96); }
+
   /* footer */
   footer.site{ border-top:1px solid var(--rule); padding:34px 0 80px; color:var(--faint);
     font-family:"JetBrains Mono", monospace; font-size:12.5px; line-height:1.9; }
@@ -233,15 +238,18 @@ const SECTIONS = [
       { title:"Indie Game Development", cat:"Game Development · Multiple Titles", img:"indiegames.png",
         desc:"A collection of complete game projects across genres — an enhanced Tetris with progressive scaling, a horizontal-scrolling space shooter with homing missiles and time manipulation, and a full FPS with intelligent enemy AI and modular weapons.",
         tech:["Unity","C#","AI","Procedural Generation"], link:null },
+      { title:"Ursavus", cat:"Video Game Studio", img:"ursavus.png",
+        desc:"My video game studio — home to game projects in development.",
+        tech:["Game Development","Software","Company"], link:"https://ursavus.com" },
+      { title:"LimitShift", cat:"Game Studio · Now Ursavus", img:"limitshift.png",
+        desc:"My former indie game studio — rebranded to Ursavus.",
+        tech:["Game Development","Web Design"], link:null, muted:true },
     ]
   },
   {
     title: "Ventures",
     blurb: "Companies and studios I build and run.",
     items: [
-      { title:"Ursavus", cat:"Video Game Studio", img:"ursavus.png",
-        desc:"My video game studio — home to game projects in development. Formerly LimitShift.",
-        tech:["Game Development","Software","Company"], link:"https://ursavus.com" },
       { title:"Dudas Engineering", cat:"Civil & Environmental Engineering", img:"dudasengineering.png",
         desc:"Business platform for a civil and environmental engineering firm.",
         tech:["Web Design","Business"], link:"https://dudasengineering.com" },
@@ -311,7 +319,7 @@ function projHTML(p){
   const thumb = p.img
     ? `<img class="thumb" src="images/${esc(p.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
     : `<div class="thumb"></div>`;
-  return `<article class="proj">
+  return `<article class="proj${p.muted ? " muted" : ""}">
     ${thumb}
     <div class="pbody">
       <h3>${titleInner}</h3>
