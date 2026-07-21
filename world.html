@@ -750,6 +750,15 @@ const PROJECTS = {
     image: "./images/indiegames.png",
     link: null
   },
+  gameCase: {
+    title: "LimitShift",
+    category: "Game Studio · Now Ursavus",
+    status: "Rebranded · Now Ursavus",
+    desc: "My former indie game studio — Ursavus is its new home.",
+    tech: ["Game Development", "Web Design"],
+    image: "./images/limitshift.png",
+    link: "https://ursavus.com"
+  },
   bookCharlie: {
     title: "Charlie & Pip",
     category: "Children's Book",
@@ -4367,8 +4376,8 @@ const tvAnim = tvScreenTexture();
 
   makeInteractive(body, 'console', 'Console · Indie Games');
 
-  // cartridge case stack — shares the teddy bear's 'bearUrsavus' key, so
-  // the discovery counter treats both objects as one Ursavus find
+  // cartridge case stack (separate object for LimitShift, the studio's
+  // former name — its card points to Ursavus as the new home)
   const caseStack = new THREE.Group();
   const colors = [0xff7e51, 0x6b8fc2, 0x9c6bc2];
   for (let i = 0; i < 3; i++) {
@@ -4389,7 +4398,7 @@ const tvAnim = tvScreenTexture();
   // (which starts at x = 3.15).
   caseStack.position.set(-0.9, 0, 0.5);
   caseStack.rotation.y = -0.3;
-  makeInteractive(caseStack.children[2], 'bearUrsavus', 'Game Cases · Ursavus');
+  makeInteractive(caseStack.children[2], 'gameCase', 'Game Cases · LimitShift');
   grp.add(caseStack);
 
   // floor placement just in front of the TV stand on the right wall —
@@ -8222,9 +8231,9 @@ function loadDiscoveries() {
     if (!raw) return;
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return;
-    // drop keys that no longer exist in the scene (renamed/removed objects,
-    // e.g. the old 'gameCase' LimitShift entry) — stale keys would inflate
-    // the counter and could mark the world complete without finding it all
+    // drop keys that no longer exist in the scene (renamed/removed
+    // objects) — stale keys would inflate the counter and could mark
+    // the world complete without finding it all
     const valid = new Set();
     for (const m of interactives) if (m.userData.key) valid.add(m.userData.key);
     for (const key of arr) {
