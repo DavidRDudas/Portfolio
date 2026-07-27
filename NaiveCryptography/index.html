@@ -23,19 +23,428 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-btn active" data-tab="encode">
-                <i class="fas fa-lock"></i> Encode
+            <button class="tab-btn active" data-tab="vsc-key">
+                <i class="fas fa-fingerprint"></i> Visual Key
+            </button>
+            <button class="tab-btn" data-tab="vsc-encrypt">
+                <i class="fas fa-lock"></i> Encrypt
+            </button>
+            <button class="tab-btn" data-tab="vsc-decrypt">
+                <i class="fas fa-unlock"></i> Decrypt
+            </button>
+            <button class="tab-btn" data-tab="vsc-otp">
+                <i class="fas fa-layer-group"></i> Visual OTP
+            </button>
+            <button class="tab-btn" data-tab="attack">
+                <i class="fas fa-bug"></i> Attack Lab
+            </button>
+            <button class="tab-btn" data-tab="encode">
+                <i class="fas fa-triangle-exclamation"></i> Legacy Encode
             </button>
             <button class="tab-btn" data-tab="decode">
-                <i class="fas fa-unlock"></i> Decode
+                <i class="fas fa-triangle-exclamation"></i> Legacy Decode
             </button>
             <button class="tab-btn" data-tab="settings">
                 <i class="fas fa-cog"></i> Settings
             </button>
+            <button class="tab-btn" data-tab="about">
+                <i class="fas fa-circle-info"></i> How it works
+            </button>
         </div>
 
         <div class="tab-content">
-            <div id="encode" class="tab-pane active">
+
+            <!-- ============================ VISUAL KEY ======================= -->
+            <div id="vsc-key" class="tab-pane active">
+                <div class="vsc-intro">
+                    <h2>Draw the key</h2>
+                    <p>
+                        Click cells to build an ordered pattern. <strong>Order matters</strong> &mdash; the same
+                        cells clicked in a different sequence produce a completely different key. Each step also
+                        carries the colour and rotation selected at the time you clicked it.
+                    </p>
+                    <p class="vsc-note">
+                        <i class="fas fa-shield-halved"></i>
+                        This pattern is the <em>only</em> secret. It is held in memory, never written to storage,
+                        never put in a URL, and never included in the encrypted output. Reloading the page forgets
+                        it &mdash; so memorise it or write it down somewhere safe.
+                    </p>
+                </div>
+
+                <div class="vsc-panel">
+                    <div class="vsc-toolbar">
+                        <div class="vsc-tool">
+                            <label for="keyGridSize">Grid</label>
+                            <select id="keyGridSize">
+                                <option value="12">12 &times; 12</option>
+                                <option value="16" selected>16 &times; 16</option>
+                                <option value="20">20 &times; 20</option>
+                                <option value="24">24 &times; 24</option>
+                            </select>
+                        </div>
+                        <div class="vsc-tool">
+                            <label>Colour</label>
+                            <div id="keyPalette" class="palette"></div>
+                        </div>
+                        <div class="vsc-tool">
+                            <label>Rotation</label>
+                            <div id="keyRotations" class="rotations"></div>
+                        </div>
+                    </div>
+
+                    <div id="keyGrid" class="key-grid"></div>
+
+                    <div class="button-group">
+                        <button id="keyRandom" class="primary-btn" type="button">
+                            <i class="fas fa-dice"></i> Random key
+                        </button>
+                        <button id="keyUndo" class="secondary-btn" type="button">
+                            <i class="fas fa-rotate-left"></i> Undo step
+                        </button>
+                        <button id="keyClear" class="secondary-btn" type="button">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="vsc-panel">
+                    <h3>Key strength</h3>
+                    <div class="strength-row">
+                        <div class="strength-metric">
+                            <span class="strength-number" id="keyEntropyReal">0</span>
+                            <span class="strength-caption">bits, realistic estimate</span>
+                        </div>
+                        <div class="strength-metric">
+                            <span class="strength-number strength-number--muted" id="keyEntropyMax">0</span>
+                            <span class="strength-caption">bits if drawn at random</span>
+                        </div>
+                        <div class="strength-metric">
+                            <span class="strength-number strength-number--muted" id="keyStepCount">0</span>
+                            <span class="strength-caption">steps</span>
+                        </div>
+                    </div>
+                    <div class="strength-track"><div id="keyStrengthBar" class="strength-bar" data-level="0"></div></div>
+                    <p class="strength-label" id="keyStrengthLabel" data-level="0">No key drawn</p>
+                    <p class="vsc-advice" id="keyAdvice"></p>
+
+                    <div class="fingerprint-row">
+                        <span class="fingerprint-caption">Key fingerprint</span>
+                        <code class="fingerprint" id="keyFingerprint">&mdash;</code>
+                    </div>
+                    <p class="vsc-fineprint">
+                        Nobody can eyeball whether they redrew a 12-step pattern correctly, so this is the same
+                        trick SSH uses: note the fingerprint down, and next time you draw the key, check it
+                        matches before you rely on it. Treat it as secret &mdash; it is a hash of the only secret
+                        in the system, so anyone holding it can confirm a guessed pattern offline.
+                    </p>
+                    <p class="vsc-fineprint">
+                        The realistic estimate deliberately discounts patterns that look like something a human
+                        would draw: a step landing next to the previous one is credited about 3 bits instead of
+                        the full <code>log&#8322;(N)</code>, and colour and rotation count only where you actually
+                        varied them. It is a heuristic meant to be pessimistic, not a proof of strength.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ============================ ENCRYPT ========================== -->
+            <div id="vsc-encrypt" class="tab-pane">
+                <div class="input-group">
+                    <label for="vscInput">Message</label>
+                    <div class="textarea-wrapper">
+                        <textarea id="vscInput" placeholder="Type the message to encrypt..."></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button id="vscEncryptBtn" class="primary-btn" type="button">
+                            <i class="fas fa-lock"></i> Encrypt &amp; split
+                        </button>
+                        <button id="vscClearEncrypt" class="secondary-btn" type="button">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                    <div class="fingerprint-row">
+                        <span class="fingerprint-caption">Encrypting under key</span>
+                        <code class="fingerprint" id="encryptFingerprint">&mdash;</code>
+                    </div>
+                    <p id="vscEncryptStatus" class="vsc-status"></p>
+                </div>
+
+                <div id="vscShareOutputs" class="output-group" hidden>
+                    <p class="vsc-note">
+                        <i class="fas fa-shuffle"></i>
+                        Send these two shares by <strong>different</strong> channels. Either one alone is a
+                        uniformly random byte string that says nothing about the message &mdash; but if both
+                        travel together, the split has bought you nothing.
+                    </p>
+                    <div class="share-grid">
+                        <div class="share-card">
+                            <h4>Share 1</h4>
+                            <canvas id="vscShareACanvas" class="share-canvas"></canvas>
+                            <div class="copy-field">
+                                <textarea id="vscShareAText" readonly></textarea>
+                                <button class="copy-btn" type="button" data-copy="vscShareAText" aria-label="Copy share 1">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                            <button id="vscDownloadA" class="secondary-btn" type="button">
+                                <i class="fas fa-download"></i> PNG
+                            </button>
+                        </div>
+                        <div class="share-card">
+                            <h4>Share 2</h4>
+                            <canvas id="vscShareBCanvas" class="share-canvas"></canvas>
+                            <div class="copy-field">
+                                <textarea id="vscShareBText" readonly></textarea>
+                                <button class="copy-btn" type="button" data-copy="vscShareBText" aria-label="Copy share 2">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                            <button id="vscDownloadB" class="secondary-btn" type="button">
+                                <i class="fas fa-download"></i> PNG
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================ DECRYPT ========================== -->
+            <div id="vsc-decrypt" class="tab-pane">
+                <div class="input-group">
+                    <p class="vsc-note">
+                        <i class="fas fa-key"></i>
+                        Draw the same pattern on the <strong>Visual Key</strong> tab before decrypting.
+                        Both shares plus the pattern are required; any two of the three are not enough.
+                    </p>
+                    <div class="share-grid">
+                        <div class="share-card">
+                            <h4>Share 1</h4>
+                            <label class="file-label" for="vscShareAFile">
+                                <i class="fas fa-image"></i> Load PNG
+                            </label>
+                            <input type="file" id="vscShareAFile" accept="image/png" class="file-input">
+                            <textarea id="vscShareAIn" placeholder="...or paste the base64 share"></textarea>
+                            <p id="vscShareAStatus" class="vsc-status"></p>
+                        </div>
+                        <div class="share-card">
+                            <h4>Share 2</h4>
+                            <label class="file-label" for="vscShareBFile">
+                                <i class="fas fa-image"></i> Load PNG
+                            </label>
+                            <input type="file" id="vscShareBFile" accept="image/png" class="file-input">
+                            <textarea id="vscShareBIn" placeholder="...or paste the base64 share"></textarea>
+                            <p id="vscShareBStatus" class="vsc-status"></p>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="vscDecryptBtn" class="primary-btn" type="button">
+                            <i class="fas fa-unlock"></i> Combine &amp; decrypt
+                        </button>
+                    </div>
+                    <p id="vscDecryptStatus" class="vsc-status"></p>
+                </div>
+
+                <div class="output-group">
+                    <div class="result-field">
+                        <label for="vscDecodedOutput">Decrypted message</label>
+                        <div class="copy-field">
+                            <textarea id="vscDecodedOutput" readonly></textarea>
+                            <button class="copy-btn" type="button" data-copy="vscDecodedOutput" aria-label="Copy decrypted message">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================ VISUAL OTP ======================= -->
+            <div id="vsc-otp" class="tab-pane">
+                <div class="vsc-intro">
+                    <h2>Naor&ndash;Shamir visual secret sharing</h2>
+                    <p>
+                        This is the original &ldquo;visual cryptography&rdquo;, published by Moni Naor and Adi Shamir
+                        in 1994. There is no key and no computer needed to decrypt: the message is split into two
+                        images of pure noise, and stacking them physically reveals it. Your eye does the decryption.
+                    </p>
+                    <p>
+                        Every pixel of the secret becomes a 2&times;2 block in each share, chosen from the six blocks
+                        that have exactly two black subpixels. If the secret pixel is white both shares get the
+                        <em>same</em> block; if it is black they get <em>complementary</em> blocks. Stacking is an OR
+                        &mdash; ink blocks light &mdash; so white recovers as 50% grey and black as solid black.
+                    </p>
+                </div>
+
+                <div class="input-group">
+                    <label for="otpInput">Secret message (keep it short &mdash; this becomes an image)</label>
+                    <div class="textarea-wrapper">
+                        <textarea id="otpInput" placeholder="ATTACK AT DAWN">ATTACK AT DAWN</textarea>
+                    </div>
+                    <div class="button-group">
+                        <button id="otpSplitBtn" class="primary-btn" type="button">
+                            <i class="fas fa-layer-group"></i> Split into two images
+                        </button>
+                    </div>
+                    <p id="otpStatus" class="vsc-status"></p>
+                </div>
+
+                <div id="otpResults" hidden>
+                    <div class="output-group">
+                        <h3>Drag to stack</h3>
+                        <p class="vsc-fineprint">
+                            The top image is drawn with <code>mix-blend-mode: multiply</code>, which reproduces
+                            exactly what two printed transparencies do when you lay one on the other.
+                        </p>
+                        <div class="overlay-stage">
+                            <canvas id="otpOverlayA" class="overlay-canvas"></canvas>
+                            <canvas id="otpOverlayB" class="overlay-canvas overlay-canvas--top"></canvas>
+                        </div>
+                        <p id="otpOverlayHint" class="vsc-advice"></p>
+                        <div class="button-group">
+                            <button id="otpAlign" class="secondary-btn" type="button">
+                                <i class="fas fa-crosshairs"></i> Snap to align
+                            </button>
+                            <button id="otpScatter" class="secondary-btn" type="button">
+                                <i class="fas fa-arrows-left-right"></i> Offset again
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="output-group">
+                        <div class="share-grid share-grid--three">
+                            <div class="share-card">
+                                <h4>Share 1</h4>
+                                <canvas id="otpShareA" class="share-canvas share-canvas--bw"></canvas>
+                                <button id="otpDownloadA" class="secondary-btn" type="button">
+                                    <i class="fas fa-download"></i> PNG
+                                </button>
+                            </div>
+                            <div class="share-card">
+                                <h4>Share 2</h4>
+                                <canvas id="otpShareB" class="share-canvas share-canvas--bw"></canvas>
+                                <button id="otpDownloadB" class="secondary-btn" type="button">
+                                    <i class="fas fa-download"></i> PNG
+                                </button>
+                            </div>
+                            <div class="share-card">
+                                <h4>Stacked</h4>
+                                <canvas id="otpStacked" class="share-canvas share-canvas--bw"></canvas>
+                                <p class="vsc-fineprint">Share 1 OR Share 2</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================ ATTACK LAB ======================= -->
+            <div id="attack" class="tab-pane">
+                <div class="vsc-intro">
+                    <h2>Attack lab</h2>
+                    <p>
+                        Documentation claims a scheme is broken. An attack demonstrates it. Both attacks below
+                        run entirely in your browser, against ciphertext you generate yourself.
+                    </p>
+                </div>
+
+                <div class="vsc-panel">
+                    <h3>1. Break the legacy cipher</h3>
+                    <p>
+                        This does not use the app's own <code>decrypt()</code>, does not read any grid state, and
+                        does not need the grid that produced the ciphertext to still exist. It reimplements the
+                        legacy key schedule from scratch against nothing but the output string &mdash; exactly the
+                        position an interceptor is in. Paste any legacy envelope, from any machine, from any
+                        session.
+                    </p>
+                    <textarea id="attackLegacyInput" placeholder="Paste output from the Legacy Encode tab..."></textarea>
+                    <div class="button-group">
+                        <button id="attackLegacyRun" class="primary-btn" type="button">
+                            <i class="fas fa-unlock-keyhole"></i> Break it
+                        </button>
+                        <button id="attackLegacySample" class="secondary-btn" type="button">
+                            <i class="fas fa-wand-magic-sparkles"></i> Generate a target for me
+                        </button>
+                    </div>
+                    <p id="attackLegacyStatus" class="vsc-status"></p>
+
+                    <div id="attackLegacyResult" hidden>
+                        <div class="attack-result">
+                            <div class="attack-row">
+                                <span class="attack-key">Recovered plaintext</span>
+                                <code class="attack-val attack-val--win" id="attackPlain"></code>
+                            </div>
+                            <div class="attack-row">
+                                <span class="attack-key">Key material used</span>
+                                <code class="attack-val" id="attackKeyBytes"></code>
+                            </div>
+                            <div class="attack-row">
+                                <span class="attack-key">Recovered from</span>
+                                <code class="attack-val" id="attackPatternPreview"></code>
+                            </div>
+                            <div class="attack-row">
+                                <span class="attack-key">PBKDF2 iterations defeated</span>
+                                <code class="attack-val" id="attackIterations"></code>
+                            </div>
+                        </div>
+                        <p class="vsc-note">
+                            <i class="fas fa-skull"></i>
+                            <span id="attackHow"></span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="vsc-panel">
+                    <h3>2. Crack a drawn visual key</h3>
+                    <p>
+                        VSC-1 is only as strong as the pattern you draw, so here is the attack that tests that
+                        claim. It enumerates the shapes people actually draw &mdash; horizontal runs, columns,
+                        diagonals, corners, boxes &mdash; all on the default colour and rotation, and tries each
+                        against a real envelope encrypted under <em>your</em> current key.
+                    </p>
+                    <div class="vsc-toolbar">
+                        <div class="vsc-tool">
+                            <label for="attackDictSize">Dictionary size</label>
+                            <select id="attackDictSize">
+                                <option value="600">600 candidates</option>
+                                <option value="1200" selected>1,200 candidates</option>
+                                <option value="3000">3,000 candidates</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="attackCrackRun" class="primary-btn" type="button">
+                            <i class="fas fa-hammer"></i> Attack my current key
+                        </button>
+                        <button id="attackCrackWeak" class="secondary-btn" type="button">
+                            <i class="fas fa-arrow-down-short-wide"></i> Draw a weak key first
+                        </button>
+                        <button id="attackCrackStop" class="secondary-btn" type="button" hidden>
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                    </div>
+                    <p id="attackCrackStatus" class="vsc-status"></p>
+                    <div class="strength-track"><div id="attackProgressBar" class="strength-bar" data-level="1"></div></div>
+                    <div id="attackCrackResult" hidden>
+                        <p class="vsc-note"><i class="fas fa-gavel"></i> <span id="attackVerdict"></span></p>
+                    </div>
+                    <p class="vsc-fineprint">
+                        The demo runs at 100,000 PBKDF2 iterations so it finishes while you watch; results are
+                        extrapolated back to your configured setting. A real attacker would not use one
+                        JavaScript thread either &mdash; a GPU cluster is orders of magnitude faster than the
+                        rate measured here, so treat every number below as a generous lower bound on how long
+                        you would last.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ============================ LEGACY ENCODE ==================== -->
+            <div id="encode" class="tab-pane">
+                <div class="vsc-warning">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div>
+                        <strong>This method provides no security. It is kept as a worked example of how to get
+                        this wrong.</strong>
+                        The key is derived from the animated grid, and then the grid state is written into the
+                        <code>gridState</code> field of the output. The ciphertext carries its own key, so anyone
+                        who has the output can decrypt it without knowing anything. See <em>How it works</em>.
+                    </div>
+                </div>
                 <div class="input-group">
                     <label for="inputText">Plain Text</label>
                     <div class="textarea-wrapper">
@@ -68,7 +477,16 @@
                 <div id="gridStatus" class="grid-status"></div>
             </div>
 
+            <!-- ============================ LEGACY DECODE ==================== -->
             <div id="decode" class="tab-pane">
+                <div class="vsc-warning">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div>
+                        <strong>Decoding here needs no key.</strong>
+                        Paste any output from Legacy Encode &mdash; produced on any machine, by anyone &mdash; and
+                        it will decode. That is the bug, demonstrated.
+                    </div>
+                </div>
                 <div class="input-group">
                     <label for="encodedInput">Encoded Text</label>
                     <div class="textarea-wrapper">
@@ -94,6 +512,7 @@
                                 <i class="fas fa-copy"></i>
                             </button>
                         </div>
+                        <div class="char-count">Characters: <span id="decodedCharCount">0</span></div>
                     </div>
                 </div>
 
@@ -101,10 +520,36 @@
                 <div id="gridStatus2" class="grid-status"></div>
             </div>
 
+            <!-- ============================ SETTINGS ========================= -->
             <div id="settings" class="tab-pane">
                 <div class="settings-group">
+                    <div class="vsc-panel">
+                        <h3>Visual Share Cipher</h3>
+                        <div class="setting-control">
+                            <label for="vscIterations">PBKDF2 iterations</label>
+                            <input type="number" id="vscIterations" min="100000" max="5000000"
+                                   step="50000" value="600000">
+                        </div>
+                        <p class="vsc-fineprint">
+                            600,000 is the OWASP floor for PBKDF2-HMAC-SHA256. Raising it slows an offline
+                            attacker down linearly and slows you down by the same factor. It is recorded in the
+                            authenticated header, so it cannot be lowered in transit without breaking the tag.
+                        </p>
+                        <div class="button-group">
+                            <button id="vscSelfTest" class="primary-btn" type="button">
+                                <i class="fas fa-vial"></i> Run self-test in this browser
+                            </button>
+                        </div>
+                        <label for="vscSelfTestOut">Self-test output</label>
+                        <textarea id="vscSelfTestOut" readonly class="debug-output"></textarea>
+                        <p class="vsc-fineprint">
+                            The PNG checks matter: some browsers colour-manage canvas pixels on the way back in,
+                            which would corrupt a share. If those fail here, use the base64 shares instead.
+                        </p>
+                    </div>
+
                     <div class="grid-settings">
-                        <h3>Grid Settings</h3>
+                        <h3>Legacy Grid Settings</h3>
                         <div class="setting-control">
                             <label for="gridSize">Grid Size:</label>
                             <input type="range" id="gridSize" min="16" max="64" value="32" step="8">
@@ -140,9 +585,199 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ============================ ABOUT ============================ -->
+            <div id="about" class="tab-pane">
+                <div class="vsc-prose">
+                    <h2>Does visual encryption actually work?</h2>
+                    <p>
+                        Yes &mdash; but only two of the three things people mean by the phrase are real, and the
+                        original version of this app did the third one.
+                    </p>
+
+                    <h3>What the legacy method got wrong</h3>
+                    <p>
+                        The legacy cipher animates a grid, derives 64 bytes of key material from the active cells'
+                        positions, colours, rotations and intensities, stretches that through PBKDF2 with up to
+                        225,000 iterations, and encrypts with AES-256-GCM. Every primitive in that sentence is a
+                        good one. It is still worth nothing, for three compounding reasons:
+                    </p>
+                    <ol>
+                        <li>
+                            <strong>The key ships with the ciphertext.</strong>
+                            <code>analyzeGridPattern()</code> builds a <code>pattern</code> string listing every
+                            active cell as <code>position:colour:rotation:intensity</code>. The key bytes are
+                            computed from exactly those fields &mdash; and then <code>pattern</code> is
+                            base64-encoded into the <code>gridState</code> field of the output.
+                            <code>decrypt()</code> reads it straight back out and rebuilds the key. There is no
+                            secret anywhere in the system.
+                        </li>
+                        <li>
+                            <strong>Nobody chose the pattern.</strong>
+                            The grid is mutated by a <code>setInterval</code> on a timer. The user never picks it,
+                            so it is not something they know and could re-supply later. It is a random key that has
+                            to be transmitted &mdash; and it is, in the clear.
+                        </li>
+                        <li>
+                            <strong>The second class is worse.</strong>
+                            <code>SecureVisualGridCipher</code> calls <code>exportKey('raw', ...)</code> and puts
+                            the raw AES-256 key in the output as a field literally named <code>key</code>. It is
+                            also dead code: <code>encodeText()</code> uses the base class. And its
+                            <code>decrypt()</code> reads the AAD from <code>gridState.pattern</code>, which is only
+                            written when the &ldquo;include grid data&rdquo; box is ticked, so with the box
+                            unticked it could never have decrypted its own output.
+                        </li>
+                    </ol>
+                    <p class="vsc-note">
+                        <i class="fas fa-lightbulb"></i>
+                        The general lesson: expensive key derivation protects a secret an attacker has to guess.
+                        If the attacker is handed the input to the KDF, iteration count is irrelevant. 225,000
+                        iterations of nothing is nothing.
+                    </p>
+                    <p>
+                        None of that is a claim you have to take on trust. The <em>Attack Lab</em> tab implements
+                        it: paste any legacy envelope and it recovers the plaintext, using a key schedule
+                        reimplemented from scratch against the output string alone. It never touches the app's own
+                        <code>decrypt()</code> and does not need the grid that produced the ciphertext to still
+                        exist &mdash; a browser tab that has never rendered the grid decrypts it just as well.
+                    </p>
+                    <p>
+                        A smaller bug in the same file is worth naming because it is the classic one:
+                        <code>getRandomCell()</code> computes
+                        <code>Math.floor(byte * gridSize&sup2; / 256)</code>. On a 32&times;32 grid that is
+                        <code>byte * 4</code>, so it can only ever return cells 0, 4, 8, &hellip; &mdash; three
+                        quarters of the grid are unreachable. Folding random bytes into a range needs rejection
+                        sampling, not scaling.
+                    </p>
+                    <p>
+                        Two more surfaced while building the attacks, both about timers rather than cryptography:
+                    </p>
+                    <ul>
+                        <li>
+                            <code>startGridAnimation()</code> opened a 250ms <code>setInterval</code> and never
+                            kept the handle. The constructor calls it once, <code>script.js</code> calls
+                            <code>initializeGrid()</code> again immediately after, and
+                            <code>applyGridSettings()</code> calls it once more on every click &mdash; so the
+                            animation quietly accelerated for the rest of the session, and kept restyling 1,025
+                            cells even with its tab hidden. It now retires the previous timer and pauses when it
+                            is not on screen.
+                        </li>
+                        <li>
+                            <code>const secureCipher = new SecureVisualGridCipher(32)</code> ran at script-parse
+                            time and was then never referenced by anything. Constructing it started
+                            <em>another</em> permanent animation timer and rendered into the same
+                            <code>#gridContainer</code>, so a dead object spent every session animating the live
+                            grid's cells from underneath the cipher that actually owns them. The instantiation is
+                            gone; the class stays as the worked example it is.
+                        </li>
+                    </ul>
+
+                    <h3>The three real meanings of &ldquo;visual encryption&rdquo;</h3>
+                    <p>
+                        <strong>1. Visual secret sharing</strong> &mdash; real, provably secure, and implemented on
+                        the <em>Visual OTP</em> tab. Naor and Shamir's 1994 scheme splits an image into shares that
+                        are individually indistinguishable from noise; stacking them reveals the secret with no
+                        computation. A single share is information-theoretically useless: it is a one-time pad
+                        applied to pixels, so it is not merely hard to break, there is nothing there to break.
+                        The price is that each share is twice the size of the secret in each dimension, contrast
+                        drops by half, and a pad may never be reused.
+                    </p>
+                    <p>
+                        <strong>2. A visual key</strong> &mdash; real, and what the <em>Visual Key</em> tab does.
+                        A drawn pattern is just a password with a nicer input method. It works exactly as well as
+                        the pattern is unguessable, which is the entire caveat: humans draw lines, letters and
+                        symmetric shapes, so the realistic entropy is far below the theoretical maximum. The
+                        strength meter tries to say so honestly rather than flatter you.
+                    </p>
+                    <p>
+                        <strong>3. Steganography</strong> &mdash; real, but not encryption. Hiding a message in an
+                        image's low bits conceals that a message exists; it does nothing to protect the content
+                        once found. It composes with encryption, it does not replace it.
+                    </p>
+                    <p>
+                        What is <em>not</em> real is the fourth thing, which is what the legacy method did:
+                        generating randomness locally, deriving a key from it, and shipping the randomness
+                        alongside the ciphertext. That is an encoding, not an encryption.
+                    </p>
+
+                    <h3>What this build does &mdash; VSC-1</h3>
+                    <p>
+                        Two independent layers. Neither one invents a primitive; inventing primitives is how the
+                        legacy cipher happened.
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>Layer 1, the visual key.</strong> The drawn pattern is canonicalised to
+                            <code>VSC1|gridSize|cell.colour.rotation-&hellip;</code>, run through PBKDF2-HMAC-SHA256
+                            with a fresh 16-byte salt, and used as an AES-256-GCM key. The full 38-byte header
+                            &mdash; version, grid size, iteration count, salt, IV &mdash; is passed as additional
+                            authenticated data, so an attacker cannot rewrite the iteration count down to 1 to make
+                            an offline attack cheap. The pattern is never stored or transmitted.
+                        </li>
+                        <li>
+                            <strong>Layer 2, the visual shares.</strong> The envelope is XORed with a fresh pad the
+                            same length. Share 1 is the pad, share 2 is the XOR. Each is uniformly distributed and
+                            independent of the envelope, so one share is genuinely zero information &mdash; this is
+                            2-of-2 secret sharing, not obfuscation. Both are rendered as PNGs, three bytes per pixel
+                            with alpha pinned at 255 so nothing is lost to premultiplication.
+                        </li>
+                    </ul>
+                    <p>
+                        Recovering the message needs share 1, share 2, <em>and</em> the pattern. Any two of the
+                        three give you nothing.
+                    </p>
+
+                    <h3>Where this is still weak</h3>
+                    <p>
+                        Stating this plainly is the point of the app, so:
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>The pattern is the whole ballgame.</strong> A short or line-shaped pattern
+                            falls to an offline dictionary attack over plausible shapes. PBKDF2 at 600,000
+                            iterations adds roughly 19 bits of work &mdash; helpful, not redemptive. Attack 2 in
+                            the <em>Attack Lab</em> demonstrates exactly this against your own current key: a
+                            five-cell horizontal run falls in about 200 guesses, a couple of seconds. Measured on
+                            this machine, 600,000 iterations costs the defender only about 97ms, which works out
+                            to roughly 10 guesses per second on one JavaScript thread &mdash; and a GPU is orders
+                            of magnitude faster than that.
+                        </li>
+                        <li>
+                            <strong>PBKDF2-SHA256 is GPU-friendly.</strong> Argon2id is the right choice for a
+                            password-derived key; it is not used here only because it would mean shipping a
+                            dependency into a static portfolio page.
+                        </li>
+                        <li>
+                            <strong>The two shares must travel separately.</strong> Emailing both attachments in
+                            one message reduces the scheme to layer 1 alone.
+                        </li>
+                        <li>
+                            <strong>Length leaks.</strong> The envelope, and therefore each share, is about as long
+                            as the message. No padding scheme is applied.
+                        </li>
+                        <li>
+                            <strong>Browser JavaScript is not a trustworthy execution environment.</strong> Anyone
+                            who can modify the page can read your pattern as you draw it. This is a demonstration
+                            of a construction, not a tool to protect anything that matters.
+                        </li>
+                        <li>
+                            <strong>It has not been reviewed by anyone.</strong> For real work use age, libsodium,
+                            or Signal &mdash; things that have survived people trying to break them.
+                        </li>
+                    </ul>
+                    <p class="vsc-fineprint">
+                        The <em>Settings</em> tab has a self-test that runs the whole path in your browser:
+                        round-trip, wrong-key rejection, single-bit tamper detection, share recombination, the PNG
+                        encode/decode cycle, and the Naor&ndash;Shamir contrast and uniformity properties.
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
     <div id="toast"></div>
+    <script src="visual-share-cipher.js"></script>
+    <script src="attack-lab.js"></script>
+    <script src="visual-share-ui.js"></script>
     <script src="script.js"></script>
     <script src="../header.js"></script>
 </body>
