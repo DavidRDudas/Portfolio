@@ -106,7 +106,47 @@ const idx=V.randomIndices(60000,6), hc=new Array(6).fill(0); for(const v of idx)
 const e6=10000, chi6=hc.reduce((s,o)=>s+(o-e6)**2/e6,0);
 ok(`chi-square ${chi6.toFixed(1)} < 15 for df=5 (no modulo bias)`, chi6<15, JSON.stringify(hc));
 
-console.log('\n[8] entropy accounting');
+console.log('\n[8] randomIndices across every range the UI actually asks for');
+// Regression: a byte-only implementation hung forever once n > 256, which is
+// every grid size above 16x16. Each call is wrapped so a hang fails loudly
+// instead of freezing the run.
+function withTimeout(label, fn, ms = 5000) {
+  const started = Date.now();
+  const value = fn();
+  const took = Date.now() - started;
+  ok(`${label} completed in ${took}ms`, took < ms, 'possible infinite loop');
+  return value;
+}
+for (const g of [12, 16, 20, 24]) {
+  const n = g * g;
+  const draws = withTimeout(`${g}x${g} (n=${n})`, () => V.randomIndices(2000, n));
+  const inRange = draws.every(v => v >= 0 && v < n);
+  ok(`${g}x${g} draws all within [0,${n})`, inRange);
+  ok(`${g}x${g} uses the full grid, not just the low cells`, Math.max(...draws) > n * 0.9,
+     `max=${Math.max(...draws)}`);
+}
+// Uniformity at a range that needs 32-bit draws.
+const wide = V.randomIndices(60000, 576);
+const wideHist = new Array(576).fill(0); for (const v of wide) wideHist[v]++;
+const eW = 60000 / 576, chiW = wideHist.reduce((s, o) => s + (o - eW) ** 2 / eW, 0);
+ok(`n=576 chi-square ${chiW.toFixed(0)} in [480,670] for df=575`, chiW > 480 && chiW < 670);
+ok('n=1 degenerate range works', V.randomIndices(5, 1).every(v => v === 0));
+ok('n=257 (just past the byte boundary) works',
+   V.randomIndices(500, 257).every(v => v >= 0 && v < 257));
+try { V.randomIndices(1, 0); ok('n=0 rejected', false); } catch (e) { ok('n=0 rejected', true); }
+
+console.log('\n[9] full round-trip on every grid size');
+for (const g of [12, 16, 20, 24]) {
+  const p = { gridSize: g, steps: V.randomIndices(10, g * g)
+    .reduce((acc, cell, i) => (acc.some(s => s.cell === cell) ? acc : acc.concat([{ cell, color: i % 8, rotation: i % 8 }])), []) };
+  const b = await V.encrypt(`grid ${g}`, p, { iterations: 100000 });
+  const [s1, s2] = V.splitIntoShares(b);
+  const back = await V.decrypt(V.combineShares(s1, s2), p);
+  ok(`${g}x${g} encrypt -> split -> combine -> decrypt`, back.text === `grid ${g}`);
+  ok(`${g}x${g} header records gridSize`, V.parseHeader(b).gridSize === g);
+}
+
+console.log('\n[10] entropy accounting');
 const line={gridSize:16,steps:Array.from({length:8},(_,i)=>({cell:i+34,color:0,rotation:0}))};
 const scatter={gridSize:16,steps:[3,91,17,204,55,130,72,248].map((c,i)=>({cell:c,color:i%8,rotation:(i*3)%8}))};
 ok('straight line scores below scatter', V.realisticEntropyBits(line) < V.realisticEntropyBits(scatter),

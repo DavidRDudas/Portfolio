@@ -312,7 +312,9 @@
         if ($('keyRandom')) {
             $('keyRandom').addEventListener('click', function () {
                 const total = pattern.gridSize * pattern.gridSize;
-                const wanted = 14;
+                // Guard the dedupe loop: asking for more distinct cells than
+                // the grid holds would never terminate.
+                const wanted = Math.min(14, total);
                 const chosen = [];
                 const used = new Set();
                 while (chosen.length < wanted) {
