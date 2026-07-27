@@ -73,17 +73,39 @@
     }
 
     /**
-     * `count` unbiased integers in [0, n). Rejection sampling: bytes at or
+     * `count` unbiased integers in [0, n). Rejection sampling: draws at or
      * above the largest multiple of n are thrown away rather than folded in
      * with `% n`, which would over-weight the low values.
+     *
+     * The draw width has to follow n. A byte-only version looks fine until
+     * n > 256, at which point floor(256/n)*n is 0, no draw can ever land below
+     * the limit, and the fill loop spins forever -- which is exactly what a
+     * 20x20 or 24x24 key grid did. Byte draws are kept for the small-n case
+     * because visualSplitBitmap() calls this once per secret pixel.
      */
     function randomIndices(count, n) {
-        const out = new Uint8Array(count);
-        const limit = Math.floor(256 / n) * n;
+        if (!Number.isInteger(n) || n < 1) {
+            throw new RangeError('randomIndices needs a positive integer range, got ' + n);
+        }
+        if (n > 0x100000000) {
+            throw new RangeError('randomIndices supports ranges up to 2^32, got ' + n);
+        }
+
+        const wide = n > 256;
+        const out = wide ? new Uint32Array(count) : new Uint8Array(count);
+        const limit = Math.floor((wide ? 0x100000000 : 256) / n) * n;
+
         let filled = 0;
         while (filled < count) {
-            const want = Math.min(RNG_CHUNK, Math.max(32, (count - filled) * 2));
-            const buf = randomBytes(want);
+            const need = (count - filled) * 2;
+            let buf;
+            if (wide) {
+                // getRandomValues caps on byte length, so 4 bytes per word.
+                buf = new Uint32Array(Math.min(RNG_CHUNK >> 2, Math.max(8, need)));
+                crypto.getRandomValues(buf);
+            } else {
+                buf = randomBytes(Math.min(RNG_CHUNK, Math.max(32, need)));
+            }
             for (let i = 0; i < buf.length && filled < count; i++) {
                 if (buf[i] < limit) out[filled++] = buf[i] % n;
             }
