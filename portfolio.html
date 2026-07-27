@@ -209,8 +209,8 @@ const SECTIONS = [
     eq: "\\[ \\frac{d\\mathbf{x}_i}{dt} \\;=\\; \\sum_{j\\neq i} \\mathbf{f}_{ij}(\\mathbf{x}_i,\\mathbf{x}_j) \\]",
     items: [
       { title:"Particle Physics Simulator", cat:"Interactive Simulation", img:"particlephysics.png",
-        desc:"Particle-physics engine with multiple modes — gravitational systems, electric fields, gas molecules, celestial bodies. Spatial-grid collision detection, real-time parameter tuning, and smooth performance with hundreds of particles.",
-        tech:["JavaScript","Physics","Optimization"], link:"./ParticleApplication/index.html" },
+        desc:"Interactive 2D physics sandbox across four regimes — free particles, solar systems, electric fields and gas kinetics. Broad-phase spatial hashing, fixed-timestep integration so the physics stays framerate-independent, and live kinetic-energy and momentum readouts that make integrator drift visible. Pause and single-step to inspect a collision frame by frame.",
+        tech:["JavaScript","Canvas","Physics Simulation","Spatial Hashing"], link:"./ParticleApplication/index.html" },
       { title:"Ant Colony Optimization", cat:"Interactive 3D Simulation", img:"aco.png",
         desc:"Real-time 3D ecosystem of competing ant colonies — queens, scouts, foragers and warriors driven by glowing pheromone fields, predators and territorial battles. Orbit the world, focus any nest, and tune every parameter live.",
         tech:["Three.js","WebGL","Emergent Behavior"], link:"./ACO/index.html" },
