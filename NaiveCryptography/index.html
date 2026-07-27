@@ -35,6 +35,9 @@
             <button class="tab-btn" data-tab="vsc-otp">
                 <i class="fas fa-layer-group"></i> Visual OTP
             </button>
+            <button class="tab-btn" data-tab="attack">
+                <i class="fas fa-bug"></i> Attack Lab
+            </button>
             <button class="tab-btn" data-tab="encode">
                 <i class="fas fa-triangle-exclamation"></i> Legacy Encode
             </button>
@@ -123,6 +126,17 @@
                     <div class="strength-track"><div id="keyStrengthBar" class="strength-bar" data-level="0"></div></div>
                     <p class="strength-label" id="keyStrengthLabel" data-level="0">No key drawn</p>
                     <p class="vsc-advice" id="keyAdvice"></p>
+
+                    <div class="fingerprint-row">
+                        <span class="fingerprint-caption">Key fingerprint</span>
+                        <code class="fingerprint" id="keyFingerprint">&mdash;</code>
+                    </div>
+                    <p class="vsc-fineprint">
+                        Nobody can eyeball whether they redrew a 12-step pattern correctly, so this is the same
+                        trick SSH uses: note the fingerprint down, and next time you draw the key, check it
+                        matches before you rely on it. Treat it as secret &mdash; it is a hash of the only secret
+                        in the system, so anyone holding it can confirm a guessed pattern offline.
+                    </p>
                     <p class="vsc-fineprint">
                         The realistic estimate deliberately discounts patterns that look like something a human
                         would draw: a step landing next to the previous one is credited about 3 bits instead of
@@ -146,6 +160,10 @@
                         <button id="vscClearEncrypt" class="secondary-btn" type="button">
                             <i class="fas fa-trash"></i> Clear
                         </button>
+                    </div>
+                    <div class="fingerprint-row">
+                        <span class="fingerprint-caption">Encrypting under key</span>
+                        <code class="fingerprint" id="encryptFingerprint">&mdash;</code>
                     </div>
                     <p id="vscEncryptStatus" class="vsc-status"></p>
                 </div>
@@ -312,6 +330,106 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- ============================ ATTACK LAB ======================= -->
+            <div id="attack" class="tab-pane">
+                <div class="vsc-intro">
+                    <h2>Attack lab</h2>
+                    <p>
+                        Documentation claims a scheme is broken. An attack demonstrates it. Both attacks below
+                        run entirely in your browser, against ciphertext you generate yourself.
+                    </p>
+                </div>
+
+                <div class="vsc-panel">
+                    <h3>1. Break the legacy cipher</h3>
+                    <p>
+                        This does not use the app's own <code>decrypt()</code>, does not read any grid state, and
+                        does not need the grid that produced the ciphertext to still exist. It reimplements the
+                        legacy key schedule from scratch against nothing but the output string &mdash; exactly the
+                        position an interceptor is in. Paste any legacy envelope, from any machine, from any
+                        session.
+                    </p>
+                    <textarea id="attackLegacyInput" placeholder="Paste output from the Legacy Encode tab..."></textarea>
+                    <div class="button-group">
+                        <button id="attackLegacyRun" class="primary-btn" type="button">
+                            <i class="fas fa-unlock-keyhole"></i> Break it
+                        </button>
+                        <button id="attackLegacySample" class="secondary-btn" type="button">
+                            <i class="fas fa-wand-magic-sparkles"></i> Generate a target for me
+                        </button>
+                    </div>
+                    <p id="attackLegacyStatus" class="vsc-status"></p>
+
+                    <div id="attackLegacyResult" hidden>
+                        <div class="attack-result">
+                            <div class="attack-row">
+                                <span class="attack-key">Recovered plaintext</span>
+                                <code class="attack-val attack-val--win" id="attackPlain"></code>
+                            </div>
+                            <div class="attack-row">
+                                <span class="attack-key">Key material used</span>
+                                <code class="attack-val" id="attackKeyBytes"></code>
+                            </div>
+                            <div class="attack-row">
+                                <span class="attack-key">Recovered from</span>
+                                <code class="attack-val" id="attackPatternPreview"></code>
+                            </div>
+                            <div class="attack-row">
+                                <span class="attack-key">PBKDF2 iterations defeated</span>
+                                <code class="attack-val" id="attackIterations"></code>
+                            </div>
+                        </div>
+                        <p class="vsc-note">
+                            <i class="fas fa-skull"></i>
+                            <span id="attackHow"></span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="vsc-panel">
+                    <h3>2. Crack a drawn visual key</h3>
+                    <p>
+                        VSC-1 is only as strong as the pattern you draw, so here is the attack that tests that
+                        claim. It enumerates the shapes people actually draw &mdash; horizontal runs, columns,
+                        diagonals, corners, boxes &mdash; all on the default colour and rotation, and tries each
+                        against a real envelope encrypted under <em>your</em> current key.
+                    </p>
+                    <div class="vsc-toolbar">
+                        <div class="vsc-tool">
+                            <label for="attackDictSize">Dictionary size</label>
+                            <select id="attackDictSize">
+                                <option value="600">600 candidates</option>
+                                <option value="1200" selected>1,200 candidates</option>
+                                <option value="3000">3,000 candidates</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="attackCrackRun" class="primary-btn" type="button">
+                            <i class="fas fa-hammer"></i> Attack my current key
+                        </button>
+                        <button id="attackCrackWeak" class="secondary-btn" type="button">
+                            <i class="fas fa-arrow-down-short-wide"></i> Draw a weak key first
+                        </button>
+                        <button id="attackCrackStop" class="secondary-btn" type="button" hidden>
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                    </div>
+                    <p id="attackCrackStatus" class="vsc-status"></p>
+                    <div class="strength-track"><div id="attackProgressBar" class="strength-bar" data-level="1"></div></div>
+                    <div id="attackCrackResult" hidden>
+                        <p class="vsc-note"><i class="fas fa-gavel"></i> <span id="attackVerdict"></span></p>
+                    </div>
+                    <p class="vsc-fineprint">
+                        The demo runs at 100,000 PBKDF2 iterations so it finishes while you watch; results are
+                        extrapolated back to your configured setting. A real attacker would not use one
+                        JavaScript thread either &mdash; a GPU cluster is orders of magnitude faster than the
+                        rate measured here, so treat every number below as a generous lower bound on how long
+                        you would last.
+                    </p>
                 </div>
             </div>
 
@@ -517,6 +635,13 @@
                         iterations of nothing is nothing.
                     </p>
                     <p>
+                        None of that is a claim you have to take on trust. The <em>Attack Lab</em> tab implements
+                        it: paste any legacy envelope and it recovers the plaintext, using a key schedule
+                        reimplemented from scratch against the output string alone. It never touches the app's own
+                        <code>decrypt()</code> and does not need the grid that produced the ciphertext to still
+                        exist &mdash; a browser tab that has never rendered the grid decrypts it just as well.
+                    </p>
+                    <p>
                         A smaller bug in the same file is worth naming because it is the classic one:
                         <code>getRandomCell()</code> computes
                         <code>Math.floor(byte * gridSize&sup2; / 256)</code>. On a 32&times;32 grid that is
@@ -524,6 +649,28 @@
                         quarters of the grid are unreachable. Folding random bytes into a range needs rejection
                         sampling, not scaling.
                     </p>
+                    <p>
+                        Two more surfaced while building the attacks, both about timers rather than cryptography:
+                    </p>
+                    <ul>
+                        <li>
+                            <code>startGridAnimation()</code> opened a 250ms <code>setInterval</code> and never
+                            kept the handle. The constructor calls it once, <code>script.js</code> calls
+                            <code>initializeGrid()</code> again immediately after, and
+                            <code>applyGridSettings()</code> calls it once more on every click &mdash; so the
+                            animation quietly accelerated for the rest of the session, and kept restyling 1,025
+                            cells even with its tab hidden. It now retires the previous timer and pauses when it
+                            is not on screen.
+                        </li>
+                        <li>
+                            <code>const secureCipher = new SecureVisualGridCipher(32)</code> ran at script-parse
+                            time and was then never referenced by anything. Constructing it started
+                            <em>another</em> permanent animation timer and rendered into the same
+                            <code>#gridContainer</code>, so a dead object spent every session animating the live
+                            grid's cells from underneath the cipher that actually owns them. The instantiation is
+                            gone; the class stays as the worked example it is.
+                        </li>
+                    </ul>
 
                     <h3>The three real meanings of &ldquo;visual encryption&rdquo;</h3>
                     <p>
@@ -588,7 +735,12 @@
                         <li>
                             <strong>The pattern is the whole ballgame.</strong> A short or line-shaped pattern
                             falls to an offline dictionary attack over plausible shapes. PBKDF2 at 600,000
-                            iterations adds roughly 19 bits of work &mdash; helpful, not redemptive.
+                            iterations adds roughly 19 bits of work &mdash; helpful, not redemptive. Attack 2 in
+                            the <em>Attack Lab</em> demonstrates exactly this against your own current key: a
+                            five-cell horizontal run falls in about 200 guesses, a couple of seconds. Measured on
+                            this machine, 600,000 iterations costs the defender only about 97ms, which works out
+                            to roughly 10 guesses per second on one JavaScript thread &mdash; and a GPU is orders
+                            of magnitude faster than that.
                         </li>
                         <li>
                             <strong>PBKDF2-SHA256 is GPU-friendly.</strong> Argon2id is the right choice for a
@@ -624,6 +776,7 @@
     </div>
     <div id="toast"></div>
     <script src="visual-share-cipher.js"></script>
+    <script src="attack-lab.js"></script>
     <script src="visual-share-ui.js"></script>
     <script src="script.js"></script>
     <script src="../header.js"></script>

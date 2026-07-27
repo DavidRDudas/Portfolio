@@ -808,3 +808,93 @@ code {
 [data-theme="dark"] .strength-label[data-level="3"] {
     color: #fbc02d;
 }
+
+/* --- key fingerprint ---------------------------------------------------- */
+
+.fingerprint-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+.fingerprint-caption {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+}
+
+.fingerprint {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 4px 10px;
+}
+
+/* --- attack lab --------------------------------------------------------- */
+
+.attack-result {
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 14px;
+    margin-top: 14px;
+}
+
+.attack-row {
+    display: grid;
+    grid-template-columns: minmax(140px, 210px) 1fr;
+    gap: 14px;
+    padding: 7px 0;
+    align-items: baseline;
+}
+
+.attack-row + .attack-row {
+    border-top: 1px solid var(--border-color);
+}
+
+.attack-key {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+}
+
+.attack-val {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    word-break: break-all;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.attack-val--win {
+    font-size: 15px;
+    font-weight: 700;
+    color: #d32f2f;
+    word-break: break-word;
+}
+
+[data-theme="dark"] .attack-val--win {
+    color: #ff6b6b;
+}
+
+#attackLegacyInput {
+    height: 90px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+}
+
+#attackProgressBar {
+    transition: width 0.15s linear;
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

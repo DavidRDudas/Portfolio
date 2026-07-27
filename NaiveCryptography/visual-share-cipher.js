@@ -231,6 +231,26 @@
         return { bits: bits, effective: effective, label: label, level: level };
     }
 
+    /**
+     * A short checksum of the pattern, for the same reason SSH prints key
+     * fingerprints: you cannot eyeball whether you redrew a 12-step pattern
+     * correctly, but you can compare six hex digits.
+     *
+     * This is NOT public data. It is a hash of the only secret in the system,
+     * so anyone holding it can confirm a guessed pattern offline without
+     * touching the ciphertext. Write it down the way you would write down a
+     * password hint -- privately.
+     */
+    async function patternFingerprint(pattern) {
+        if (!pattern || !pattern.steps || pattern.steps.length === 0) return null;
+        const material = new TextEncoder().encode('VSC1-fingerprint|' + canonicalPattern(pattern));
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', material));
+        return Array.prototype.map
+            .call(digest.slice(0, 3), function (b) { return b.toString(16).padStart(2, '0'); })
+            .join(' ')
+            .toUpperCase();
+    }
+
     async function deriveKey(pattern, salt, iterations, usages) {
         const material = new TextEncoder().encode(canonicalPattern(pattern));
         const base = await crypto.subtle.importKey(
@@ -639,6 +659,7 @@
 
         // key
         canonicalPattern: canonicalPattern,
+        patternFingerprint: patternFingerprint,
         maxEntropyBits: maxEntropyBits,
         realisticEntropyBits: realisticEntropyBits,
         strengthVerdict: strengthVerdict,
