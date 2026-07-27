@@ -40,9 +40,21 @@
             margin: 5px 0;
         }
         
+        /* body is display:flex. Without these the canvas's intrinsic width
+           (its width attribute) fought the flex algorithm: the panel was
+           squeezed below its own basis and the canvas still overflowed the
+           viewport. Pin the panel, let the canvas take exactly what is left. */
+        #controls {
+            flex: 0 0 auto;
+            overflow-y: auto;
+        }
+
         canvas {
             border: 1px solid #ccc;
             margin-left: 20px;
+            flex: 1 1 0;
+            min-width: 0;
+            display: block;
         }
         
         label[title] {
@@ -57,6 +69,8 @@
             margin-top: 10px;
         }
 
+        .sim-buttons { display: flex; gap: 8px; margin-bottom: 10px; }
+        .sim-buttons button { flex: 1; }
         .performance-stats div {
             margin: 5px 0;
         }
@@ -227,9 +241,15 @@
             <div class="performance-stats">
                 <div>FPS: <span id="fpsCounter">0</span></div>
                 <div>Particles: <span id="particleCounter">0</span></div>
+                <div>Kinetic energy: <span id="keReadout">0</span></div>
+                <div>Momentum: <span id="momentumReadout">0</span></div>
             </div>
         </div>
 
+        <div class="sim-buttons">
+            <button id="pauseToggle">Pause</button>
+            <button id="stepOnce">Step</button>
+        </div>
         <button id="clearParticles">Clear All Particles</button>
     </div>
 
@@ -238,11 +258,10 @@
     <script src="src/SpatialGrid.js"></script>
     <script src="src/ParticleSystem.js"></script>
     <script src="src/main.js"></script>
+    <script src="src/enhance.js?v=1"></script>
     <script src="../header.js"></script>
     <script>
         const canvas = document.getElementById('simulationCanvas');
-        canvas.width = window.innerWidth - 360;
-        canvas.height = window.innerHeight - 40;
 
         const system = new ParticleSystem(canvas, {
             gravity: 500,
@@ -250,34 +269,52 @@
             elasticity: 0.7
         });
 
-        // Initialize the controls
         initializeControls(system);
-        
-        // Add particles on click
+
         canvas.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            system.createParticlesAtPoint(x, y);
+            system.createParticlesAtPoint(e.clientX - rect.left, e.clientY - rect.top);
         });
 
-        // Update the animation loop
-        function animate(currentTime) {
-            const deltaTime = (currentTime - lastTime) / 1000;
-            lastTime = currentTime;
+        // Fixed-timestep driver. Feeding the raw frame delta into update() made
+        // the physics framerate-dependent -- update() clamps dt to 0.016, so
+        // below ~62fps the simulation quietly ran in slow motion. The driver
+        // also owns canvas sizing, which previously happened once at load and
+        // never again.
+        const fpsMeter = { frames: 0, last: performance.now() };
+        const driver = SimulationDriver(system, canvas, {
+            onFrame() {
+                fpsMeter.frames++;
+                const now = performance.now();
+                if (now - fpsMeter.last >= 500) {
+                    const value = Math.round((fpsMeter.frames * 1000) / (now - fpsMeter.last));
+                    fpsMeter.frames = 0;
+                    fpsMeter.last = now;
 
-            system.update(deltaTime);
-            system.render();
+                    const m = system.measure();
+                    document.getElementById('fpsCounter').textContent = value;
+                    document.getElementById('particleCounter').textContent = m.count;
+                    document.getElementById('keReadout').textContent = m.kinetic.toExponential(2);
+                    document.getElementById('momentumReadout').textContent = m.momentum.toExponential(2);
+                }
+            }
+        });
 
-            // Update FPS display more frequently
-            document.getElementById('fpsCounter').textContent = system.fps;
-            
-            requestAnimationFrame(animate);
-        }
+        const pauseBtn = document.getElementById('pauseToggle');
+        pauseBtn.addEventListener('click', () => {
+            pauseBtn.textContent = driver.toggle() ? 'Resume' : 'Pause';
+        });
+        document.getElementById('stepOnce').addEventListener('click', () => {
+            driver.setPaused(true);
+            pauseBtn.textContent = 'Resume';
+            driver.step();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (e.code === 'Space') { e.preventDefault(); pauseBtn.click(); }
+            if (e.key === '.') document.getElementById('stepOnce').click();
+        });
 
-        // Start the animation
-        let lastTime = performance.now();
-        requestAnimationFrame(animate);
     </script>
 </body>
 </html>
