@@ -1,1 +1,864 @@
-class DreamWeaver{constructor(){this.canvas=document.getElementById("canvas"),this.input=document.getElementById("input"),this.canvas.setAttribute("viewBox","0 0 600 400"),this.debounceTimeout=null,this.debounceDelay=500,this.palettes={vibrant:["#FF0055","#FF9100","#FFF700","#00FF95","#00B8FF","#9C00FF"],muted:["#CFB5C0","#B4A6AB","#998B96","#7D7082","#62566D","#463B58"],earth:["#4A3F35","#6B5B4D","#8C7765","#AD937D","#CEB095","#EFCCAD"],ocean:["#001B3B","#003776","#0053B1","#006EEB","#2689FF","#4DA3FF"],forest:["#1B4B00","#366D00","#518F00","#6CB100","#87D300","#A2F500"],sunset:["#FF7B00","#FF5E00","#FF4100","#FF2400","#FF0700","#FF001F"],moonlight:["#FFFFFF","#E6E6FF","#CCCCFF","#B3B3FF","#9999FF","#8080FF"],aurora:["#00FF87","#00FFE1","#00E4FF","#00AAFF","#0055FF","#0000FF"]},this.blendModes=["multiply","screen","overlay","darken","lighten","color-dodge","color-burn","hard-light","soft-light"],this.input.addEventListener("input",(t=>{" "!==this.input.value[this.input.value.length-1]&&this.debouncedGenerateArt()})),this.layerSettings={texture:!0,flowField:!0,mainShapes:!0,details:!0,highlights:!0,noise:!0,patterns:!0,voronoi:!0,particles:!0,lightRays:!0},this.initializeSettings(),this.totalLayers=11,this.currentLayer=0,this.convertToImage=this.convertToImage.bind(this)}initializeSettings(){const t=document.querySelector(".settings-toggle"),e=document.querySelector(".settings-content");t.addEventListener("click",(()=>{e.classList.toggle("hidden")})),document.querySelectorAll(".setting-item input").forEach((t=>{const e=t.dataset.layer;t.addEventListener("change",(()=>{this.layerSettings[e]=t.checked,this.generateArt()}))}))}debouncedGenerateArt(){this.debounceTimeout&&clearTimeout(this.debounceTimeout),this.debounceTimeout=setTimeout((async()=>{" "!==this.input.value[this.input.value.length-1]&&await this.generateArt()}),this.debounceDelay)}updateProgress(t){const e=document.getElementById("loading"),s=e.querySelector(".progress"),a=e.querySelector(".loading-bar-fill"),n=Math.round(t/this.totalLayers*100);s.textContent=`${n}%`,a.style.width=`${n}%`}async generateArt(){const t=this.input.value,e=document.getElementById("loading");if(!t)return this.canvas.innerHTML="",void e.classList.add("hidden");if("img"===this.canvas.tagName.toLowerCase()){const t=document.createElementNS("http://www.w3.org/2000/svg","svg");t.setAttribute("id","canvas"),t.setAttribute("viewBox","0 0 600 400"),t.setAttribute("width","600"),t.setAttribute("height","400"),t.setAttribute("aria-label","Generated dream visualization"),t.style.borderRadius="12px",t.style.maxWidth="100%",this.canvas.replaceWith(t),this.canvas=t}this.currentLayer=0,this.updateProgress(0),e.classList.remove("hidden"),this.canvas.innerHTML="";const s=t;this.canvas.innerHTML="",this.currentSeed=this.hashText(s);const a=this.analyzeText(s);try{await this.generateBackground(a),this.currentLayer++,this.updateProgress(this.currentLayer),await new Promise((t=>setTimeout(t,50)));const t=[{enabled:this.layerSettings.texture,fn:()=>this.generateTextureLayer(a)},{enabled:this.layerSettings.flowField,fn:()=>this.generateFlowField(a)},{enabled:this.layerSettings.mainShapes,fn:()=>this.generateMainShapes(a)},{enabled:this.layerSettings.details,fn:()=>this.generateDetailLayer(a)},{enabled:this.layerSettings.highlights,fn:()=>this.generateHighlights(a)},{enabled:this.layerSettings.noise,fn:()=>this.applyNoiseFilter(a)},{enabled:this.layerSettings.patterns,fn:()=>this.generatePatternMesh(a)},{enabled:this.layerSettings.voronoi,fn:()=>this.generateVoronoiCells(a)},{enabled:this.layerSettings.particles,fn:()=>this.generateFlowParticles(a)},{enabled:this.layerSettings.lightRays,fn:()=>this.generateLightRays(a)}];for(const e of t)e.enabled&&(await new Promise((t=>{requestAnimationFrame((async()=>{await e.fn(),this.currentLayer++,this.updateProgress(this.currentLayer),t()}))})),await new Promise((t=>setTimeout(t,50))));await this.applyColorHarmonies(a),this.currentLayer++,this.updateProgress(this.currentLayer),await this.convertToImage()}catch(t){console.error("Error generating art:",t)}finally{this.updateProgress(this.totalLayers),await new Promise((t=>setTimeout(t,300))),e.classList.add("hidden")}}generateBackground(t){const e=this.palettes[this.selectPalette(t)],s=document.createElementNS("http://www.w3.org/2000/svg","linearGradient"),a="backgroundGradient";s.setAttribute("id",a),s.setAttribute("x1","0%"),s.setAttribute("y1","0%"),s.setAttribute("x2","100%"),s.setAttribute("y2","100%");[{offset:"0%",color:e[0],opacity:.4},{offset:"50%",color:e[1],opacity:.3},{offset:"100%",color:e[2],opacity:.4}].forEach((t=>{const e=document.createElementNS("http://www.w3.org/2000/svg","stop");e.setAttribute("offset",t.offset),e.setAttribute("stop-color",t.color),e.setAttribute("stop-opacity",t.opacity),s.appendChild(e)}));const n=this.canvas.querySelector("defs")||document.createElementNS("http://www.w3.org/2000/svg","defs");n.appendChild(s),this.canvas.querySelector("defs")||this.canvas.appendChild(n);const i=document.createElementNS("http://www.w3.org/2000/svg","rect");i.setAttribute("width","600"),i.setAttribute("height","400"),i.setAttribute("fill",`url(#${a})`),this.canvas.appendChild(i)}generateTextureLayer(t){const e=Math.floor(50+200*this.seededRandom(0)),s=document.createElementNS("http://www.w3.org/2000/svg","g");for(let t=0;t<e;t++){const e=600*this.seededRandom(t),a=400*this.seededRandom(t+1),n=.5+2*this.seededRandom(t+2),i=document.createElementNS("http://www.w3.org/2000/svg","circle");i.setAttribute("cx",e),i.setAttribute("cy",a),i.setAttribute("r",n),i.setAttribute("fill","#000"),i.setAttribute("opacity",.05),s.appendChild(i)}this.canvas.appendChild(s)}generateFlowField(t){const e=this.palettes[this.selectPalette(t)],s=Math.min(100,5*t.complexity);for(let t=0;t<s;t++){const s=document.createElementNS("http://www.w3.org/2000/svg","path");let a=`M ${600*this.seededRandom(t)} ${400*this.seededRandom(t+1)}`;const n=10+Math.floor(10*this.seededRandom(t+2));let i=600*this.seededRandom(t),r=400*this.seededRandom(t+1);for(let e=0;e<n;e++){const s=this.seededRandom(t+3*e)*Math.PI*4,n=20+40*this.seededRandom(t+2*e),o=i+Math.cos(s)*n,h=r+Math.sin(s)*n;a+=` Q ${i+Math.cos(s)*n*.5} ${r+Math.sin(s)*n*.5} ${o} ${h}`,i=o,r=h}s.setAttribute("d",a),s.setAttribute("stroke",e[Math.floor(this.seededRandom(7*t)*e.length)]),s.setAttribute("stroke-width",.5+2*this.seededRandom(11*t)),s.setAttribute("fill","none"),s.setAttribute("opacity",.1+.2*this.seededRandom(13*t)),this.canvas.appendChild(s)}}generateMainShapes(t){const e=this.palettes[this.selectPalette(t)];t.words.forEach(((t,s)=>{const a=500*this.seededRandom(s)+50,n=300*this.seededRandom(s+1)+50,i=10+3*t.length;this.generateShapeCluster(a,n,i,t,s,e)}))}generateShapeCluster(t,e,s,a,n,i){const r=5*a.length;for(let a=0;a<r;a++){const r=this.seededRandom(n*a)*Math.PI*2,o=this.seededRandom(n*a+1)*s*2,h=t+Math.cos(r)*o,d=e+Math.sin(r)*o,l=s*(.2+.3*this.seededRandom(n*a+2));switch(Math.floor(4*this.seededRandom(n*a+3))){case 0:this.generateSpiralShape(h,d,l,n*a,i);break;case 1:this.generateCrystalShape(h,d,l,n*a,i);break;case 2:this.generateFlowerShape(h,d,l,n*a,i);break;case 3:this.generateStarburstShape(h,d,l,n*a,i)}}}generateSpiralShape(t,e,s,a,n){const i=document.createElementNS("http://www.w3.org/2000/svg","path");let r=`M ${t} ${e}`;const o=3+Math.floor(4*this.seededRandom(a)),h=20*o;for(let a=0;a<h;a++){const n=a/h*Math.PI*2*o,i=a/h*s;r+=` L ${t+Math.cos(n)*i} ${e+Math.sin(n)*i}`}i.setAttribute("d",r),i.setAttribute("stroke",n[Math.floor(this.seededRandom(a)*n.length)]),i.setAttribute("stroke-width",.5+this.seededRandom(a+1)),i.setAttribute("fill","none"),i.setAttribute("opacity",.3+.4*this.seededRandom(a+2)),this.canvas.appendChild(i)}generateCrystalShape(t,e,s,a,n){const i=6+Math.floor(4*this.seededRandom(a)),r=document.createElementNS("http://www.w3.org/2000/svg","path");let o="";for(let n=0;n<i;n++){const r=n/i*Math.PI*2,h=s*(.5+.5*this.seededRandom(a+n));o+=`${0===n?"M":"L"} ${t+Math.cos(r)*h} ${e+Math.sin(r)*h}`}o+="Z",r.setAttribute("d",o),r.setAttribute("fill",n[Math.floor(this.seededRandom(a)*n.length)]),r.setAttribute("opacity",.2+.3*this.seededRandom(a+1)),this.canvas.appendChild(r)}generateFlowerShape(t,e,s,a,n){const i=5+Math.floor(7*this.seededRandom(a)),r=document.createElementNS("http://www.w3.org/2000/svg","path");let o="";for(let n=0;n<i;n++){const r=n/i*Math.PI*2,h=(n+1)/i*Math.PI*2,d=s*(.8+.4*this.seededRandom(a+n)),l=t+Math.cos(r)*d,c=e+Math.sin(r)*d;0===n&&(o+=`M ${l} ${c}`),o+=` C ${t+Math.cos(r+Math.PI/4)*d*1.5} ${e+Math.sin(r+Math.PI/4)*d*1.5} ${t+Math.cos(h-Math.PI/4)*d*1.5} ${e+Math.sin(h-Math.PI/4)*d*1.5} ${t+Math.cos(h)*d} ${e+Math.sin(h)*d}`}o+="Z",r.setAttribute("d",o),r.setAttribute("fill",n[Math.floor(this.seededRandom(a)*n.length)]),r.setAttribute("opacity",.2+.3*this.seededRandom(a+1)),this.canvas.appendChild(r)}generateStarburstShape(t,e,s,a,n){const i=8+Math.floor(8*this.seededRandom(a)),r=document.createElementNS("http://www.w3.org/2000/svg","path");let o="";for(let n=0;n<2*i;n++){const r=n/(2*i)*Math.PI*2,h=s*(n%2==0?1:.3+.3*this.seededRandom(a+n));o+=`${0===n?"M":"L"} ${t+Math.cos(r)*h} ${e+Math.sin(r)*h}`}o+="Z",r.setAttribute("d",o),r.setAttribute("fill",n[Math.floor(this.seededRandom(a)*n.length)]),r.setAttribute("opacity",.2+.3*this.seededRandom(a+1)),this.canvas.appendChild(r)}generateConnectingLines(t){const e=this.palettes[this.selectPalette(t)],s=t.words;for(let t=0;t<s.length-1;t++){const s=500*this.seededRandom(t)+50,a=300*this.seededRandom(t+1)+50,n=500*this.seededRandom(t+1)+50,i=300*this.seededRandom(t+2)+50,r=document.createElementNS("http://www.w3.org/2000/svg","path"),o=`M ${s} ${a} Q ${(s+n)/2} ${(a+i)/2+50} ${n} ${i}`;r.setAttribute("d",o),r.setAttribute("stroke",e[t%e.length]),r.setAttribute("stroke-width","1"),r.setAttribute("fill","none"),r.setAttribute("opacity","0.3"),this.canvas.appendChild(r)}}generateParticles(t){const e=this.palettes[this.selectPalette(t)],s=Math.min(100,2*t.length);for(let t=0;t<s;t++){const s=document.createElementNS("http://www.w3.org/2000/svg","circle");s.setAttribute("cx",600*this.seededRandom(t)),s.setAttribute("cy",400*this.seededRandom(t+1)),s.setAttribute("r",1+3*this.seededRandom(t+2)),s.setAttribute("fill",e[t%e.length]),s.setAttribute("opacity","0.5"),this.canvas.appendChild(s)}}generateDetailLayer(t){t.words.forEach(((t,e)=>{this.generateFractalPattern(600*this.seededRandom(e),400*this.seededRandom(e+1),3,5*t.length,e)}))}generateFractalPattern(t,e,s,a,n){if(s<=0)return;const i=3+Math.floor(4*this.seededRandom(n)),r=this.palettes[this.selectPalette({complexity:s})];for(let o=0;o<i;o++){const h=o/i*Math.PI*2+this.seededRandom(n+o),d=.6*a,l=a*(.5+.5*this.seededRandom(n+o)),c=t+Math.cos(h)*l,u=e+Math.sin(h)*l,g=document.createElementNS("http://www.w3.org/2000/svg","path"),p=t+Math.cos(h)*l*.5+(this.seededRandom(n+o)-.5)*a,m=e+Math.sin(h)*l*.5+(this.seededRandom(n+o+1)-.5)*a;g.setAttribute("d",`M ${t} ${e} Q ${p} ${m} ${c} ${u}`),g.setAttribute("stroke",r[Math.floor(this.seededRandom(n+o)*r.length)]),g.setAttribute("stroke-width",.5*s),g.setAttribute("fill","none"),g.setAttribute("opacity",.3),this.canvas.appendChild(g),this.generateJunctionDecoration(c,u,.5*d,n+o,s),this.generateFractalPattern(c,u,s-1,d,n+o)}}generateJunctionDecoration(t,e,s,a,n){const i=Math.floor(4*this.seededRandom(a)),r=this.palettes[this.selectPalette({complexity:n})],o=r[Math.floor(this.seededRandom(a)*r.length)];switch(i){case 0:this.generateMandala(t,e,s,a,o);break;case 1:this.generateConcentricCircles(t,e,s,a,o);break;case 2:this.generateGeometricBurst(t,e,s,a,o);break;case 3:this.generateOrganicBlob(t,e,s,a,o)}}generateHighlights(t){const e=Math.floor(20+30*this.seededRandom(0)),s=this.palettes[this.selectPalette(t)];for(let t=0;t<e;t++){const e=600*this.seededRandom(t),a=400*this.seededRandom(t+1),n=5+15*this.seededRandom(t+2),i=document.createElementNS("http://www.w3.org/2000/svg","radialGradient"),r=`highlight-${t}`;i.setAttribute("id",r);const o=document.createElementNS("http://www.w3.org/2000/svg","stop");o.setAttribute("offset","0%"),o.setAttribute("stop-color",s[Math.floor(this.seededRandom(t)*s.length)]),o.setAttribute("stop-opacity","0.4");const h=document.createElementNS("http://www.w3.org/2000/svg","stop");h.setAttribute("offset","100%"),h.setAttribute("stop-color","#ffffff"),h.setAttribute("stop-opacity","0"),i.appendChild(o),i.appendChild(h),this.canvas.appendChild(i);const d=document.createElementNS("http://www.w3.org/2000/svg","circle");d.setAttribute("cx",e),d.setAttribute("cy",a),d.setAttribute("r",n),d.setAttribute("fill",`url(#${r})`),this.canvas.appendChild(d)}}applyNoiseFilter(t){const e=document.createElementNS("http://www.w3.org/2000/svg","g");for(let t=0;t<2e3;t++){const s=600*this.seededRandom(3*t),a=400*this.seededRandom(3*t+1),n=.2+.8*this.seededRandom(3*t+2),i=document.createElementNS("http://www.w3.org/2000/svg","circle");i.setAttribute("cx",s),i.setAttribute("cy",a),i.setAttribute("r",n),i.setAttribute("fill","#000"),i.setAttribute("opacity",.03),e.appendChild(i)}this.canvas.appendChild(e)}seededRandom(t){const e=Math.pow(2,32);return this.currentSeed=(1664525*(t+this.currentSeed)+1013904223)%e,this.currentSeed/e}hashText(t){return t.split("").reduce(((t,e)=>t+e.charCodeAt(0)),0)}selectPalette(t){const e=Object.keys(this.palettes);return e[Math.abs(this.currentSeed)%e.length]}analyzeText(t){const e=t.split(" "),s=new Set(e).size,a=t.length/e.length;return{words:e,length:t.length,complexity:e.length*a*(s/e.length),uniqueRatio:s/e.length,avgWordLength:a,sentiment:0}}generateMandala(t,e,s,a,n){const i=document.createElementNS("http://www.w3.org/2000/svg","g"),r=3+Math.floor(4*this.seededRandom(a)),o=6+Math.floor(12*this.seededRandom(a+1));for(let h=0;h<r;h++){const d=s*(.3+h/r*.7),l=document.createElementNS("http://www.w3.org/2000/svg","path");let c="";for(let s=0;s<=o;s++){const n=s/o*Math.PI*2,i=d*(.8+.4*this.seededRandom(a+h+s)),r=t+Math.cos(n)*i,l=e+Math.sin(n)*i;if(0===s)c+=`M ${r} ${l}`;else{const d=(s-1)/o*Math.PI*2,u=i*(1+.2*this.seededRandom(a+h+s));c+=` C ${t+Math.cos(d+Math.PI/o)*u} ${e+Math.sin(d+Math.PI/o)*u} ${t+Math.cos(n-Math.PI/o)*u} ${e+Math.sin(n-Math.PI/o)*u} ${r} ${l}`}}c+="Z",l.setAttribute("d",c),l.setAttribute("fill","none"),l.setAttribute("stroke",n),l.setAttribute("stroke-width",.5*(r-h)),l.setAttribute("opacity",.2+h/r*.3),i.appendChild(l)}this.canvas.appendChild(i)}generateConcentricCircles(t,e,s,a,n){const i=document.createElementNS("http://www.w3.org/2000/svg","g"),r=4+Math.floor(4*this.seededRandom(a));for(let o=0;o<r;o++){const h=document.createElementNS("http://www.w3.org/2000/svg","circle"),d=s*((o+1)/r),l=document.createElementNS("http://www.w3.org/2000/svg","animate");l.setAttribute("attributeName","r"),l.setAttribute("values",`${.9*d};${1.1*d};${.9*d}`),l.setAttribute("dur",2+3*this.seededRandom(a+o)+"s"),l.setAttribute("repeatCount","indefinite"),h.setAttribute("cx",t),h.setAttribute("cy",e),h.setAttribute("r",d),h.setAttribute("fill","none"),h.setAttribute("stroke",n),h.setAttribute("stroke-width",.5),h.setAttribute("opacity",.1+o/r*.2),h.appendChild(l),i.appendChild(h)}this.canvas.appendChild(i)}generateGeometricBurst(t,e,s,a,n){const i=document.createElementNS("http://www.w3.org/2000/svg","g"),r=8+Math.floor(8*this.seededRandom(a)),o=2+Math.floor(3*this.seededRandom(a+1));for(let h=0;h<o;h++){const d=s*(.5+h/o*.5);for(let s=0;s<r;s++){const l=s/r*Math.PI*2,c=document.createElementNS("http://www.w3.org/2000/svg","path"),u=.3*d,g=d*(.8+.4*this.seededRandom(a+s)),p=2*Math.PI/r*(.3+.4*this.seededRandom(a+s+h)),m=t+Math.cos(l-p)*u,w=e+Math.sin(l-p)*u,b=t+Math.cos(l+p)*u,f=e+Math.sin(l+p)*u,M=t+Math.cos(l+p/2)*g,y=e+Math.sin(l+p/2)*g;c.setAttribute("d",`M ${m} ${w} L ${b} ${f} L ${M} ${y} Z`),c.setAttribute("fill",n),c.setAttribute("opacity",.1+h/o*.2),i.appendChild(c)}}this.canvas.appendChild(i)}generateOrganicBlob(t,e,s,a,n){const i=document.createElementNS("http://www.w3.org/2000/svg","path"),r=8+Math.floor(8*this.seededRandom(a));let o="";const h=[];for(let n=0;n<r;n++){const i=n/r*Math.PI*2,o=s*(.5+.5*this.seededRandom(a+n)),d=t+Math.cos(i)*o,l=e+Math.sin(i)*o;h.push({x:d,y:l})}h.push({...h[0]}),h.push({...h[1]}),o+=`M ${h[0].x} ${h[0].y}`;for(let t=0;t<r;t++){const e=h[t],n=h[t+1],i=h[t+2];o+=` C ${e.x+.5*(n.x-e.x)+(this.seededRandom(a+t)-.5)*s*.3} ${e.y+.5*(n.y-e.y)+(this.seededRandom(a+t+1)-.5)*s*.3} ${n.x+.5*(i.x-n.x)+(this.seededRandom(a+t+2)-.5)*s*.3} ${n.y+.5*(i.y-n.y)+(this.seededRandom(a+t+3)-.5)*s*.3} ${n.x} ${n.y}`}const d=2+Math.floor(3*this.seededRandom(a));for(let n=0;n<d;n++){const i=Math.floor(this.seededRandom(a+n)*r),d=Math.floor(this.seededRandom(a+n+1)*r),l=h[i],c=h[d];o+=` M ${l.x} ${l.y}`,o+=` Q ${t+(this.seededRandom(a+n)-.5)*s} ${e+(this.seededRandom(a+n+1)-.5)*s} ${c.x} ${c.y}`}i.setAttribute("d",o),i.setAttribute("fill",n),i.setAttribute("opacity",.2),i.setAttribute("stroke",n),i.setAttribute("stroke-width",.5),this.canvas.appendChild(i)}generatePatternMesh(t){const e=document.createElementNS("http://www.w3.org/2000/svg","g"),s=Math.ceil(30),a=Math.ceil(20);for(let t=0;t<s;t++)for(let s=0;s<a;s++){const n=20*t,i=20*s,r=t*a+s+this.currentSeed;if(this.seededRandom(r)>.7){const t=this.generateMicroPattern(n,i,20,r);e.appendChild(t)}}e.setAttribute("opacity","0.3"),this.canvas.appendChild(e)}generateMicroPattern(t,e,s,a){const n=document.createElementNS("http://www.w3.org/2000/svg","path");let i="";switch(Math.floor(5*this.seededRandom(a))){case 0:i=this.generateCrosshatch(t,e,s,a);break;case 1:i=this.generateDotPattern(t,e,s,a);break;case 2:i=this.generateWavePattern(t,e,s,a);break;case 3:i=this.generateZigzagPattern(t,e,s,a);break;case 4:i=this.generateSpiralPattern(t,e,s,a)}return n.setAttribute("d",i),n.setAttribute("stroke",this.getPatternColor(a)),n.setAttribute("stroke-width","0.5"),n.setAttribute("fill","none"),n}generateVoronoiCells(t){const e=[],s=10+Math.floor(15*this.seededRandom(0));for(let t=0;t<s;t++)e.push({x:600*this.seededRandom(t),y:400*this.seededRandom(t+1)});const a=this.computeVoronoi(e),n=document.createElementNS("http://www.w3.org/2000/svg","g");a.forEach(((t,e)=>{const s=document.createElementNS("http://www.w3.org/2000/svg","path");s.setAttribute("d",this.cellToPath(t)),s.setAttribute("fill",this.getPatternColor(e)),s.setAttribute("opacity","0.1"),n.appendChild(s)})),this.canvas.appendChild(n)}generateFlowParticles(t){const e=document.createElementNS("http://www.w3.org/2000/svg","g"),s=100+Math.floor(200*this.seededRandom(0));for(let t=0;t<s;t++){const s=this.createFlowParticle(t);e.appendChild(s)}this.canvas.appendChild(e)}createFlowParticle(t){const e=document.createElementNS("http://www.w3.org/2000/svg","g"),s=600*this.seededRandom(t),a=400*this.seededRandom(t+1),n=1+3*this.seededRandom(t+2),i=document.createElementNS("http://www.w3.org/2000/svg","path");let r=`M ${s} ${a}`,o=s,h=a;for(let e=0;e<5;e++){const s=this.seededRandom(t+e)*Math.PI*2,a=5+15*this.seededRandom(t+e+1);o+=Math.cos(s)*a,h+=Math.sin(s)*a,r+=` L ${o} ${h}`}return i.setAttribute("d",r),i.setAttribute("stroke",this.getPatternColor(t)),i.setAttribute("stroke-width",n),i.setAttribute("opacity","0.3"),e.appendChild(i),e}generateLightRays(t){const e=document.createElementNS("http://www.w3.org/2000/svg","g"),s=10+Math.floor(20*this.seededRandom(0)),a=300+200*(this.seededRandom(1)-.5),n=200+200*(this.seededRandom(2)-.5);for(let t=0;t<s;t++){const s=this.createLightRay(a,n,t);e.appendChild(s)}e.setAttribute("opacity","0.2"),this.canvas.appendChild(e)}createLightRay(t,e,s){const a=document.createElementNS("http://www.w3.org/2000/svg","path"),n=s/10*Math.PI*2,i=300+200*this.seededRandom(s),r=10+20*this.seededRandom(s+1),o=t+Math.cos(n)*i,h=e+Math.sin(n)*i,d=t+Math.cos(n)*i*.3,l=e+Math.sin(n)*i*.3,c=t+Math.cos(n)*i*.6,u=e+Math.sin(n)*i*.6;return a.setAttribute("d",`M ${t} ${e} C ${d} ${l} ${c} ${u} ${o} ${h}`),a.setAttribute("stroke",this.getPatternColor(s)),a.setAttribute("stroke-width",r),a.setAttribute("fill","none"),a}applyColorHarmonies(t){const e=document.createElementNS("http://www.w3.org/2000/svg","defs"),s=document.createElementNS("http://www.w3.org/2000/svg","filter");s.setAttribute("id","colorAdjust");const a=document.createElementNS("http://www.w3.org/2000/svg","feColorMatrix"),n=this.calculateColorHarmony(t);a.setAttribute("type","matrix"),a.setAttribute("values",n.join(" ")),s.appendChild(a),e.appendChild(s),this.canvas.appendChild(e);const i=document.createElementNS("http://www.w3.org/2000/svg","g");for(i.setAttribute("filter","url(#colorAdjust)");this.canvas.firstChild;)i.appendChild(this.canvas.firstChild);this.canvas.appendChild(i)}calculateColorHarmony(t){const e=[1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0],s=t.sentiment||0,a=t.complexity||1;return e[0]+=.2*s,e[6]+=.1*a,e[12]+=-.1*s,e}generateCrosshatch(t,e,s,a){const n=s/4;let i="";for(let a=0;a<4;a++){const r=a*n;i+=`M ${t} ${e+r} L ${t+s} ${e+r} `}for(let a=0;a<4;a++){const r=a*n;i+=`M ${t+r} ${e} L ${t+r} ${e+s} `}return i}generateDotPattern(t,e,s,a){let n="";const i=s/3;for(let a=0;a<3;a++)for(let r=0;r<3;r++){const o=s/20;n+=`M ${t+a*i+i/2} ${e+r*i+i/2} m -${o}, 0 a ${o},${o} 0 1,0 ${2*o},0 a ${o},${o} 0 1,0 -${2*o},0 `}return n}generateWavePattern(t,e,s,a){let n="";const i=s/8,r=2*Math.PI*2;n+=`M ${t} ${e+s/2}`;for(let a=0;a<=s;a+=s/20){n+=` L ${t+a} ${e+s/2+i*Math.sin(a/s*r)}`}return n}generateZigzagPattern(t,e,s,a){let n="";const i=s/4;n+=`M ${t} ${e}`;for(let a=0;a<4;a++){n+=` L ${t+a*i} ${a%2==0?e:e+s} L ${t+(a+1)*i} ${a%2==0?e+s:e}`}return n}generateSpiralPattern(t,e,s,a){let n="";n+=`M ${t+s/2} ${e+s/2}`;for(let a=0;a<=20;a++){const i=a/20*Math.PI*2*3,r=a/20*s/2;n+=` L ${t+s/2+Math.cos(i)*r} ${e+s/2+Math.sin(i)*r}`}return n}getPatternColor(t){const e=this.palettes[Object.keys(this.palettes)[t%Object.keys(this.palettes).length]];return e[t%e.length]}computeVoronoi(t){const e=[];for(let s=0;s<600;s+=20)for(let a=0;a<400;a+=20){let n=1/0,i=null;for(const e of t){const t=this.distance(s,a,e.x,e.y);t<n&&(n=t,i=e)}if(i){const t=e.find((t=>t.point===i));t?t.points.push({x:s,y:a}):e.push({point:i,points:[{x:s,y:a}]})}}return e}distance(t,e,s,a){return Math.sqrt(Math.pow(s-t,2)+Math.pow(a-e,2))}cellToPath(t){if(!t.points||0===t.points.length)return"";const e=this.getConvexHull(t.points);let s=`M ${e[0].x} ${e[0].y}`;for(let t=1;t<e.length;t++)s+=` L ${e[t].x} ${e[t].y}`;return s+="Z",s}getConvexHull(t){if(t.length<3)return t;let e=t[0];for(let s=1;s<t.length;s++)(t[s].y<e.y||t[s].y===e.y&&t[s].x<e.x)&&(e=t[s]);const s=t.filter((t=>t!==e)).sort(((t,s)=>Math.atan2(t.y-e.y,t.x-e.x)-Math.atan2(s.y-e.y,s.x-e.x))),a=[e];for(const t of s){for(;a.length>=2&&!this.isLeftTurn(a[a.length-2],a[a.length-1],t);)a.pop();a.push(t)}return a}isLeftTurn(t,e,s){return(e.x-t.x)*(s.y-t.y)-(e.y-t.y)*(s.x-t.x)>0}async convertToImage(){const t=(new XMLSerializer).serializeToString(this.canvas),e=new Blob([t],{type:"image/svg+xml;charset=utf-8"}),s=URL.createObjectURL(e);return new Promise(((t,e)=>{const a=new Image;a.onload=()=>{const e=document.createElement("canvas");e.width=600,e.height=400;e.getContext("2d").drawImage(a,0,0);const n=document.createElement("img");n.src=e.toDataURL("image/png"),n.width=600,n.height=400,n.style.borderRadius="12px",n.style.maxWidth="100%",this.canvas.replaceWith(n),this.canvas=n,URL.revokeObjectURL(s),t()},a.onerror=e,a.src=s}))}}const dreamWeaver=new DreamWeaver;
+/**
+ * Dream Weaver -- text to generative SVG art.
+ * ===========================================================================
+ * Rewritten to fix a set of defects that were undermining the output:
+ *
+ *   - hashText() summed character codes, so every anagram collided:
+ *     "dog", "god" and "odg" all hashed to 314 and produced identical art.
+ *     Now FNV-1a.
+ *
+ *   - seededRandom() mutated a single shared cursor, and selectPalette() read
+ *     that cursor, so each layer picked a *different* palette. One artwork was
+ *     drawn in forest, vibrant, muted, ocean and earth at once, which is why
+ *     the results looked muddy. The palette is now chosen once per artwork,
+ *     and every layer draws from its own independent stream -- so toggling one
+ *     layer no longer reshuffles all the others.
+ *
+ *   - calculateColorHarmony() added 0.1 * complexity to the green channel with
+ *     complexity unbounded. A nine-word phrase produced a 5.4x green
+ *     multiplier and the whole piece went neon. Now normalised and clamped.
+ *
+ *   - generateArt() had no concurrency guard, and the layer checkboxes called
+ *     it directly with no debounce. Toggling five boxes started five
+ *     overlapping runs whose layers interleaved into the same canvas. Now
+ *     token-guarded, and each run builds off-screen and swaps in atomically.
+ *
+ *   - Clearing the input did nothing once the canvas had been replaced by the
+ *     rasterised <img>, because innerHTML = "" is a no-op on a void element.
+ *
+ *   - Progress divided by a hardcoded 11 while up to 12 steps ran, so the bar
+ *     reported 109%.
+ *
+ * The piece also no longer rasterises itself after every render. That was
+ * presumably done for performance, but it destroyed the <animate> elements the
+ * code had just added and forced the next run to rebuild the SVG from scratch.
+ * Instead the node count is kept under control (a turbulence filter replaces
+ * 2000 hand-placed noise circles) and PNG export is an explicit button.
+ */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+class DreamWeaver {
+    constructor() {
+        this.canvas = document.getElementById('canvas');
+        this.input = document.getElementById('input');
+        this.status = document.getElementById('status');
+
+        this.palettes = {
+            vibrant: ['#FF0055', '#FF9100', '#FFF700', '#00FF95', '#00B8FF', '#9C00FF'],
+            muted: ['#CFB5C0', '#B4A6AB', '#998B96', '#7D7082', '#62566D', '#463B58'],
+            earth: ['#4A3F35', '#6B5B4D', '#8C7765', '#AD937D', '#CEB095', '#EFCCAD'],
+            ocean: ['#001B3B', '#003776', '#0053B1', '#006EEB', '#2689FF', '#4DA3FF'],
+            forest: ['#1B4B00', '#366D00', '#518F00', '#6CB100', '#87D300', '#A2F500'],
+            sunset: ['#FF7B00', '#FF5E00', '#FF4100', '#FF2400', '#FF0700', '#FF001F'],
+            moonlight: ['#FFFFFF', '#E6E6FF', '#CCCCFF', '#B3B3FF', '#9999FF', '#8080FF'],
+            aurora: ['#00FF87', '#00FFE1', '#00E4FF', '#00AAFF', '#0055FF', '#0000FF']
+        };
+
+        // A small keyword lexicon, not sentiment analysis. It exists so that
+        // what you type actually steers the result -- the previous version
+        // hardcoded sentiment to 0 and then fed it into the colour matrix.
+        this.lexicon = {
+            warm: ['sun', 'fire', 'warm', 'summer', 'gold', 'ember', 'desert', 'lava', 'candle', 'amber', 'burning'],
+            cold: ['ice', 'cold', 'winter', 'snow', 'frost', 'moon', 'silver', 'glacier', 'rain', 'mist', 'pale'],
+            calm: ['calm', 'quiet', 'slow', 'soft', 'still', 'gentle', 'drift', 'float', 'sleep', 'hush', 'dream'],
+            wild: ['storm', 'chaos', 'fast', 'wild', 'burst', 'scream', 'shatter', 'rush', 'lightning', 'fall', 'crash'],
+            dark: ['dark', 'night', 'shadow', 'deep', 'black', 'void', 'grave', 'abyss', 'hollow', 'buried'],
+            bright: ['light', 'bright', 'glow', 'shine', 'white', 'star', 'dawn', 'radiant', 'flare', 'gleam'],
+            nature: ['forest', 'tree', 'leaf', 'river', 'ocean', 'sea', 'mountain', 'wave', 'garden', 'flower', 'root']
+        };
+
+        this.layerSettings = {
+            texture: true, flowField: true, mainShapes: true, details: true,
+            highlights: true, noise: true, patterns: true, voronoi: true,
+            particles: true, lightRays: true
+        };
+
+        this.variation = 0;
+        this.paletteOverride = null;
+        this.token = 0;
+        this.text = '';
+        this.reduceMotion = window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        this.debounceTimeout = null;
+        this.debounceDelay = 400;
+
+        this.initialiseControls();
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Deterministic randomness
+     *
+     * Each layer pulls from its own named stream, so enabling or disabling
+     * one layer cannot change what any other layer draws. Same text plus
+     * same variation always yields the same artwork.
+     * ------------------------------------------------------------------ */
+
+    /** FNV-1a. Order-sensitive, unlike the previous sum of char codes. */
+    hashText(str) {
+        let h = 2166136261;
+        for (let i = 0; i < str.length; i++) {
+            h ^= str.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+    }
+
+    /** mulberry32 -- small, fast, and good enough for art. */
+    stream(name) {
+        let a = this.hashText(this.text + '|' + name + '|' + this.variation);
+        return function () {
+            a |= 0;
+            a = (a + 0x6D2B79F5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Element budget
+     *
+     * generateDetailLayer() recursed three deep with up to seven branches per
+     * level and a decoration at every junction -- tens of thousands of nodes
+     * for a normal sentence. That is what made rasterising feel necessary.
+     * ------------------------------------------------------------------ */
+
+    el(tag, attrs, parent) {
+        if (this.budget <= 0) return null;
+        this.budget--;
+        const node = document.createElementNS(SVG_NS, tag);
+        if (attrs) {
+            for (const k in attrs) {
+                if (attrs[k] !== undefined && attrs[k] !== null) node.setAttribute(k, attrs[k]);
+            }
+        }
+        if (parent) parent.appendChild(node);
+        return node;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Text analysis
+     * ------------------------------------------------------------------ */
+
+    analyzeText(text) {
+        const words = text.trim().split(/\s+/).filter(Boolean);
+        const unique = new Set(words.map(function (w) { return w.toLowerCase(); })).size;
+        const avgWordLength = words.length ? text.replace(/\s+/g, '').length / words.length : 0;
+
+        const mood = {};
+        for (const key in this.lexicon) mood[key] = 0;
+        const lower = text.toLowerCase();
+        for (const key in this.lexicon) {
+            this.lexicon[key].forEach(function (term) {
+                if (lower.indexOf(term) !== -1) mood[key]++;
+            });
+        }
+
+        // Two bounded axes the layers can actually use.
+        const warmth = Math.max(-1, Math.min(1, (mood.warm - mood.cold) / 3));
+        const energy = Math.max(-1, Math.min(1, (mood.wild - mood.calm) / 3));
+        const luminance = Math.max(-1, Math.min(1, (mood.bright - mood.dark) / 3));
+
+        return {
+            words: words,
+            length: text.length,
+            uniqueRatio: words.length ? unique / words.length : 0,
+            avgWordLength: avgWordLength,
+            // Bounded 0..1 rather than the old unbounded product.
+            complexity: Math.min(1, (words.length * avgWordLength) / 120),
+            mood: mood,
+            warmth: warmth,
+            energy: energy,
+            luminance: luminance
+        };
+    }
+
+    /**
+     * One palette for the whole artwork, steered by the words and stable for
+     * a given text. Previously each layer re-read a mutating cursor and
+     * therefore picked its own palette.
+     */
+    choosePalette(analysis) {
+        if (this.paletteOverride && this.palettes[this.paletteOverride]) {
+            return this.paletteOverride;
+        }
+        const m = analysis.mood;
+        if (m.nature >= 2) return 'forest';
+        // "deep sea at night" should read as water, not as a generic calm mood,
+        // so nature plus darkness wins over the broader axes below.
+        if (m.nature >= 1 && analysis.luminance < 0) return 'ocean';
+        if (analysis.warmth > 0.3) return analysis.luminance > 0 ? 'sunset' : 'earth';
+        if (analysis.warmth < -0.3) return analysis.luminance > 0 ? 'moonlight' : 'ocean';
+        if (analysis.energy > 0.3) return 'vibrant';
+        if (analysis.energy < -0.3) return 'muted';
+        const names = Object.keys(this.palettes);
+        return names[this.hashText(this.text) % names.length];
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Layers
+     * ------------------------------------------------------------------ */
+
+    background(root, a, colors) {
+        const defs = this.defs;
+        const grad = this.el('linearGradient', {
+            id: 'bgGradient', x1: '0%', y1: '0%', x2: '100%', y2: '100%'
+        }, defs);
+        const stops = [
+            { offset: '0%', color: colors[0], opacity: 0.75 },
+            { offset: '50%', color: colors[2], opacity: 0.55 },
+            { offset: '100%', color: colors[5], opacity: 0.8 }
+        ];
+        stops.forEach((s) => {
+            this.el('stop', {
+                offset: s.offset, 'stop-color': s.color, 'stop-opacity': s.opacity
+            }, grad);
+        });
+        // A dark base keeps the piece readable whatever the palette.
+        this.el('rect', { width: 600, height: 400, fill: '#07070d' }, root);
+        this.el('rect', { width: 600, height: 400, fill: 'url(#bgGradient)' }, root);
+    }
+
+    texture(root, a) {
+        const rnd = this.stream('texture');
+        const g = this.el('g', { opacity: 0.5 }, root);
+        const count = 60 + Math.floor(90 * rnd());
+        for (let i = 0; i < count; i++) {
+            this.el('circle', {
+                cx: (600 * rnd()).toFixed(1), cy: (400 * rnd()).toFixed(1),
+                r: (0.5 + 2 * rnd()).toFixed(2), fill: '#000', opacity: 0.05
+            }, g);
+        }
+    }
+
+    flowField(root, a, colors) {
+        const rnd = this.stream('flowField');
+        const g = this.el('g', null, root);
+        const count = 30 + Math.floor(70 * a.complexity) + Math.floor(20 * (a.energy + 1));
+        g.style.mixBlendMode = 'screen';
+        for (let i = 0; i < count; i++) {
+            let x = 600 * rnd();
+            let y = 400 * rnd();
+            let d = 'M ' + x.toFixed(1) + ' ' + y.toFixed(1);
+            const steps = 10 + Math.floor(10 * rnd());
+            for (let s = 0; s < steps; s++) {
+                const angle = rnd() * Math.PI * 4;
+                const len = 20 + 40 * rnd();
+                const nx = x + Math.cos(angle) * len;
+                const ny = y + Math.sin(angle) * len;
+                d += ' Q ' + (x + Math.cos(angle) * len * 0.5).toFixed(1) + ' ' +
+                    (y + Math.sin(angle) * len * 0.5).toFixed(1) + ' ' +
+                    nx.toFixed(1) + ' ' + ny.toFixed(1);
+                x = nx; y = ny;
+            }
+            this.el('path', {
+                d: d, fill: 'none',
+                stroke: colors[Math.floor(rnd() * colors.length)],
+                'stroke-width': (0.5 + 2 * rnd()).toFixed(2),
+                opacity: (0.1 + 0.2 * rnd()).toFixed(2)
+            }, g);
+        }
+    }
+
+    mainShapes(root, a, colors) {
+        const rnd = this.stream('mainShapes');
+        const g = this.el('g', null, root);
+        // The focal layer: screened so shapes glow rather than muddying.
+        g.style.mixBlendMode = 'screen';
+        // Scale the per-word cluster down as the text grows, so a long
+        // sentence stays legible instead of turning into a solid mat.
+        const perWord = Math.max(2, Math.round(14 / Math.sqrt(Math.max(1, a.words.length))));
+        a.words.forEach((word, i) => {
+            const cx = 60 + 480 * rnd();
+            const cy = 50 + 300 * rnd();
+            const scale = 10 + Math.min(30, 3 * word.length);
+            for (let j = 0; j < perWord; j++) {
+                const angle = rnd() * Math.PI * 2;
+                const dist = rnd() * scale * 2;
+                const x = cx + Math.cos(angle) * dist;
+                const y = cy + Math.sin(angle) * dist;
+                const size = scale * (0.2 + 0.35 * rnd());
+                const color = colors[Math.floor(rnd() * colors.length)];
+                switch (Math.floor(4 * rnd())) {
+                    case 0: this.spiral(g, x, y, size, rnd, color); break;
+                    case 1: this.crystal(g, x, y, size, rnd, color); break;
+                    case 2: this.flower(g, x, y, size, rnd, color); break;
+                    default: this.starburst(g, x, y, size, rnd, color);
+                }
+            }
+        });
+    }
+
+    spiral(g, cx, cy, size, rnd, color) {
+        const turns = 3 + Math.floor(4 * rnd());
+        const steps = 20 * turns;
+        let d = 'M ' + cx.toFixed(1) + ' ' + cy.toFixed(1);
+        for (let i = 0; i < steps; i++) {
+            const angle = (i / steps) * Math.PI * 2 * turns;
+            const r = (i / steps) * size;
+            d += ' L ' + (cx + Math.cos(angle) * r).toFixed(1) + ' ' + (cy + Math.sin(angle) * r).toFixed(1);
+        }
+        this.el('path', {
+            d: d, fill: 'none', stroke: color,
+            'stroke-width': (0.5 + rnd()).toFixed(2),
+            opacity: (0.3 + 0.4 * rnd()).toFixed(2)
+        }, g);
+    }
+
+    crystal(g, cx, cy, size, rnd, color) {
+        const sides = 6 + Math.floor(4 * rnd());
+        let d = '';
+        for (let i = 0; i < sides; i++) {
+            const angle = (i / sides) * Math.PI * 2;
+            const r = size * (0.5 + 0.5 * rnd());
+            d += (i === 0 ? 'M ' : 'L ') + (cx + Math.cos(angle) * r).toFixed(1) +
+                ' ' + (cy + Math.sin(angle) * r).toFixed(1) + ' ';
+        }
+        this.el('path', { d: d + 'Z', fill: color, opacity: (0.2 + 0.3 * rnd()).toFixed(2) }, g);
+    }
+
+    flower(g, cx, cy, size, rnd, color) {
+        const petals = 5 + Math.floor(7 * rnd());
+        let d = '';
+        for (let i = 0; i < petals; i++) {
+            const a1 = (i / petals) * Math.PI * 2;
+            const a2 = ((i + 1) / petals) * Math.PI * 2;
+            const r = size * (0.8 + 0.4 * rnd());
+            if (i === 0) d += 'M ' + (cx + Math.cos(a1) * r).toFixed(1) + ' ' + (cy + Math.sin(a1) * r).toFixed(1);
+            d += ' C ' + (cx + Math.cos(a1 + Math.PI / 4) * r * 1.5).toFixed(1) + ' ' +
+                (cy + Math.sin(a1 + Math.PI / 4) * r * 1.5).toFixed(1) + ' ' +
+                (cx + Math.cos(a2 - Math.PI / 4) * r * 1.5).toFixed(1) + ' ' +
+                (cy + Math.sin(a2 - Math.PI / 4) * r * 1.5).toFixed(1) + ' ' +
+                (cx + Math.cos(a2) * r).toFixed(1) + ' ' + (cy + Math.sin(a2) * r).toFixed(1);
+        }
+        this.el('path', { d: d + 'Z', fill: color, opacity: (0.2 + 0.3 * rnd()).toFixed(2) }, g);
+    }
+
+    starburst(g, cx, cy, size, rnd, color) {
+        const points = 8 + Math.floor(8 * rnd());
+        let d = '';
+        for (let i = 0; i < points * 2; i++) {
+            const angle = (i / (points * 2)) * Math.PI * 2;
+            const r = size * (i % 2 === 0 ? 1 : 0.3 + 0.3 * rnd());
+            d += (i === 0 ? 'M ' : 'L ') + (cx + Math.cos(angle) * r).toFixed(1) +
+                ' ' + (cy + Math.sin(angle) * r).toFixed(1) + ' ';
+        }
+        this.el('path', { d: d + 'Z', fill: color, opacity: (0.2 + 0.3 * rnd()).toFixed(2) }, g);
+    }
+
+    details(root, a, colors) {
+        const rnd = this.stream('details');
+        const g = this.el('g', null, root);
+        // Depth scales down with word count so the branch count stays bounded.
+        const depth = a.words.length > 8 ? 2 : 3;
+        a.words.slice(0, 10).forEach((word) => {
+            this.fractal(g, 600 * rnd(), 400 * rnd(), depth, Math.min(40, 5 * word.length), rnd, colors);
+        });
+    }
+
+    fractal(g, x, y, depth, size, rnd, colors) {
+        if (depth <= 0 || this.budget <= 0) return;
+        const branches = 3 + Math.floor(3 * rnd());
+        for (let i = 0; i < branches; i++) {
+            const angle = (i / branches) * Math.PI * 2 + rnd();
+            const len = size * (0.5 + 0.5 * rnd());
+            const ex = x + Math.cos(angle) * len;
+            const ey = y + Math.sin(angle) * len;
+            this.el('path', {
+                d: 'M ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' Q ' +
+                    (x + Math.cos(angle) * len * 0.5 + (rnd() - 0.5) * size).toFixed(1) + ' ' +
+                    (y + Math.sin(angle) * len * 0.5 + (rnd() - 0.5) * size).toFixed(1) + ' ' +
+                    ex.toFixed(1) + ' ' + ey.toFixed(1),
+                fill: 'none',
+                stroke: colors[Math.floor(rnd() * colors.length)],
+                'stroke-width': (0.5 * depth).toFixed(2),
+                opacity: 0.3
+            }, g);
+            if (depth === 2) {
+                this.junction(g, ex, ey, size * 0.3, rnd, colors[Math.floor(rnd() * colors.length)]);
+            }
+            this.fractal(g, ex, ey, depth - 1, size * 0.6, rnd, colors);
+        }
+    }
+
+    junction(g, x, y, size, rnd, color) {
+        const rings = 3 + Math.floor(3 * rnd());
+        for (let i = 0; i < rings; i++) {
+            const r = size * ((i + 1) / rings);
+            const circle = this.el('circle', {
+                cx: x.toFixed(1), cy: y.toFixed(1), r: r.toFixed(2),
+                fill: 'none', stroke: color, 'stroke-width': 0.5,
+                opacity: (0.1 + (i / rings) * 0.2).toFixed(2)
+            }, g);
+            // The previous version added these and then rasterised the SVG,
+            // which discarded them. Now the SVG stays live, so they run.
+            if (circle && !this.reduceMotion) {
+                this.el('animate', {
+                    attributeName: 'r',
+                    values: (r * 0.9).toFixed(2) + ';' + (r * 1.1).toFixed(2) + ';' + (r * 0.9).toFixed(2),
+                    dur: (3 + 3 * rnd()).toFixed(1) + 's',
+                    repeatCount: 'indefinite'
+                }, circle);
+            }
+        }
+    }
+
+    highlights(root, a, colors) {
+        const rnd = this.stream('highlights');
+        const g = this.el('g', null, root);
+        g.style.mixBlendMode = 'screen';
+        const count = 16 + Math.floor(20 * rnd());
+        for (let i = 0; i < count; i++) {
+            const id = 'hl' + i;
+            const grad = this.el('radialGradient', { id: id }, this.defs);
+            if (!grad) break;
+            this.el('stop', {
+                offset: '0%', 'stop-color': colors[Math.floor(rnd() * colors.length)],
+                'stop-opacity': 0.45
+            }, grad);
+            this.el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': 0 }, grad);
+            this.el('circle', {
+                cx: (600 * rnd()).toFixed(1), cy: (400 * rnd()).toFixed(1),
+                r: (8 + 22 * rnd()).toFixed(1), fill: 'url(#' + id + ')'
+            }, g);
+        }
+    }
+
+    /** One turbulence filter in place of 2000 individually placed circles. */
+    noise(root, a) {
+        const filter = this.el('filter', {
+            id: 'grain', x: '0%', y: '0%', width: '100%', height: '100%'
+        }, this.defs);
+        this.el('feTurbulence', {
+            type: 'fractalNoise',
+            baseFrequency: (0.6 + 0.3 * a.complexity).toFixed(2),
+            numOctaves: 3,
+            stitchTiles: 'stitch',
+            seed: this.hashText(this.text) % 1000
+        }, filter);
+        this.el('feColorMatrix', { type: 'saturate', values: '0' }, filter);
+        this.el('rect', {
+            width: 600, height: 400, filter: 'url(#grain)',
+            opacity: 0.16, 'mix-blend-mode': 'overlay', 'pointer-events': 'none'
+        }, root);
+    }
+
+    patterns(root, a, colors) {
+        const rnd = this.stream('patterns');
+        const g = this.el('g', { opacity: 0.16 }, root);
+        g.style.mixBlendMode = 'overlay';
+        // Merge every cell of the same pattern type into one path element
+        // rather than emitting ~180 separate nodes.
+        const buckets = ['', '', '', '', ''];
+        for (let cx = 0; cx < 30; cx++) {
+            for (let cy = 0; cy < 20; cy++) {
+                if (rnd() <= 0.7) continue;
+                const x = cx * 20 + (rnd() - 0.5) * 8;
+                const y = cy * 20 + (rnd() - 0.5) * 8;
+                const kind = Math.floor(5 * rnd());
+                buckets[kind] += this.microPattern(kind, x, y, 20);
+            }
+        }
+        buckets.forEach((d, i) => {
+            if (!d) return;
+            this.el('path', {
+                d: d, fill: 'none', stroke: colors[i % colors.length], 'stroke-width': 0.5
+            }, g);
+        });
+    }
+
+    microPattern(kind, x, y, s) {
+        let d = '';
+        if (kind === 0) {
+            for (let i = 0; i < 4; i++) {
+                const o = i * (s / 4);
+                d += 'M ' + (x) + ' ' + (y + o) + ' L ' + (x + s) + ' ' + (y + o) + ' ';
+                d += 'M ' + (x + o) + ' ' + (y) + ' L ' + (x + o) + ' ' + (y + s) + ' ';
+            }
+        } else if (kind === 1) {
+            const step = s / 3;
+            const r = s / 20;
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const px = x + i * step + step / 2;
+                    const py = y + j * step + step / 2;
+                    d += 'M ' + (px - r) + ' ' + py + ' a ' + r + ',' + r + ' 0 1,0 ' + (2 * r) + ',0 a ' +
+                        r + ',' + r + ' 0 1,0 ' + (-2 * r) + ',0 ';
+                }
+            }
+        } else if (kind === 2) {
+            d += 'M ' + x + ' ' + (y + s / 2);
+            for (let i = 0; i <= s; i += s / 20) {
+                d += ' L ' + (x + i).toFixed(1) + ' ' +
+                    (y + s / 2 + (s / 8) * Math.sin((i / s) * Math.PI * 4)).toFixed(1);
+            }
+            d += ' ';
+        } else if (kind === 3) {
+            const step = s / 4;
+            d += 'M ' + x + ' ' + y;
+            for (let i = 0; i < 4; i++) {
+                d += ' L ' + (x + i * step) + ' ' + (i % 2 === 0 ? y : y + s) +
+                    ' L ' + (x + (i + 1) * step) + ' ' + (i % 2 === 0 ? y + s : y);
+            }
+            d += ' ';
+        } else {
+            d += 'M ' + (x + s / 2) + ' ' + (y + s / 2);
+            for (let i = 0; i <= 20; i++) {
+                const angle = (i / 20) * Math.PI * 6;
+                const r = (i / 20) * (s / 2);
+                d += ' L ' + (x + s / 2 + Math.cos(angle) * r).toFixed(1) + ' ' +
+                    (y + s / 2 + Math.sin(angle) * r).toFixed(1);
+            }
+            d += ' ';
+        }
+        return d;
+    }
+
+    voronoi(root, a, colors) {
+        const rnd = this.stream('voronoi');
+        const g = this.el('g', null, root);
+        const sites = [];
+        const count = 10 + Math.floor(15 * rnd());
+        for (let i = 0; i < count; i++) sites.push({ x: 600 * rnd(), y: 400 * rnd(), i: i });
+
+        // Sample the plane, group by nearest site, then hull each group.
+        const groups = sites.map(function () { return []; });
+        for (let x = 0; x < 600; x += 12) {
+            for (let y = 0; y < 400; y += 12) {
+                let best = 0;
+                let bestD = Infinity;
+                for (let s = 0; s < sites.length; s++) {
+                    const dx = sites[s].x - x;
+                    const dy = sites[s].y - y;
+                    const d = dx * dx + dy * dy;
+                    if (d < bestD) { bestD = d; best = s; }
+                }
+                groups[best].push({ x: x, y: y });
+            }
+        }
+        groups.forEach((pts, i) => {
+            const hull = this.convexHull(pts);
+            if (hull.length < 3) return;
+            let d = 'M ' + hull[0].x + ' ' + hull[0].y;
+            for (let k = 1; k < hull.length; k++) d += ' L ' + hull[k].x + ' ' + hull[k].y;
+            this.el('path', {
+                d: d + ' Z', fill: 'none',
+                stroke: colors[(i + 2) % colors.length], 'stroke-width': 0.8, 'stroke-opacity': 0.35
+            }, g);
+        });
+    }
+
+    /** Andrew's monotone chain -- the previous angular sort mishandled ties. */
+    convexHull(points) {
+        if (points.length < 3) return points;
+        const pts = points.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+        const cross = function (o, a, b) {
+            return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+        };
+        const lower = [];
+        for (const p of pts) {
+            while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+            lower.push(p);
+        }
+        const upper = [];
+        for (let i = pts.length - 1; i >= 0; i--) {
+            const p = pts[i];
+            while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+            upper.push(p);
+        }
+        lower.pop();
+        upper.pop();
+        return lower.concat(upper);
+    }
+
+    particles(root, a, colors) {
+        const rnd = this.stream('particles');
+        const g = this.el('g', { opacity: 0.4 }, root);
+        g.style.mixBlendMode = 'screen';
+        const count = 80 + Math.floor(100 * rnd());
+        for (let i = 0; i < count; i++) {
+            let x = 600 * rnd();
+            let y = 400 * rnd();
+            let d = 'M ' + x.toFixed(1) + ' ' + y.toFixed(1);
+            for (let s = 0; s < 5; s++) {
+                const angle = rnd() * Math.PI * 2;
+                const len = 5 + 15 * rnd();
+                x += Math.cos(angle) * len;
+                y += Math.sin(angle) * len;
+                d += ' L ' + x.toFixed(1) + ' ' + y.toFixed(1);
+            }
+            this.el('path', {
+                d: d, fill: 'none',
+                stroke: colors[Math.floor(rnd() * colors.length)],
+                'stroke-width': (1 + 2 * rnd()).toFixed(2)
+            }, g);
+        }
+    }
+
+    lightRays(root, a, colors) {
+        const rnd = this.stream('lightRays');
+        const g = this.el('g', null, root);
+        g.style.mixBlendMode = 'screen';
+        const count = 6 + Math.floor(8 * rnd());
+        const ox = 300 + 220 * (rnd() - 0.5);
+        const oy = 140 + 180 * (rnd() - 0.5);
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2 + rnd() * 0.5;
+            const len = 320 + 260 * rnd();
+            const spread = 0.04 + 0.07 * rnd();
+            const ex = ox + Math.cos(angle) * len;
+            const ey = oy + Math.sin(angle) * len;
+            const color = colors[Math.floor(rnd() * colors.length)];
+
+            // userSpaceOnUse so the fade runs along the ray itself rather than
+            // down the bounding box, which would be wrong for any ray not
+            // pointing straight down.
+            const id = 'ray' + i;
+            const grad = this.el('linearGradient', {
+                id: id, gradientUnits: 'userSpaceOnUse',
+                x1: ox.toFixed(1), y1: oy.toFixed(1), x2: ex.toFixed(1), y2: ey.toFixed(1)
+            }, this.defs);
+            if (!grad) break;
+            this.el('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': 0.5 }, grad);
+            this.el('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': 0 }, grad);
+
+            this.el('path', {
+                d: 'M ' + ox.toFixed(1) + ' ' + oy.toFixed(1) +
+                    ' L ' + (ox + Math.cos(angle - spread) * len).toFixed(1) + ' ' +
+                    (oy + Math.sin(angle - spread) * len).toFixed(1) +
+                    ' L ' + (ox + Math.cos(angle + spread) * len).toFixed(1) + ' ' +
+                    (oy + Math.sin(angle + spread) * len).toFixed(1) + ' Z',
+                fill: 'url(#' + id + ')'
+            }, g);
+        }
+    }
+
+    /** Pulls the eye to the middle instead of letting the piece read flat. */
+    vignette(root) {
+        const grad = this.el('radialGradient', { id: 'vignette', cx: '50%', cy: '50%', r: '72%' }, this.defs);
+        this.el('stop', { offset: '50%', 'stop-color': '#000', 'stop-opacity': 0 }, grad);
+        this.el('stop', { offset: '100%', 'stop-color': '#000', 'stop-opacity': 0.6 }, grad);
+        this.el('rect', { width: 600, height: 400, fill: 'url(#vignette)', 'pointer-events': 'none' }, root);
+    }
+
+    /**
+     * A gentle grade. The previous version scaled a channel by an unbounded
+     * complexity figure and routinely multiplied green by 5x.
+     */
+    colorGrade(a) {
+        const warm = a.warmth * 0.12;
+        const lum = a.luminance * 0.08;
+        const clamp = function (v) { return Math.max(0.75, Math.min(1.3, v)); };
+        return [
+            clamp(1 + warm + lum), 0, 0, 0, 0,
+            0, clamp(1 + lum), 0, 0, 0,
+            0, 0, clamp(1 - warm + lum), 0, 0,
+            0, 0, 0, 1, 0
+        ];
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Orchestration
+     * ------------------------------------------------------------------ */
+
+    setStatus(message, isError) {
+        if (!this.status) return;
+        this.status.textContent = message || '';
+        this.status.classList.toggle('error', !!isError);
+    }
+
+    updateProgress(done, total) {
+        const loading = document.getElementById('loading');
+        const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
+        loading.querySelector('.progress').textContent = pct + '%';
+        loading.querySelector('.loading-bar-fill').style.width = pct + '%';
+    }
+
+    clearCanvas() {
+        while (this.canvas.firstChild) this.canvas.removeChild(this.canvas.firstChild);
+    }
+
+    async generate() {
+        // Every run gets a token. A run whose token is stale when it finishes
+        // discards its output instead of writing into a canvas that a newer
+        // run already owns.
+        const token = ++this.token;
+        const text = this.input.value;
+        const loading = document.getElementById('loading');
+
+        this.text = text;
+
+        if (!text.trim()) {
+            this.clearCanvas();
+            loading.classList.add('hidden');
+            this.setStatus('');
+            this.setExportEnabled(false);
+            return;
+        }
+
+        loading.classList.remove('hidden');
+        this.updateProgress(0, 1);
+        this.setStatus('');
+
+        try {
+            const analysis = this.analyzeText(text);
+            const paletteName = this.choosePalette(analysis);
+            const colors = this.palettes[paletteName];
+
+            this.budget = 4000;
+            // Build off-screen, so a superseded run never shows partial output.
+            const fragment = document.createElementNS(SVG_NS, 'g');
+            this.defs = document.createElementNS(SVG_NS, 'defs');
+
+            const steps = [
+                { name: 'background', run: () => this.background(fragment, analysis, colors), always: true },
+                { name: 'texture', run: () => this.texture(fragment, analysis) },
+                { name: 'flowField', run: () => this.flowField(fragment, analysis, colors) },
+                { name: 'mainShapes', run: () => this.mainShapes(fragment, analysis, colors) },
+                { name: 'details', run: () => this.details(fragment, analysis, colors) },
+                { name: 'highlights', run: () => this.highlights(fragment, analysis, colors) },
+                { name: 'patterns', run: () => this.patterns(fragment, analysis, colors) },
+                { name: 'voronoi', run: () => this.voronoi(fragment, analysis, colors) },
+                { name: 'particles', run: () => this.particles(fragment, analysis, colors) },
+                { name: 'lightRays', run: () => this.lightRays(fragment, analysis, colors) },
+                { name: 'noise', run: () => this.noise(fragment, analysis) },
+                { name: 'vignette', run: () => this.vignette(fragment), always: true }
+            ].filter((s) => s.always || this.layerSettings[s.name]);
+
+            let done = 0;
+            for (const step of steps) {
+                if (token !== this.token) return;      // superseded mid-render
+                step.run();
+                done++;
+                this.updateProgress(done, steps.length);
+                await new Promise((r) => requestAnimationFrame(r));
+            }
+
+            if (token !== this.token) return;
+
+            const graded = document.createElementNS(SVG_NS, 'g');
+            const filter = this.el('filter', { id: 'grade' }, this.defs);
+            this.el('feColorMatrix', { type: 'matrix', values: this.colorGrade(analysis).join(' ') }, filter);
+            graded.setAttribute('filter', 'url(#grade)');
+            graded.appendChild(fragment);
+
+            this.clearCanvas();
+            this.canvas.appendChild(this.defs);
+            this.canvas.appendChild(graded);
+
+            this.setStatus(analysis.words.length + ' words · ' + paletteName + ' palette · ' +
+                (4000 - this.budget) + ' shapes');
+            this.setExportEnabled(true);
+        } catch (err) {
+            console.error('Dream Weaver failed to render:', err);
+            this.setStatus('Could not weave that: ' + err.message, true);
+        } finally {
+            if (token === this.token) {
+                this.updateProgress(1, 1);
+                await new Promise((r) => setTimeout(r, 250));
+                loading.classList.add('hidden');
+            }
+        }
+    }
+
+    debouncedGenerate() {
+        if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
+        this.debounceTimeout = setTimeout(() => this.generate(), this.debounceDelay);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Export
+     * ------------------------------------------------------------------ */
+
+    setExportEnabled(enabled) {
+        const btn = document.getElementById('download');
+        if (btn) btn.disabled = !enabled;
+    }
+
+    async downloadPng() {
+        const scale = 2;
+        const source = new XMLSerializer().serializeToString(this.canvas);
+        const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        try {
+            const img = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error('could not rasterise the SVG'));
+                image.src = url;
+            });
+            const c = document.createElement('canvas');
+            c.width = 600 * scale;
+            c.height = 400 * scale;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            const a = document.createElement('a');
+            a.download = 'dream-' + this.hashText(this.text).toString(36) + '.png';
+            a.href = c.toDataURL('image/png');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch (err) {
+            this.setStatus('Export failed: ' + err.message, true);
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Controls
+     * ------------------------------------------------------------------ */
+
+    initialiseControls() {
+        this.input.addEventListener('input', () => this.debouncedGenerate());
+
+        const toggle = document.querySelector('.settings-toggle');
+        const content = document.querySelector('.settings-content');
+        if (toggle && content) {
+            toggle.addEventListener('click', () => content.classList.toggle('hidden'));
+        }
+
+        document.querySelectorAll('.setting-item input').forEach((box) => {
+            box.addEventListener('change', () => {
+                this.layerSettings[box.dataset.layer] = box.checked;
+                // Debounced like every other trigger. Previously this called
+                // generate() directly, so five quick toggles started five
+                // concurrent renders.
+                this.debouncedGenerate();
+            });
+        });
+
+        const vary = document.getElementById('vary');
+        if (vary) {
+            vary.addEventListener('click', () => {
+                this.variation++;
+                this.generate();
+            });
+        }
+
+        const download = document.getElementById('download');
+        if (download) download.addEventListener('click', () => this.downloadPng());
+
+        const palette = document.getElementById('palette');
+        if (palette) {
+            Object.keys(this.palettes).forEach((name) => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                palette.appendChild(option);
+            });
+            palette.addEventListener('change', () => {
+                this.paletteOverride = palette.value || null;
+                this.generate();
+            });
+        }
+
+        this.setExportEnabled(false);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.dreamWeaver = new DreamWeaver();
+});
