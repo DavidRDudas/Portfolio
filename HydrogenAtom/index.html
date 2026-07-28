@@ -56,8 +56,29 @@
             <div class="row"><span>⟨r⟩</span><code id="radiusOut">—</code></div>
             <div class="row"><span>Nodes</span><code id="nodesOut">—</code></div>
             <div class="row" id="beatRow" hidden><span>Beat</span><code id="beatOut">—</code></div>
+            <p class="hint" id="flowNote"></p>
             <button id="verifyBtn" class="wide" type="button">Verify against closed form</button>
             <div id="verifyOut" hidden></div>
+        </section>
+
+        <section class="block">
+            <h2>Measure</h2>
+            <p class="hint">
+                A measurement never returns a cloud. It returns <em>one location</em>. Each click
+                re-prepares the atom in the same state and finds the electron once — the cloud is
+                what the outcomes add up to.
+            </p>
+            <div class="measure-buttons">
+                <button id="measureOne" type="button">Measure</button>
+                <button id="measureMany" type="button">×250</button>
+                <button id="measureClear" type="button">Clear</button>
+            </div>
+            <div class="row"><span>Outcomes</span><code id="measureCount">0</code></div>
+            <div class="row"><span>Last</span><code id="measureLast">—</code></div>
+            <label class="check">
+                <input type="checkbox" id="hideCloudIn">
+                <span>Hide the cloud — rebuild it from measurements alone</span>
+            </label>
         </section>
 
         <section class="block">
@@ -118,11 +139,16 @@
             </label>
             <label class="check"><input type="checkbox" id="realIn"><span>Real orbitals (p<sub>x</sub>, d<sub>xy</sub>…)</span></label>
             <label class="slider">
-                <span>Slice <em>cross-section</em></span>
-                <input type="range" id="sliceIn" min="0" max="60" step="2" value="10">
-                <b id="sliceOut">10%</b>
+                <span>Flow <em>probability current</em></span>
+                <input type="range" id="flowIn" min="0" max="150" step="5" value="35">
+                <b id="flowOut">0.35 rad/s</b>
             </label>
-            <label class="check"><input type="checkbox" id="clipIn"><span>Cut away front half</span></label>
+            <label class="slider">
+                <span>Slice <em>cross-section</em></span>
+                <input type="range" id="sliceIn" min="0" max="60" step="2" value="0">
+                <b id="sliceOut">solid</b>
+            </label>
+            <label class="check"><input type="checkbox" id="clipIn" checked><span>Cutaway — remove a quadrant to expose the shells</span></label>
             <label class="check"><input type="checkbox" id="rotateIn" checked><span>Auto-rotate</span></label>
         </section>
 
@@ -130,8 +156,10 @@
             <h2>Reading it</h2>
             <ul class="legend">
                 <li><b>Every dot</b> is one draw from |ψ|² — where the electron would be found.</li>
-                <li><b>Hue</b> is the phase of ψ. The rainbow winding around the axis for m≠0 is real
-                    circulating current, not decoration.</li>
+                <li><b>The grains drift</b> along the real probability current,
+                    v<sub>φ</sub> = ℏm/(μr sinθ). A stationary state is stationary, not static: the
+                    density never changes while the electron keeps circulating.</li>
+                <li><b>Hue</b> (in glow style) is the phase of ψ, winding once per unit of m.</li>
                 <li><b>Dark shells</b> are nodes, where ψ passes through zero: n−ℓ−1 radial, ℓ angular.</li>
                 <li><b>Scale</b> grows as n² — 8g is ~40× wider than 1s.</li>
             </ul>

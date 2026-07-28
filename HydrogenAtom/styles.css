@@ -357,3 +357,32 @@ body.light #titlebar h1 { color: #2a2622; text-shadow: 0 1px 18px rgba(255, 255,
 body.light #titlebar p { color: rgba(60, 54, 46, 0.72); text-shadow: 0 1px 12px rgba(255, 255, 255, 0.8); }
 body.light #busy { color: rgba(60, 54, 46, 0.7); }
 body.light .spinner { border-color: rgba(120, 90, 30, 0.25); border-top-color: #b8842a; }
+
+/* --- measurement --------------------------------------------------------- */
+
+.measure-buttons {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+    margin: 12px 0 4px;
+}
+
+.measure-buttons button {
+    padding: 8px 12px;
+    background: rgba(255, 60, 110, 0.14);
+    border: 1px solid rgba(255, 90, 130, 0.4);
+    border-radius: 6px;
+    color: #ffd9e2;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.measure-buttons button:hover {
+    background: rgba(255, 60, 110, 0.3);
+    border-color: #ff5a82;
+}
+
+#measureLast { line-height: 1.5; }
+
+body.light .measure-buttons button { color: #ffe3ea; }
