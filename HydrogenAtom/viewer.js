@@ -85,8 +85,13 @@
     uniform int uColorMode;   // 0 phase, 1 sign, 2 single hue
     uniform int uStyle;       // 0 granular, 1 glow
     uniform float uExposure;
-    uniform float uClipZ;
+    uniform int uCut;         // 0 none, 1 quadrant cutaway
     uniform float uDensityNorm;
+    uniform float uTime;
+    uniform float uFlow;      // angular-velocity scale for the current
+    uniform float uM;         // magnetic quantum number of the leading state
+    uniform vec3 uFog;        // background colour to fade into with depth
+    uniform vec2 uFogRange;
 
     out vec4 vColor;
     out float vDiscard;
@@ -105,13 +110,34 @@
         return fract(sin(float(i) * 12.9898) * 43758.5453);
     }
 
+    // sample() puts the quantisation axis on y, so the current circulates
+    // about y.
+    vec3 rotY(vec3 p, float a) {
+        float c = cos(a), s = sin(a);
+        return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+    }
+
     void main() {
         vec2 psi = cmul(aAmp0, uCoef0) + cmul(aAmp1, uCoef1);
         float raw = dot(psi, psi);       // |psi|^2 itself
         float weight = raw * aInvQ;      // 1 for an eigenstate, beats in a mix
 
-        vec3 p = aPosition * uScale;
-        vDiscard = (p.z > uClipZ) ? 1.0 : 0.0;
+        // Probability current. For psi_nlm the flow is purely azimuthal with
+        // v_phi = hbar m / (mu r sin theta); in atomic units that is m/s for
+        // cylindrical radius s, so the angular velocity is m/s^2 -- a real
+        // differential rotation, faster near the axis. m = 0 carries no
+        // current at all and correctly does not move.
+        float cylR = max(length(aPosition.xz), 1e-3);
+        float omega = clamp(uFlow * uM / (cylR * cylR), -4.0, 4.0);
+        vec3 world = rotY(aPosition, omega * uTime);
+
+        vec3 p = world * uScale;
+        // A solid cloud of opaque grains only ever shows its own envelope, so
+        // the interior shells are invisible from outside no matter how it is
+        // lit. Removing one quadrant exposes two cut faces through the middle
+        // while leaving the outer form intact -- the cutaway a physical model
+        // would use.
+        vDiscard = (uCut == 1 && world.x > 0.0 && world.z > 0.0) ? 1.0 : 0.0;
 
         vec4 viewPos = uView * vec4(p, 1.0);
         gl_Position = uProj * viewPos;
@@ -130,7 +156,12 @@
             vec3 tint = mix(bright, deep, t * 0.92);
 
             float v = 0.86 + 0.28 * hash(gl_VertexID);   // grains are not identical
-            vColor = vec4(tint * v, 1.0);
+
+            // Aerial perspective: fade distant grains into the background so a
+            // solid 3D cloud still reads as having depth rather than as a flat
+            // disc. Depth cueing does the work the silhouette cannot.
+            float fog = clamp((dist - uFogRange.x) / max(0.001, uFogRange.y - uFogRange.x), 0.0, 1.0);
+            vColor = vec4(mix(tint * v, uFog, fog * 0.82), 1.0);
         } else {
             gl_PointSize = clamp(uPointSize * 130.0 / dist, 1.0, 6.0);
             float amp = clamp(weight * uExposure, 0.0, 1.0);
@@ -195,16 +226,18 @@
         exposure: 1.0,
         pointSize: 1.0,
         densityNorm: 1,
-        slice: 0.10,       // slab half-width as a fraction of <r>; 0 = solid
-        clip: false,
+        slice: 0,          // slab half-width as a fraction of <r>; 0 = solid 3D
+        flow: 0.35,        // rad/s at the mean radius; 0 freezes the current
+        clip: true,        // cutaway on by default so the shells are visible
         paused: false,
         speed: 1.0,
         autoRotate: true,
         cloud: null,
-        simTime: 0
+        simTime: 0,
+        flowTime: 0
     };
 
-    const camera = { theta: Math.PI / 2, phi: Math.PI / 2, distance: 3.2, target: [0, 0, 0] };
+    const camera = { theta: 1.0, phi: 1.32, distance: 3.2, target: [0, 0, 0] };
     const pointer = { down: false, x: 0, y: 0 };
 
     let gl, canvas, program, vao;
@@ -243,7 +276,8 @@
         gl.useProgram(program);
 
         ['uProj', 'uView', 'uCoef0', 'uCoef1', 'uPointSize', 'uScale',
-         'uColorMode', 'uStyle', 'uExposure', 'uClipZ', 'uDensityNorm'].forEach((name) => {
+         'uColorMode', 'uStyle', 'uExposure', 'uCut', 'uDensityNorm',
+         'uTime', 'uFlow', 'uM', 'uFog', 'uFogRange'].forEach((name) => {
             uniforms[name] = gl.getUniformLocation(program, name);
         });
 
@@ -387,7 +421,10 @@
         lastFrame = now;
         resize();
 
-        if (!state.paused) state.simTime += dt * state.speed;
+        if (!state.paused) {
+            state.simTime += dt * state.speed;
+            state.flowTime += dt;
+        }
         if (state.autoRotate && !pointer.down) camera.theta += dt * 0.12;
 
         if (state.style === 0) gl.clearColor(0.937, 0.933, 0.925, 1);
@@ -437,9 +474,21 @@
             gl.uniform1i(uniforms.uColorMode, state.colorMode);
             gl.uniform1i(uniforms.uStyle, state.style);
             gl.uniform1f(uniforms.uDensityNorm, state.densityNorm || 1);
+
+            // Normalise the flow so omega equals `flow` at the mean radius,
+            // which keeps the apparent speed comparable from 1s out to 12h.
+            const meanR = O.expectedRadius(state.n, state.l);
+            gl.uniform1f(uniforms.uFlow, state.flow * meanR * meanR);
+            gl.uniform1f(uniforms.uM, state.superposition ? 0 : state.m);
+            gl.uniform1f(uniforms.uTime, state.flowTime);
+
+            const bg = state.style === 0 ? [0.937, 0.933, 0.925] : [0.016, 0.020, 0.043];
+            gl.uniform3f(uniforms.uFog, bg[0], bg[1], bg[2]);
+            gl.uniform2f(uniforms.uFogRange,
+                camera.distance * 0.55, camera.distance * 1.85);
             gl.uniform1f(uniforms.uExposure,
                 state.exposure * 0.030 * (500000 / Math.max(1, state.cloud.count)));
-            gl.uniform1f(uniforms.uClipZ, state.clip ? 0.0 : 1e6);
+            gl.uniform1i(uniforms.uCut, state.clip ? 1 : 0);
             gl.drawArrays(gl.POINTS, 0, state.cloud.count);
         }
 
@@ -468,6 +517,19 @@
             (O.expectedRadius(n, l) * O.BOHR_PM).toFixed(1) + ' pm)';
         $('nodesOut').textContent = O.radialNodes(n, l) + ' radial · ' + O.angularNodes(l) + ' angular';
         $('pointsOut').textContent = state.pointCount.toLocaleString();
+
+        const flowNote = $('flowNote');
+        if (flowNote) {
+            if (state.superposition) {
+                flowNote.textContent = 'Superposition: the current is not a simple rotation, so the grains are held still and only the beat is shown.';
+            } else if (state.m === 0) {
+                flowNote.textContent = 'm = 0 carries no probability current. Nothing circulates — and that is the physics, not a missing feature.';
+            } else {
+                const meanR = O.expectedRadius(state.n, state.l);
+                flowNote.textContent = 'm = ' + (state.m > 0 ? '+' : '') + state.m +
+                    ' circulates about the vertical axis. Angular speed goes as m/s², so grains near the axis lap the outer ones.';
+            }
+        }
 
         const beat = $('beatOut');
         if (state.superposition) {
@@ -566,11 +628,37 @@
         bind('pointsIn', () => {
             state.pointCount = +$('pointsIn').value;
             $('pointsOut').textContent = state.pointCount.toLocaleString();
+
+        const flowNote = $('flowNote');
+        if (flowNote) {
+            if (state.superposition) {
+                flowNote.textContent = 'Superposition: the current is not a simple rotation, so the grains are held still and only the beat is shown.';
+            } else if (state.m === 0) {
+                flowNote.textContent = 'm = 0 carries no probability current. Nothing circulates — and that is the physics, not a missing feature.';
+            } else {
+                const meanR = O.expectedRadius(state.n, state.l);
+                flowNote.textContent = 'm = ' + (state.m > 0 ? '+' : '') + state.m +
+                    ' circulates about the vertical axis. Angular speed goes as m/s², so grains near the axis lap the outer ones.';
+            }
+        }
             regenerate();
         });
         bind('sizeIn', () => { state.pointSize = +$('sizeIn').value / 100; });
+        bind('flowIn', () => {
+            state.flow = +$('flowIn').value / 100;
+            $('flowOut').textContent = state.flow > 0 ? state.flow.toFixed(2) + ' rad/s' : 'frozen';
+        });
         bind('sliceIn', () => {
+            const wasSolid = state.slice === 0;
             state.slice = +$('sliceIn').value / 100;
+            // A cross-section is only readable face-on, so square up to it the
+            // first time one is asked for, and pull back to an oblique view
+            // when it is switched off again.
+            if (state.slice > 0 && wasSolid) {
+                camera.theta = Math.PI / 2; camera.phi = Math.PI / 2;
+            } else if (state.slice === 0 && !wasSolid) {
+                camera.theta = 1.0; camera.phi = 1.32;
+            }
             $('sliceOut').textContent = state.slice > 0
                 ? Math.round(state.slice * 100) + '%' : 'solid';
             regenerate();
