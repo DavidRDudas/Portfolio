@@ -106,6 +106,18 @@
         return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
     }
 
+    // Perceptual dark-to-hot ramp. Mapping probability density to brightness
+    // and hue together is what makes a point cloud read as a volume: the dense
+    // core glows through the sparse halo instead of being buried by it.
+    vec3 fireRamp(float t) {
+        t = clamp(t, 0.0, 1.0);
+        vec3 c = mix(vec3(0.045, 0.015, 0.14), vec3(0.42, 0.03, 0.50), smoothstep(0.0, 0.30, t));
+        c = mix(c, vec3(0.87, 0.13, 0.40), smoothstep(0.25, 0.55, t));
+        c = mix(c, vec3(1.00, 0.52, 0.08), smoothstep(0.50, 0.80, t));
+        c = mix(c, vec3(1.00, 0.96, 0.78), smoothstep(0.78, 1.0, t));
+        return c;
+    }
+
     float hash(int i) {
         return fract(sin(float(i) * 12.9898) * 43758.5453);
     }
@@ -186,6 +198,13 @@
                 rgb = hsv2rgb(vec3(phase / 6.2831853 + 0.5, 0.68, 1.0));
             } else if (uColorMode == 1) {
                 rgb = psi.x >= 0.0 ? vec3(1.0, 0.42, 0.36) : vec3(0.36, 0.62, 1.0);
+            } else if (uColorMode == 3) {
+                // Density: the cube root compresses the enormous dynamic range
+                // of |psi|^2 so the faint outer shells survive alongside a core
+                // that can be orders of magnitude brighter.
+                float t = pow(clamp(raw / max(uDensityNorm, 1e-30), 0.0, 1.0), 0.33);
+                rgb = fireRamp(t);
+                amp = clamp(amp * (0.35 + 1.5 * t), 0.0, 1.0);
             } else {
                 rgb = vec3(1.0, 0.76, 0.24);
             }
