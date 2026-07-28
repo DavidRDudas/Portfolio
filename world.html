@@ -887,6 +887,14 @@ const PROJECTS = {
     image: "./images/dudasengineering.png",
     link: "https://dudasengineering.com"
   },
+  orbital: {
+    title: "Hydrogen — Orbital Explorer",
+    category: "Computational Physics",
+    desc: "Exact solutions of the Schrödinger equation for hydrogen, sampled point by point into a granular cloud of a million grains. Superpose two eigenstates and watch |ψ|² slosh at the transition frequency — the oscillating dipole that radiates the photon. Every figure is checked against its closed form in the page.",
+    tech: ["WebGL2", "Quantum Mechanics", "GLSL", "Numerical Methods"],
+    image: "./images/hydrogen.png",
+    link: "./HydrogenAtom/index.html"
+  },
   cipher: {
     title: "Naive Cryptography",
     category: "Educational",
@@ -5106,6 +5114,69 @@ const monitorAnim = monitorScreenTexture();
   root.add(briefcase);
 }
 
+// Small per-frame hooks for desk props, driven from animate().
+const propTickers = [];
+
+// ==========================================================
+// ORBITAL SCULPTURE — Hydrogen (desk model of an atom)
+// ==========================================================
+{
+  const grp = new THREE.Group();
+
+  // weighted base
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.018, 28),
+    matStandard(0x1e2028, 0.45, 0.55));
+  base.castShadow = true; grp.add(base);
+
+  // stem
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.075, 10),
+    matStandard(0x2c3038, 0.4, 0.6));
+  stem.position.y = 0.045; grp.add(stem);
+
+  // nucleus — the amber glow the cloud is drawn in
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.027, 20, 16),
+    matEmissive(0xffb733, 0xff9a1e, 1.5));
+  core.position.y = 0.105; core.castShadow = true; grp.add(core);
+
+  // three orbital rings on different axes
+  const ringMat = matEmissive(0x6da8ff, 0x3f7ddb, 0.7);
+  const ringTilts = [
+    [0, 0, 0],
+    [Math.PI / 2.6, 0.5, 0],
+    [-Math.PI / 2.6, -0.5, Math.PI / 3]
+  ];
+  const rings = [];
+  ringTilts.forEach((t) => {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.0028, 8, 60), ringMat);
+    ring.position.y = 0.105;
+    ring.rotation.set(t[0] + Math.PI / 2, t[1], t[2]);
+    grp.add(ring);
+    rings.push(ring);
+  });
+
+  // a few electrons riding the rings
+  const dotMat = matEmissive(0xdfefff, 0x9ec8ff, 1.2);
+  const electrons = rings.map((ring, i) => {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.0075, 10, 8), dotMat);
+    ring.add(d);
+    d.userData.phase = i * 2.1;
+    return d;
+  });
+
+  grp.userData.tick = (t) => {
+    electrons.forEach((d, i) => {
+      const a = t * (0.9 + i * 0.22) + d.userData.phase;
+      d.position.set(Math.cos(a) * 0.062, Math.sin(a) * 0.062, 0);
+    });
+    grp.rotation.y = t * 0.16;
+  };
+  propTickers.push(grp.userData.tick);
+
+  makeInteractive(core, 'orbital', 'Orbital Model · Hydrogen');
+  grp.position.set(0.28, 1.06, -2.95);
+  root.add(grp);
+}
+
 // ==========================================================
 // CIPHER WHEEL — Naive Cryptography (small disk on desk)
 // ==========================================================
@@ -8693,6 +8764,7 @@ function animate() {
   // Prism game overlay owns the screen — pause the cabin render to free the GPU
   if (FP.portal) return;
   const t = performance.now() - startTime;
+  for (let i = 0; i < propTickers.length; i++) propTickers[i](t / 1000);
   tickAutoTime();
   // update indoor/outdoor SFX muffling smoothly as the camera moves
   if (typeof updateIndoorFactor === 'function') {
