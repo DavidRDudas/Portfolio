@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydrogen — Orbital Explorer</title>
+    <link rel="stylesheet" href="../shared.css">
+    <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<div id="stage">
+    <canvas id="gl"></canvas>
+
+    <div id="titlebar">
+        <h1>Hydrogen</h1>
+        <p>Exact solutions of the Schrödinger equation, sampled point by point.</p>
+    </div>
+
+    <p id="error" hidden></p>
+    <div id="busy" hidden><span class="spinner"></span>sampling…</div>
+
+    <aside id="panel">
+        <section class="block">
+            <h2>Orbital</h2>
+            <div class="name" id="nameOut">—</div>
+
+            <label class="slider">
+                <span>n <em>principal</em></span>
+                <input type="range" id="nIn" min="1" max="12" step="1" value="4">
+                <b id="nOut">4</b>
+            </label>
+            <label class="slider">
+                <span>ℓ <em>angular</em></span>
+                <input type="range" id="lIn" min="0" max="11" step="1" value="2">
+                <b id="lOut">2</b>
+            </label>
+            <label class="slider">
+                <span>m <em>magnetic</em></span>
+                <input type="range" id="mIn" min="-11" max="11" step="1" value="1">
+                <b id="mOutVal">+1</b>
+            </label>
+
+            <div class="presets">
+                <button data-preset="1s" type="button">1s</button>
+                <button data-preset="2pz" type="button">2p</button>
+                <button data-preset="3d" type="button">3d</button>
+                <button data-preset="4f" type="button">4f</button>
+                <button data-preset="8g" type="button">8g</button>
+                <button data-preset="minutephysics" type="button" title="n=6, ℓ=2, m=+1">6d</button>
+            </div>
+        </section>
+
+        <section class="block">
+            <h2>Measured</h2>
+            <div class="row"><span>Energy</span><code id="energyOut">—</code></div>
+            <div class="row"><span>⟨r⟩</span><code id="radiusOut">—</code></div>
+            <div class="row"><span>Nodes</span><code id="nodesOut">—</code></div>
+            <div class="row" id="beatRow" hidden><span>Beat</span><code id="beatOut">—</code></div>
+            <button id="verifyBtn" class="wide" type="button">Verify against closed form</button>
+            <div id="verifyOut" hidden></div>
+        </section>
+
+        <section class="block">
+            <h2>Superposition</h2>
+            <label class="check">
+                <input type="checkbox" id="superIn">
+                <span>Mix two states and evolve in time</span>
+            </label>
+            <p class="hint">
+                A single eigenstate is <em>stationary</em> — |ψ|² never changes. Mix two and the cross
+                term beats at (E₂−E₁)/ℏ: the cloud sloshes, and that oscillating dipole is what
+                radiates a photon.
+            </p>
+            <div id="superPanel">
+                <label class="slider">
+                    <span>n₂</span><input type="range" id="n2In" min="1" max="12" step="1" value="1"><b id="n2Out">1</b>
+                </label>
+                <label class="slider">
+                    <span>ℓ₂</span><input type="range" id="l2In" min="0" max="11" step="1" value="0"><b id="l2Out">0</b>
+                </label>
+                <label class="slider">
+                    <span>m₂</span><input type="range" id="m2In" min="-11" max="11" step="1" value="0"><b id="m2OutVal">0</b>
+                </label>
+                <label class="slider">
+                    <span>Speed</span><input type="range" id="speedIn" min="5" max="300" step="5" value="100"><b id="speedOut">1.00×</b>
+                </label>
+                <button id="pauseBtn" class="wide" type="button">Pause</button>
+            </div>
+        </section>
+
+        <section class="block">
+            <h2>Render</h2>
+            <label class="slider">
+                <span>Points</span>
+                <input type="range" id="pointsIn" min="50000" max="1500000" step="50000" value="500000">
+                <b id="pointsOut">500,000</b>
+            </label>
+            <label class="slider">
+                <span>Size</span><input type="range" id="sizeIn" min="20" max="300" step="5" value="100"><b></b>
+            </label>
+            <label class="slider">
+                <span>Exposure</span><input type="range" id="exposureIn" min="10" max="400" step="5" value="100"><b></b>
+            </label>
+            <label class="field">
+                <span>Style</span>
+                <select id="styleIn">
+                    <option value="0">Granular — physical grains</option>
+                    <option value="1">Glow — quantum phase</option>
+                </select>
+            </label>
+            <label class="field">
+                <span>Colour</span>
+                <select id="colorIn">
+                    <option value="0">Quantum phase</option>
+                    <option value="1">Sign of ψ</option>
+                    <option value="2">Single hue</option>
+                </select>
+            </label>
+            <label class="check"><input type="checkbox" id="realIn"><span>Real orbitals (p<sub>x</sub>, d<sub>xy</sub>…)</span></label>
+            <label class="slider">
+                <span>Slice <em>cross-section</em></span>
+                <input type="range" id="sliceIn" min="0" max="60" step="2" value="10">
+                <b id="sliceOut">10%</b>
+            </label>
+            <label class="check"><input type="checkbox" id="clipIn"><span>Cut away front half</span></label>
+            <label class="check"><input type="checkbox" id="rotateIn" checked><span>Auto-rotate</span></label>
+        </section>
+
+        <section class="block">
+            <h2>Reading it</h2>
+            <ul class="legend">
+                <li><b>Every dot</b> is one draw from |ψ|² — where the electron would be found.</li>
+                <li><b>Hue</b> is the phase of ψ. The rainbow winding around the axis for m≠0 is real
+                    circulating current, not decoration.</li>
+                <li><b>Dark shells</b> are nodes, where ψ passes through zero: n−ℓ−1 radial, ℓ angular.</li>
+                <li><b>Scale</b> grows as n² — 8g is ~40× wider than 1s.</li>
+            </ul>
+            <p class="caveat">
+                Hydrogen only. One electron means the Schrödinger equation is exactly solvable, so
+                nothing here is fitted or approximated. Helium onward has no closed form — two
+                electrons repelling each other needs Hartree–Fock or DFT, and “orbital” stops being
+                an exact object.
+            </p>
+        </section>
+    </aside>
+</div>
+
+<script src="orbitals.js?v=1"></script>
+<script src="viewer.js?v=1"></script>
+<script src="../header.js"></script>
+</body>
+</html>
