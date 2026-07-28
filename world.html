@@ -750,10 +750,10 @@ const PROJECTS = {
     image: "./images/indiegames.png",
     link: null
   },
-  cycle: {
-    title: "Cycle",
+  klast: {
+    title: "Klast",
     category: "Twin-Stick Arcade Shooter",
-    desc: "A high-intensity neon twin-stick arcade shooter — three campaigns across rescue missions (Cycle), arena warfare (Vector), and fully spherical planetary battles (Asteroid), with customizable ships, challenge modes, bosses, endless progression, rankings, and AI demonstration pilots.",
+    desc: "A high-intensity neon twin-stick arcade shooter — three campaigns across rescue missions (Klast), arena warfare (Vector), and fully spherical planetary battles (Asteroid), with customizable ships, challenge modes, bosses, endless progression, rankings, and AI demonstration pilots.",
     tech: ["Game Development", "Game Design", "Procedural Generation", "AI"],
     image: "./images/cycle.png",
     link: null
@@ -4720,7 +4720,7 @@ const tvAnim = tvScreenTexture();
 }
 
 // ==========================================================
-// ARCADE CABINET (SW corner) — Cycle, neon twin-stick shooter
+// ARCADE CABINET (SW corner) — Klast, neon twin-stick shooter
 // ==========================================================
 {
   function arcadeScreenTexture() {
@@ -4748,7 +4748,7 @@ const tvAnim = tvScreenTexture();
     g.textAlign = 'center';
     g.font = 'bold 34px monospace';
     g.shadowColor = '#37e0ff'; g.shadowBlur = 14; g.fillStyle = '#37e0ff';
-    g.fillText('CYCLE', 128, 44);
+    g.fillText('KLAST', 128, 44);
     g.shadowBlur = 0;
     g.font = '11px monospace'; g.fillStyle = '#ffd166';
     g.fillText('PRESS START', 128, 198);
@@ -4831,7 +4831,7 @@ const tvAnim = tvScreenTexture();
     cab.add(trim);
   }
 
-  makeInteractive(screen, 'cycle', 'Arcade Cabinet · Cycle');
+  makeInteractive(screen, 'klast', 'Arcade Cabinet · Klast');
   // tucked into the SW corner, angled to face the middle of the room
   cab.position.set(-3.82, 0, 3.82);
   cab.rotation.y = Math.PI * 0.75;
@@ -6681,10 +6681,10 @@ function attachInfoIcon(mesh) {
 }
 // attach an icon to every interactive once the room is fully constructed
 for (const m of interactives) attachInfoIcon(m);
-// the Cycle cabinet's icon is anchored to its screen, which would park it
+// the Klast cabinet's icon is anchored to its screen, which would park it
 // right on the marquee text — lift it above the cabinet silhouette
 for (const s of infoIcons) {
-  if (s.userData.mesh.userData.key === 'cycle') s.userData.yOffset += 0.34;
+  if (s.userData.mesh.userData.key === 'klast') s.userData.yOffset += 0.34;
 }
 
 // ==========================================================
