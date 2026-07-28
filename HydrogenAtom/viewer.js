@@ -266,7 +266,15 @@
         superposition: false,
         n2: 1, l2: 0, m2: 0,
         pointCount: 500000,
-        style: 0,          // 0 granular (default), 1 phase glow
+        style: 2,          // 0 granular, 1 glow points, 2 volume (default)
+        volume: null,
+        volumeSize: 128,
+        steps: 180,
+        // Extinction coefficient, in units of 1/(box length) at the reference
+        // density. A ray crosses ~2 box units and averages a small fraction of
+        // densityRef (a 99.5th percentile), so the integrated optical depth is
+        // roughly opacity/40 -- single digits leave the volume transparent.
+        opacity: 38,
         colorMode: 0,
         exposure: 1.0,
         pointSize: 1.0,
@@ -287,7 +295,7 @@
     const camera = { theta: 1.0, phi: 1.32, distance: 3.2, target: [0, 0, 0] };
     const pointer = { down: false, x: 0, y: 0 };
 
-    let gl, canvas, program, vao, markerVao;
+    let gl, canvas, program, vao, markerVao, raymarch;
     let markerBuffers = {};
     let buffers = {};
     let uniforms = {};
@@ -479,6 +487,14 @@
             // a cross-section is a way of looking, not a constraint on where
             // the electron can be found.
             state.sampler = O.createSampler(state.n, state.l, state.m, { real: state.real });
+
+            if (raymarch) {
+                const vol = window.OrbitalVolume.build(activeStates(), {
+                    size: state.volumeSize, real: state.real
+                });
+                raymarch.upload(vol);
+                state.volume = vol;
+            }
             state.cloud = cloud;
             uploadCloud(cloud);
             // Frame from where the density actually is. <r> sits well inside
@@ -533,6 +549,39 @@
         gl.viewport(0, 0, canvas.width, canvas.height);
     }
 
+    /**
+     * Measurement beads, drawn from the point program in both render paths.
+     *
+     * The raymarcher owns the whole frame in volume mode -- an opaque
+     * fullscreen pass with the depth test off -- so markers left inside the
+     * point-cloud branch were recorded, counted and never drawn. Since volume
+     * is the default style, that is precisely what "Measure does nothing"
+     * looked like from the outside.
+     *
+     * A bead lands in the same place either way because the two paths share a
+     * vantage: the point path views world units (physical / r97) from
+     * camera.distance, and the box maps [-1,1] onto [-half, half] with the eye
+     * scaled by r97/half. Both reduce to the same physical eye position, and
+     * both use the same 0.9 rad lens and off-axis shift.
+     */
+    function drawMarkers(aspect, eye, up, shift) {
+        if (!state.measurements.length) return;
+
+        gl.useProgram(program);
+        gl.bindVertexArray(markerVao);
+        gl.uniformMatrix4fv(uniforms.uProj, false, perspective(0.9, aspect, 0.05, 60, shift));
+        gl.uniformMatrix4fv(uniforms.uView, false, lookAt(eye, camera.target, up));
+        gl.uniform1f(uniforms.uScale, state.scale || 0.05);
+        gl.uniform1i(uniforms.uStyle, 2);
+
+        // Opaque and depth-tested so the beads sort among themselves. Nothing
+        // wrote depth before this, so they all clear the background.
+        gl.disable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
+        gl.drawArrays(gl.POINTS, 0, state.measurements.length);
+        applyStyleState();          // hand the blend/depth state back
+    }
+
     let lastFrame = performance.now();
 
     function frame(now) {
@@ -546,17 +595,84 @@
         }
         if (state.autoRotate && !pointer.down) camera.theta += dt * 0.12;
 
-        if (state.style === 0) gl.clearColor(0.937, 0.933, 0.925, 1);
-        else gl.clearColor(0.016, 0.020, 0.043, 1);
+        const bg = state.style === 0 ? [0.937, 0.933, 0.925] : [0.016, 0.020, 0.043];
+        gl.clearColor(bg[0], bg[1], bg[2], 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        if (state.cloud) {
-            const aspect = canvas.width / Math.max(1, canvas.height);
-            const eye = [
-                camera.distance * Math.sin(camera.phi) * Math.cos(camera.theta),
-                camera.distance * Math.cos(camera.phi),
-                camera.distance * Math.sin(camera.phi) * Math.sin(camera.theta)
-            ];
+        const aspect = canvas.width / Math.max(1, canvas.height);
+        const eye = [
+            camera.distance * Math.sin(camera.phi) * Math.cos(camera.theta),
+            camera.distance * Math.cos(camera.phi),
+            camera.distance * Math.sin(camera.phi) * Math.sin(camera.theta)
+        ];
+        const up = Math.abs(Math.cos(camera.phi)) > 0.985 ? [0, 0, 1] : [0, 1, 0];
+
+        // Time factors e^(-i E t) for each component: the only time dependence
+        // a stationary state has, and the source of the beat in a mixture.
+        const list = activeStates();
+        const w0 = Math.sqrt(list[0].weight);
+        const e0 = O.energy(list[0].n);
+        const coef0 = [w0 * Math.cos(-e0 * state.simTime * TIME_SCALE),
+                       w0 * Math.sin(-e0 * state.simTime * TIME_SCALE)];
+        let coef1 = [0, 0];
+        if (list[1]) {
+            const w1 = Math.sqrt(list[1].weight);
+            const e1 = O.energy(list[1].n);
+            coef1 = [w1 * Math.cos(-e1 * state.simTime * TIME_SCALE),
+                     w1 * Math.sin(-e1 * state.simTime * TIME_SCALE)];
+        }
+
+        if (state.style === 2 && raymarch && state.volume) {
+            // Camera basis, with the same off-axis shift the point renderer
+            // uses so the orbital centres in the space the panel leaves free.
+            const f = norm3(sub3(camera.target, eye));
+            const r = norm3(cross3(f, up));
+            const u2 = cross3(r, f);
+            const panel = document.getElementById('panel');
+            const panelW = panel && panel.getBoundingClientRect().width < canvas.clientWidth
+                ? panel.getBoundingClientRect().width : 0;
+            const shift = panelW / Math.max(1, canvas.clientWidth);
+            const tan = Math.tan(0.45);
+            // camera.distance is in point-cloud units, where 1.0 is the 97th
+            // percentile radius. The box spans [-1,1] across [-half, half] Bohr,
+            // so the conversion is r97/half. Dividing by half alone treats an
+            // already-normalised distance as if it were Bohr, which parks the
+            // eye a few hundredths of a unit from the origin -- inside the
+            // volume, where every ray exits before it has integrated anything.
+            const r97 = state.scale ? 1 / state.scale : state.volume.half * 0.5;
+            const scale = r97 / state.volume.half;
+            // state.flow is the angular rate at <r>. Since omega goes as
+            // 1/(r sin theta)^2, expressing it against the box's normalised
+            // radius costs a factor of <r>^2 in box units. A flat multiplier
+            // instead put the rate near the axis in the thousands of rad/s.
+            const rRef = O.expectedRadius(state.n, state.l) / state.volume.half;
+
+            if (!state.hideCloud) raymarch.draw({
+                eye: new Float32Array([eye[0] * scale, eye[1] * scale, eye[2] * scale]),
+                right: new Float32Array(r),
+                up: new Float32Array(u2),
+                // Bake the lens shift into the forward vector.
+                forward: new Float32Array([
+                    f[0] + r[0] * shift, f[1] + r[1] * shift, f[2] + r[2] * shift
+                ]),
+                tanFov: [tan * aspect, tan],
+                coef0: coef0, coef1: coef1,
+                densityRef: state.volume.densityRef,
+                opacity: state.opacity,
+                exposure: state.exposure,
+                steps: state.steps,
+                colorMode: state.colorMode,
+                cut: state.clip,
+                slab: state.slice > 0 ? Math.min(0.98, (state.slice * O.expectedRadius(state.n, state.l)) / state.volume.half) : 0,
+                flow: state.flow * rRef * rRef,
+                time: state.flowTime,
+                m: state.superposition ? 0 : state.m,
+                background: new Float32Array(bg),
+                jitter: (state.flowTime * 60) % 97
+            });
+
+            drawMarkers(aspect, eye, up, shift);
+        } else if (state.cloud) {
             gl.useProgram(program);
             gl.bindVertexArray(vao);
             // Centre the orbital in the space the panel leaves free.
@@ -565,28 +681,10 @@
                 ? panel.getBoundingClientRect().width : 0;
             const xShift = panelW / Math.max(1, canvas.clientWidth);
             gl.uniformMatrix4fv(uniforms.uProj, false, perspective(0.9, aspect, 0.05, 60, xShift));
-            // Looking straight down +y makes [0,1,0] degenerate as an up vector.
-            const up = Math.abs(Math.cos(camera.phi)) > 0.985 ? [0, 0, 1] : [0, 1, 0];
             gl.uniformMatrix4fv(uniforms.uView, false, lookAt(eye, camera.target, up));
 
-            // e^(-i E t): the only time dependence a stationary state has, and
-            // the reason a single eigenstate never appears to move.
-            const list = activeStates();
-            const w0 = Math.sqrt(list[0].weight);
-            const e0 = O.energy(list[0].n);
-            gl.uniform2f(uniforms.uCoef0,
-                w0 * Math.cos(-e0 * state.simTime * TIME_SCALE),
-                w0 * Math.sin(-e0 * state.simTime * TIME_SCALE));
-
-            if (list[1]) {
-                const w1 = Math.sqrt(list[1].weight);
-                const e1 = O.energy(list[1].n);
-                gl.uniform2f(uniforms.uCoef1,
-                    w1 * Math.cos(-e1 * state.simTime * TIME_SCALE),
-                    w1 * Math.sin(-e1 * state.simTime * TIME_SCALE));
-            } else {
-                gl.uniform2f(uniforms.uCoef1, 0, 0);
-            }
+            gl.uniform2f(uniforms.uCoef0, coef0[0], coef0[1]);
+            gl.uniform2f(uniforms.uCoef1, coef1[0], coef1[1]);
 
             gl.uniform1f(uniforms.uPointSize, state.pointSize);
             gl.uniform1f(uniforms.uScale, state.scale || 0.05);
@@ -601,7 +699,6 @@
             gl.uniform1f(uniforms.uM, state.superposition ? 0 : state.m);
             gl.uniform1f(uniforms.uTime, state.flowTime);
 
-            const bg = state.style === 0 ? [0.937, 0.933, 0.925] : [0.016, 0.020, 0.043];
             gl.uniform3f(uniforms.uFog, bg[0], bg[1], bg[2]);
             gl.uniform2f(uniforms.uFogRange,
                 camera.distance * 0.55, camera.distance * 1.85);
@@ -612,14 +709,7 @@
                 gl.drawArrays(gl.POINTS, 0, state.cloud.count);
             }
 
-            if (state.measurements.length) {
-                gl.bindVertexArray(markerVao);
-                gl.uniform1i(uniforms.uStyle, 2);
-                const wasBlend = state.style === 1;
-                if (wasBlend) { gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); }
-                gl.drawArrays(gl.POINTS, 0, state.measurements.length);
-                if (wasBlend) { gl.enable(gl.BLEND); gl.disable(gl.DEPTH_TEST); }
-            }
+            drawMarkers(aspect, eye, up, xShift);
         }
 
         requestAnimationFrame(frame);
@@ -774,6 +864,19 @@
             regenerate();
         });
         bind('sizeIn', () => { state.pointSize = +$('sizeIn').value / 100; });
+        bind('stepsIn', () => {
+            state.steps = +$('stepsIn').value;
+            $('stepsOut').textContent = state.steps;
+        });
+        bind('opacityIn', () => {
+            state.opacity = +$('opacityIn').value / 100;
+            $('opacityOut').textContent = state.opacity.toFixed(1);
+        });
+        bind('gridIn', () => {
+            state.volumeSize = +$('gridIn').value;
+            $('gridOut').textContent = state.volumeSize + '³';
+            regenerate();
+        });
         bind('flowIn', () => {
             state.flow = +$('flowIn').value / 100;
             $('flowOut').textContent = state.flow > 0 ? state.flow.toFixed(2) + ' rad/s' : 'frozen';
@@ -921,6 +1024,17 @@
     document.addEventListener('DOMContentLoaded', () => {
         try {
             initGL();
+            try {
+                raymarch = window.OrbitalRaymarch.create(gl);
+            } catch (volErr) {
+                // A missing float-texture path should cost the volume mode,
+                // not the whole page.
+                console.warn('Volume renderer unavailable:', volErr.message);
+                raymarch = null;
+                state.style = 0;
+                const sel = document.getElementById('styleIn');
+                if (sel) { sel.value = '0'; [...sel.options].find(o=>o.value==='2').disabled = true; }
+            }
         } catch (err) {
             setError(err.message + ' This visualisation needs WebGL2.');
             return;

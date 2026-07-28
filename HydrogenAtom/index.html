@@ -112,6 +112,21 @@
         <section class="block">
             <h2>Render</h2>
             <label class="slider">
+                <span>Quality <em>ray steps</em></span>
+                <input type="range" id="stepsIn" min="48" max="384" step="16" value="180">
+                <b id="stepsOut">180</b>
+            </label>
+            <label class="slider">
+                <span>Opacity</span>
+                <input type="range" id="opacityIn" min="200" max="12000" step="50" value="3800">
+                <b id="opacityOut">38.0</b>
+            </label>
+            <label class="slider">
+                <span>Detail <em>volume grid</em></span>
+                <input type="range" id="gridIn" min="64" max="192" step="16" value="128">
+                <b id="gridOut">128³</b>
+            </label>
+            <label class="slider">
                 <span>Points</span>
                 <input type="range" id="pointsIn" min="50000" max="1500000" step="50000" value="500000">
                 <b id="pointsOut">500,000</b>
@@ -125,8 +140,9 @@
             <label class="field">
                 <span>Style</span>
                 <select id="styleIn">
+                    <option value="2" selected>Volumetric — raymarched</option>
                     <option value="0">Granular — physical grains</option>
-                    <option value="1">Glow — quantum phase</option>
+                    <option value="1">Glow — points</option>
                 </select>
             </label>
             <label class="field">
@@ -175,7 +191,9 @@
 </div>
 
 <script src="orbitals.js?v=c0c13cba"></script>
-<script src="viewer.js?v=9ad0406f"></script>
+<script src="volume.js?v=5b15207b"></script>
+<script src="raymarch.js?v=3b2fffcb"></script>
+<script src="viewer.js?v=8b71bedd"></script>
 <script src="../header.js?v=77d3f109"></script>
 </body>
 </html>
