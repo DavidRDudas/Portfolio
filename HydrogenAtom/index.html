@@ -62,6 +62,26 @@
         </section>
 
         <section class="block">
+            <h2>Measure</h2>
+            <p class="hint">
+                A measurement never returns a cloud. It returns <em>one location</em>. Each click
+                re-prepares the atom in the same state and finds the electron once — the cloud is
+                what the outcomes add up to.
+            </p>
+            <div class="measure-buttons">
+                <button id="measureOne" type="button">Measure</button>
+                <button id="measureMany" type="button">×250</button>
+                <button id="measureClear" type="button">Clear</button>
+            </div>
+            <div class="row"><span>Outcomes</span><code id="measureCount">0</code></div>
+            <div class="row"><span>Last</span><code id="measureLast">—</code></div>
+            <label class="check">
+                <input type="checkbox" id="hideCloudIn">
+                <span>Hide the cloud — rebuild it from measurements alone</span>
+            </label>
+        </section>
+
+        <section class="block">
             <h2>Superposition</h2>
             <label class="check">
                 <input type="checkbox" id="superIn">
