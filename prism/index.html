@@ -124,8 +124,14 @@ scene.add(moon);
    Procedural height field — gentle rolling hills.
    ============================================================ */
 function hash(ix, iz){
-  let n = Math.sin(ix*127.1 + iz*311.7) * 43758.5453;
-  return (n - Math.floor(n));
+  // Integer murmur-style mix. The old sin() hash needed float64 — fract of
+  // sin()*43758 falls apart in float32 — but the grass shader has to evaluate
+  // this same field on the GPU so every blade roots itself exactly on the
+  // terrain. Integer mixing is bit-exact in both JS (Math.imul) and GLSL uints.
+  let n = (Math.imul(ix|0, 0x27d4eb2d) ^ Math.imul(iz|0, 0x165667b1)) >>> 0;
+  n = Math.imul(n ^ (n >>> 15), 0x85ebca6b) >>> 0;
+  n = (n ^ (n >>> 13)) >>> 0;
+  return (n >>> 8) / 16777216;
 }
 function valueNoise(x, z){
   const ix = Math.floor(x), iz = Math.floor(z);
@@ -165,7 +171,7 @@ function makeGroundTexture(){
     const x=Math.random()*512, y=Math.random()*512;
     const h=3+Math.random()*7, lean=Math.random()*4-2;
     const s=92+Math.floor(Math.random()*86);
-    g.strokeStyle=`rgb(${s-44},${s+40},${s-32})`;
+    g.strokeStyle=`rgb(${s-34},${s+38},${s-58})`;   // warm green, no teal cast up close
     g.lineWidth=1+Math.random(); g.lineCap='round';
     g.beginPath(); g.moveTo(x,y); g.lineTo(x+lean,y-h); g.stroke();
   }
@@ -227,144 +233,383 @@ function mergeGeoms(geos){
 }
 
 /* ============================================================
-   Grass — instanced crossed quads on a world lattice, bent by
-   wind: a fine gust plus a big rolling wave that sweeps across
-   the field and darkens the grass at its crest.
+   Grass — real per-blade geometry, after SimonDev's Quick_Grass
+   (github.com/simondevyoutube/Quick_Grass). No textures, no
+   billboards: each blade is a tapered strip curled along a
+   curve in the vertex shader. Wind is a wandering noise field
+   that leans whole blades; broken gust fronts (kept from the
+   old card grass — they read beautifully from the hilltop)
+   multiply the lean; walking through pushes blades apart.
+   Blades live in pooled patch meshes on a world grid with
+   three LOD tiers, and every blade roots itself on the terrain
+   by evaluating the SAME height field as the JS (see hash()).
    ============================================================ */
-function makeBladeTexture(){
-  const c = document.createElement('canvas'); c.width=c.height=64;
-  const g = c.getContext('2d'); g.clearRect(0,0,64,64);
-  for (let i=0;i<9;i++){                  // many thin blades per clump (finer, wheat-like)
-    const x = 5 + i*6.6 + (Math.random()*2.4-1.2);
-    const tipX = x + (Math.random()*4-2);
-    g.beginPath(); g.moveTo(x, 64);
-    g.quadraticCurveTo(x + (Math.random()*8-4), 26, tipX, 6);
-    g.lineWidth = 1.6;
-    const shade = 150 + Math.floor(Math.random()*70);          // brighter blades
-    g.strokeStyle = `rgb(${shade-20},${shade+45},${shade-10})`; // light, fresh green
-    g.lineCap = 'round'; g.stroke();
-    // small green seed head at the tip — just a touch brighter than the blade
-    const hs = 165 + Math.floor(Math.random()*55);
-    g.fillStyle = `rgb(${hs-18},${hs+48},${hs-26})`;
-    g.beginPath(); g.ellipse(tipX, 5, 0.95, 2.4, (Math.random()*0.4-0.2), 0, Math.PI*2); g.fill();
-  }
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
-}
-const bladeTex = makeBladeTexture();
-const quad = new THREE.PlaneGeometry(1.4, 0.82); quad.translate(0, 0.41, 0);  // wide, shorter clumps that overlap their neighbours
-const quad2 = quad.clone(); quad2.rotateY(Math.PI/2);
-const bladeGeo = mergeGeoms([quad, quad2]); bladeGeo.computeVertexNormals();
+const IS_COARSE = matchMedia('(pointer:coarse)').matches;
+const GRASS_PATCH     = 8;                                   // world units per patch tile
+const GRASS_BLADES    = IS_COARSE ? 1024 : 2048;             // blades per near/mid patch
+const GRASS_FAR_BLADES= IS_COARSE ? 512  : 640;              // sparser, wider blades far out
+const GRASS_SEG_HI    = IS_COARSE ? 4 : 6, GRASS_SEG_LO = 1; // strip segments per blade
+const GRASS_LOD_DIST  = IS_COARSE ? 12 : 18;                 // high-detail radius
+const GRASS_MID_DIST  = IS_COARSE ? 26 : 34;
+const GRASS_MAX_DIST  = IS_COARSE ? 40 : 56;                 // blades shrink to nothing here
+const GRASS_W = 0.075, GRASS_H = 0.85;                       // base blade size
 
-const grassMat = new THREE.MeshStandardMaterial({
-  map:bladeTex, alphaTest:0.4, side:THREE.DoubleSide, roughness:1, metalness:0, color:0xc8ed96
-});
-let grassUniforms = null;
-grassMat.onBeforeCompile = (shader)=>{
-  shader.uniforms.uTime = { value:0 };
-  grassUniforms = shader.uniforms;
-  shader.vertexShader = 'uniform float uTime;\nvarying float vGust;\nvarying float vTip;\n' + shader.vertexShader;
-  shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `
-    vec4 mvPosition = vec4( transformed, 1.0 );
-    float iphase = 0.0, iamp = 1.0, gustGain = 0.6;
-    #ifdef USE_INSTANCING
-      mvPosition = instanceMatrix * mvPosition;
-      // stable pseudo-random per clump (from its world position) so every tuft
-      // has its own phase, base strength and gust-susceptibility — neighbours
-      // never move in lockstep, and strong gusts whip some far harder.
-      vec2 iorg = instanceMatrix[3].xz;
-      float h = fract(sin(dot(iorg, vec2(12.9898, 78.233))) * 43758.5453);
-      iphase = h * 6.2831;
-      iamp = 0.6 + h * 0.9;
-      gustGain = 0.2 + 1.0 * fract(h * 97.13);   // how hard this clump reacts to gusts
-    #endif
-    float bladeH = max(position.y, 0.0);
-    vTip = clamp(bladeH * 1.25, 0.0, 1.0);          // 0 at the base, 1 at the seed-head tip
-    float bend = bladeH * bladeH * 1.2;
-    vec2 wdir = vec2(0.82, 0.57);                    // wind direction; gusts travel along it
-    float along = mvPosition.x * wdir.x + mvPosition.z * wdir.y;
-    // perpendicular axis (across the wind) so gust fronts can wobble and break up
-    float perp = -mvPosition.x * wdir.y + mvPosition.z * wdir.x;
-    // gentle, ever-present breeze (calm between gusts)
-    float w1 = sin(along * 0.11 - uTime * 0.5 + iphase * 0.2);
-    float w2 = sin(along * 0.30 - uTime * 1.0 + iphase * 0.7);
-    float breeze = 0.30 + 0.20 * w1 + 0.12 * w2;
-    // STRONG gusts: a BROKEN, wavy front — its phase wobbles across the field and
-    // is summed with cross-waves, so gusts read as irregular moving blotches, not
-    // a clean arc. gustGain whips some clumps far harder than others.
-    float frontPhase = along * 0.085 - uTime * 1.0 + sin(perp * 0.20 + uTime * 0.25) * 1.7;
-    float front = sin(frontPhase)
-                + 0.7 * sin(along * 0.05 - uTime * 0.6 + perp * 0.14 + 2.0)
-                + 0.4 * sin(perp * 0.17 - uTime * 0.38);
-    float gustEnv = smoothstep(0.85, 1.7, front);    // only the strong, scattered crests
-    float whip = gustEnv * (0.5 + gustGain) * (0.85 + 0.4 * sin(uTime * 2.0 + iphase * 3.0));
-    // some patches naturally shelter the wind, so the gust visibly SKIPS them —
-    // static spots a few metres across (folds in the ground / denser grass).
-    float sN = sin(mvPosition.x * 0.43 + 1.3) * sin(mvPosition.z * 0.37 - 0.7)
-             + 0.6 * sin(mvPosition.x * 0.19 - mvPosition.z * 0.24 + 2.1);
-    float shelter = clamp(1.0 - 0.85 * smoothstep(0.15, 1.0, sN), 0.15, 1.0);
-    whip *= shelter;
-    float sway = (breeze + whip) * bend * iamp;
-    // the light shimmer rides the broken gust, so the pattern is irregular, not a band
-    vGust = clamp(smoothstep(0.4, 0.95, w2) * 0.25 + gustEnv * 0.9, 0.0, 1.0);
-    mvPosition.x += wdir.x * sway * 0.6;
-    mvPosition.z += wdir.y * sway * 0.6;
-    // slow per-clump flutter so it isn't perfectly uniform (no fast jitter)
-    float flut = sin(uTime * 1.3 + iphase * 1.5) * bend * 0.04 * iamp;
-    mvPosition.x += -wdir.y * flut;
-    mvPosition.z +=  wdir.x * flut;
-    mvPosition = modelViewMatrix * mvPosition;
-    gl_Position = projectionMatrix * mvPosition;
-  `);
-  shader.fragmentShader = 'varying float vGust;\nvarying float vTip;\n' + shader.fragmentShader;
-  shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', `
-    // wind illusion: a pale, silvery wave rolls through the grass — the tops
-    // (seed-heads) shimmer lighter as each gust passes, then settle back.
-    float sh = vGust * (0.2 + 0.8 * vTip);       // bands, strongest at the seed-heads
-    vec3 crest = vec3(0.62, 0.82, 0.40);         // a brighter GREEN (grass family), not white
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, crest, sh * 0.35);
-    #include <dithering_fragment>
-  `);
-};
-// dense field: each instance is a wide, crossed multi-blade clump, so ~19k
-// clumps overlap into a near-solid field with little ground showing. We only
-// rebuild the ring of instances when the player crosses a coarse cell.
-const GRASS_SPACING = 0.42, GRASS_HALF = 38;
-const GRASS_DIM = Math.floor((GRASS_HALF*2)/GRASS_SPACING);   // ~180 → ~32k clumps (packed tight)
-const GRASS_REBUILD = 3.0;                                    // world units between rebuilds
-const grass = new THREE.InstancedMesh(bladeGeo, grassMat, GRASS_DIM*GRASS_DIM);
-grass.frustumCulled = false;
-grass.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-scene.add(grass);
+// Shared GLSL: uniforms, helpers, murmur hashes + value noise for wind and
+// per-blade variation (float-bits murmur, exact at any coordinate), and the
+// bit-exact GLSL twin of the JS terrainHeight so blades sit on the ground.
+const GRASS_GLSL = `
+uniform float uTime;
+uniform vec3 uPlayer;
+uniform vec3 uSunDir; uniform vec3 uSunCol;
+uniform vec3 uHemiSky; uniform vec3 uHemiGnd;
+uniform vec3 uFogColor; uniform vec2 uFogRange;
+uniform vec4 uParams;   // segments, vertices per side, lodDist, maxDist
+uniform vec2 uSize;     // blade width, height
+uniform float uLane;    // half-width of the mowed lane between the fences
+
+varying vec3 vColor;
+varying vec4 vParams;   // heightPercent, xSide, highLODOut, gust
+varying vec3 vN1;
+varying vec3 vN2;
+varying vec3 vWorldPos;
+varying float vViewZ;
+
+#define PI 3.14159265359
+
+float sat(float x){ return clamp(x, 0.0, 1.0); }
+float linstep(float a, float b, float v){ return clamp((v-a)/(b-a), 0.0, 1.0); }
+float remap(float v, float a, float b, float c, float d){ return c + (d-c)*((v-a)/(b-a)); }
+float easeOut(float x, float t){ return 1.0 - pow(1.0 - x, t); }
+float easeIn(float x, float t){ return pow(x, t); }
+
+mat3 rotX(float a){ float c=cos(a), s=sin(a); return mat3(1.,0.,0., 0.,c,-s, 0.,s,c); }
+mat3 rotY(float a){ float c=cos(a), s=sin(a); return mat3(c,0.,s, 0.,1.,0., -s,0.,c); }
+mat3 rotAxis(vec3 ax, float a){
+  ax = normalize(ax); float s = sin(a), c = cos(a), oc = 1.0 - c;
+  return mat3(oc*ax.x*ax.x+c,      oc*ax.x*ax.y-ax.z*s, oc*ax.z*ax.x+ax.y*s,
+              oc*ax.x*ax.y+ax.z*s, oc*ax.y*ax.y+c,      oc*ax.y*ax.z-ax.x*s,
+              oc*ax.z*ax.x-ax.y*s, oc*ax.y*ax.z+ax.x*s, oc*ax.z*ax.z+c);
+}
+
+// ---- terrain: must match the JS hash/valueNoise/terrainHeight exactly ----
+float hashCell(ivec2 v){
+  uint n = (uint(v.x) * 0x27d4eb2du) ^ (uint(v.y) * 0x165667b1u);
+  n = (n ^ (n >> 15u)) * 0x85ebca6bu;
+  n = n ^ (n >> 13u);
+  return float(n >> 8u) * (1.0 / 16777216.0);
+}
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f*f*(3.0-2.0*f);
+  ivec2 c = ivec2(i);
+  float a = hashCell(c),             b = hashCell(c + ivec2(1,0));
+  float d = hashCell(c + ivec2(0,1)), e = hashCell(c + ivec2(1,1));
+  return a*(1.0-u.x)*(1.0-u.y) + b*u.x*(1.0-u.y) + d*(1.0-u.x)*u.y + e*u.x*u.y;
+}
+float terrainH(vec2 p){
+  return 7.5*vnoise(p*0.018) + 2.6*vnoise(vec2(p.x*0.055, p.y*0.05))
+       + 0.7*vnoise(vec2(p.x*0.16, p.y*0.15)) - 5.0;
+}
+
+// ---- per-blade + wind noise (murmur on float bits — Quick_Grass style) ----
+uvec4 murmur42(uvec2 src){
+  const uint M = 0x5bd1e995u;
+  uvec4 h = uvec4(1190494759u, 2147483647u, 3559788179u, 179424673u);
+  src *= M; src ^= src>>24u; src *= M;
+  h *= M; h ^= src.x; h *= M; h ^= src.y;
+  h ^= h>>13u; h *= M; h ^= h>>15u;
+  return h;
+}
+uint murmur12(uvec2 src){
+  const uint M = 0x5bd1e995u;
+  uint h = 1190494759u;
+  src *= M; src ^= src>>24u; src *= M;
+  h *= M; h ^= src.x; h *= M; h ^= src.y;
+  h ^= h>>13u; h *= M; h ^= h>>15u;
+  return h;
+}
+vec4 hash42(vec2 s){
+  uvec4 h = murmur42(uvec2(floatBitsToUint(s.x), floatBitsToUint(s.y)));
+  return vec4(h & 0x007fffffu) * (1.0 / 8388607.0);
+}
+float hash12(vec2 s){
+  uint h = murmur12(uvec2(floatBitsToUint(s.x), floatBitsToUint(s.y)));
+  return float(h & 0x007fffffu) * (1.0 / 8388607.0);
+}
+float noise12(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f*f*(3.0-2.0*f);
+  float v = mix(mix(hash12(i),               hash12(i + vec2(1,0)), u.x),
+                mix(hash12(i + vec2(0,1)),   hash12(i + vec2(1,1)), u.x), u.y);
+  return v*2.0 - 1.0;
+}
+`;
+
+const GRASS_VERT = GRASS_GLSL + `
+attribute float vertIndex;
+
+void main(){
+  float VERTICES = uParams.y;
+  float vertFI = vertIndex;
+  float vertID = mod(vertFI, VERTICES);
+  float zSide  = -(floor(vertFI / VERTICES) * 2.0 - 1.0);   // +1 front, -1 back
+  float xSide  = mod(vertID, 2.0);
+  float heightPercent = (vertID - xSide) / (uParams.x * 2.0);
+
+  // Blade root: patch origin + per-instance offset, rooted on the terrain.
+  vec3 offs = vec3(position.x, 0.0, position.z);
+  vec2 rootXZ = (modelMatrix * vec4(offs, 1.0)).xz;
+  vec3 rootW = vec3(rootXZ.x, terrainH(rootXZ), rootXZ.y);
+
+  vec4 h4  = hash42(rootXZ);
+  vec4 h4b = hash42(rootXZ + 137.31);
+
+  float distCam = distance(cameraPosition, rootW);
+  float highLODOut = smoothstep(uParams.z * 0.5, uParams.z, distCam);
+  float fadeOut = smoothstep(uParams.z, uParams.w, distCam);    // → nothing at max dist
+
+  // the lane between the picket fences is mowed short (and its blades wider,
+  // so the short grass still closes into a lawn instead of going bald)
+  float lane = 1.0 - smoothstep(uLane - 0.7, uLane + 0.5, abs(rootXZ.x));
+
+  float randomAngle  = h4.x * 2.0 * PI;
+  float randomShade  = remap(h4.y, 0.0, 1.0, 0.65, 1.0);
+  float randomHeight = remap(h4.z, 0.0, 1.0, 0.70, 1.45) * (1.0 - fadeOut)
+                     * mix(1.0, 0.42, lane);
+  float randomWidth  = mix(1.0, 2.4, lane) * (1.0 + fadeOut * 1.5);
+  float randomLean   = remap(h4.w, 0.0, 1.0, 0.10, 0.35);
+
+  float bladeHeight = uSize.y * randomHeight;
+  float widthHi = easeOut(1.0 - heightPercent, 2.0);            // tapered to a point
+  float widthLo = 1.0 - heightPercent;
+  float bladeWidth = uSize.x * mix(widthHi, widthLo, highLODOut) * randomWidth;
+
+  float x = (xSide - 0.5) * bladeWidth;
+  float y = heightPercent * bladeHeight;
+
+  // --- wind: a slowly wandering direction field, leaning whole blades ---
+  float windAngle = 0.61 + noise12(rootXZ * 0.05 + 0.05 * uTime) * 0.9;
+  vec3 windAxis = vec3(cos(windAngle), 0.0, sin(windAngle));
+  float windNoise = noise12(rootXZ * 0.25 + uTime * 1.0);
+  float windLean = easeIn(remap(windNoise, -1.0, 1.0, 0.25, 1.0), 2.0) * 1.15;
+
+  // broken gust fronts sweep along the prevailing wind; sheltered patches a
+  // few metres across visibly skip them. They modulate the lean, and feed
+  // the silvery crest shimmer in the fragment shader.
+  vec2 wdir = vec2(0.82, 0.57);
+  float along = dot(rootXZ, wdir);
+  float perp  = dot(rootXZ, vec2(-wdir.y, wdir.x));
+  float front = sin(along * 0.085 - uTime * 1.0 + sin(perp * 0.20 + uTime * 0.25) * 1.7)
+              + 0.7 * sin(along * 0.05 - uTime * 0.6 + perp * 0.14 + 2.0)
+              + 0.4 * sin(perp * 0.17 - uTime * 0.38);
+  float gustEnv = smoothstep(0.85, 1.7, front);
+  float sN = sin(rootXZ.x * 0.43 + 1.3) * sin(rootXZ.y * 0.37 - 0.7)
+           + 0.6 * sin(rootXZ.x * 0.19 - rootXZ.y * 0.24 + 2.1);
+  float shelter = clamp(1.0 - 0.85 * smoothstep(0.15, 1.0, sN), 0.15, 1.0);
+  windLean *= (0.55 + gustEnv * (0.4 + 1.2 * h4b.x)) * shelter;
+  windLean *= heightPercent;
+
+  // slow per-blade oscillation so neighbours never move in lockstep
+  randomLean += noise12(vec2(uTime * 0.35) + rootXZ * 137.423) * 0.1;
+
+  // --- wading through pushes blades away from the player's feet ---
+  float distToPlayer = distance(rootXZ, uPlayer.xz);
+  float playerLean = 0.55 * smoothstep(2.2, 0.35, distToPlayer)
+                   * linstep(0.9, 0.15, windLean);
+  vec3 toPlayer = normalize(vec3(uPlayer.x - rootW.x, 0.0, uPlayer.z - rootW.z) + 1e-5);
+  vec3 playerAxis = vec3(toPlayer.z, 0.0, -toPlayer.x);
+
+  // --- curl the blade and derive curved normals from the curve tangent ---
+  float easedHeight = mix(easeIn(heightPercent, 2.0), 1.0, highLODOut);
+  float curveAmount = -randomLean * easedHeight;
+
+  vec3 n1 = rotX(curveAmount)       * vec3(0.0,  heightPercent + 0.01, 0.0);
+  vec3 n2 = rotX(curveAmount * 0.9) * vec3(0.0, (heightPercent + 0.01) * 0.9, 0.0);
+  vec3 ncurve = normalize(n1 - n2);
+
+  mat3 grassMat = rotAxis(playerAxis, playerLean)
+                * rotAxis(windAxis, windLean)
+                * rotY(randomAngle);
+
+  vec3 faceN = grassMat * vec3(0.0, 0.0, 1.0) * zSide;
+
+  // two normals rotated across the width fake a curved cross-section;
+  // the fragment shader blends them by xSide
+  vec3 vertN = vec3(0.0, -ncurve.z, ncurve.y);
+  vec3 nrm1 = grassMat * (rotY(PI *  0.3 * zSide) * vertN) * zSide;
+  vec3 nrm2 = grassMat * (rotY(PI * -0.3 * zSide) * vertN) * zSide;
+
+  vec3 pos = grassMat * (rotX(curveAmount) * vec3(x, y, 0.0));
+  vec3 worldPos = rootW + pos;
+
+  // colours: dark base to pale tip, per-blade jitter, soft large-scale patches
+  float patchHue = noise12(rootXZ * 0.043);
+  vec3 b1 = vec3(0.032, 0.110, 0.012), b2 = vec3(0.060, 0.170, 0.026);
+  vec3 t1 = vec3(0.500, 0.740, 0.140), t2 = vec3(0.720, 0.860, 0.220);
+  vec3 baseC = mix(b1, b2, h4b.y);
+  vec3 tipC  = mix(t1, t2, h4b.z);
+  vec3 highC = mix(baseC, tipC, easeIn(heightPercent, 3.0)) * randomShade;
+  vec3 lowC  = mix(b1, t1, heightPercent) * randomShade;
+  vColor = mix(highC, lowC, highLODOut) * (0.9 + 0.22 * patchHue);
+
+  // near: mostly lit like the ground (soft), far: exactly like the ground —
+  // this is what stops distant grass dissolving into shading noise
+  float skyBlend = (1.0 - highLODOut) * 0.25;
+  vN1 = normalize(mix(vec3(0.0, 1.0, 0.0), nrm1, skyBlend));
+  vN2 = normalize(mix(vec3(0.0, 1.0, 0.0), nrm2, skyBlend));
+
+  vec4 mv = viewMatrix * vec4(worldPos, 1.0);
+
+  // view-space thickening: edge-on blades get pushed apart so they never
+  // alias away to nothing
+  vec3 viewDirXZ = normalize(vec3(cameraPosition.x - rootW.x, 0.0, cameraPosition.z - rootW.z));
+  vec3 faceXZ = normalize(vec3(faceN.x, 0.0, faceN.z));
+  float vdn = sat(dot(faceXZ, viewDirXZ));
+  float thicken = easeOut(1.0 - vdn, 4.0) * smoothstep(0.0, 0.2, vdn);
+  mv.x += thicken * (xSide - 0.5) * bladeWidth * 0.5 * zSide;
+
+  gl_Position = projectionMatrix * mv;
+  vParams = vec4(heightPercent, xSide, highLODOut, gustEnv * shelter);
+  vWorldPos = worldPos;
+  vViewZ = -mv.z;
+}`;
+
+const GRASS_FRAG = GRASS_GLSL + `
+layout(location = 0) out vec4 outColor;
+
+void main(){
+  float hp = vParams.x, xSide = vParams.y, lodOut = vParams.z, gust = vParams.w;
+  vec3 N = normalize(mix(vN1, vN2, xSide));
+  vec3 V = normalize(cameraPosition - vWorldPos);
+
+  float ao = mix(0.30, 1.0, easeIn(hp, 2.0));          // buried bases, lit tips
+  float crease = mix(0.88, 1.0, abs(xSide - 0.5) * 2.0);
+  vec3 albedo = vColor * ao * mix(crease, 1.0, lodOut);
+
+  // the silvery crest riding each gust — strongest at the tips
+  albedo = mix(albedo, vec3(0.62, 0.80, 0.26), gust * (0.15 + 0.55 * hp) * 0.45);
+
+  vec3 hemi = mix(uHemiGnd, uHemiSky, N.y * 0.5 + 0.5);
+
+  float wrap = 0.5;                                     // wrapped diffuse
+  float ndl = sat((dot(N, uSunDir) + wrap) / (1.0 + wrap));
+  vec3 direct = uSunCol * ndl;
+
+  vec3 H = normalize(uSunDir + V);                      // sheen on the tips
+  float spec = pow(sat(dot(N, H)), 32.0) * 0.35 * easeIn(hp, 2.0) * (1.0 - lodOut);
+
+  // backscatter: blades glow when the sun is behind them
+  float back = sat((dot(V, -uSunDir) + 0.5) / 1.5);
+  vec3 scatter = uSunCol * back * 0.45 * (1.0 - lodOut);
+
+  vec3 col = albedo * (hemi + direct + scatter) + uSunCol * spec;
+
+  float fogF = 1.0 - clamp((uFogRange.y - vViewZ) / (uFogRange.y - uFogRange.x), 0.0, 1.0);
+  outColor = vec4(mix(col, uFogColor, fogF), 1.0);
+}`;
+
+// Blade strip geometry: only an index buffer, a tiny per-vertex id, and one
+// instanced offset per blade — the vertex shader builds everything else.
+function makeGrassGeometry(segments, blades){
+  const VERTICES = (segments + 1) * 2;
+  const indices = [];
+  for (let i = 0; i < segments; i++){
+    const vi = i * 2;
+    indices.push(vi+0, vi+1, vi+2,  vi+2, vi+1, vi+3);
+    const fi = VERTICES + vi;                       // back face, wound the other way
+    indices.push(fi+2, fi+1, fi+0,  fi+3, fi+1, fi+2);
+  }
+  const vertID = new Float32Array(VERTICES * 2);
+  for (let i = 0; i < vertID.length; i++) vertID[i] = i;
+  const offsets = new Float32Array(blades * 3);
+  for (let i = 0; i < blades; i++){
+    offsets[i*3]   = (Math.random() - 0.5) * GRASS_PATCH;
+    offsets[i*3+2] = (Math.random() - 0.5) * GRASS_PATCH;
+  }
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.instanceCount = blades;
+  geo.setAttribute('vertIndex', new THREE.BufferAttribute(vertID, 1));
+  geo.setAttribute('position', new THREE.InstancedBufferAttribute(offsets, 3));
+  geo.setIndex(indices);
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), GRASS_PATCH * 0.75 + 12);
+  return geo;
+}
+
+function makeGrassMaterial(segments, widthMult){
+  return new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
+    side: THREE.FrontSide,          // the geometry carries explicit back faces
+    uniforms: {
+      uTime:    { value: 0 },
+      uPlayer:  { value: new THREE.Vector3() },
+      uSunDir:  { value: new THREE.Vector3(0, 1, 0) },
+      uSunCol:  { value: new THREE.Color() },
+      uHemiSky: { value: new THREE.Color() },
+      uHemiGnd: { value: new THREE.Color() },
+      uFogColor:{ value: new THREE.Color() },
+      uFogRange:{ value: new THREE.Vector2(80, 170) },
+      uParams:  { value: new THREE.Vector4(segments, (segments+1)*2, GRASS_LOD_DIST, GRASS_MAX_DIST) },
+      uSize:    { value: new THREE.Vector2(GRASS_W * widthMult, GRASS_H) },
+      uLane:    { value: 4.0 }
+    },
+    vertexShader: GRASS_VERT,
+    fragmentShader: GRASS_FRAG
+  });
+}
+
+// Three tiers: dense curved blades near, straight blades at mid range, and a
+// sparser ring of wide blades that fade out into the painted ground texture.
+const grassTiers = [
+  { upTo: GRASS_LOD_DIST, geo: makeGrassGeometry(GRASS_SEG_HI, GRASS_BLADES),     mat: makeGrassMaterial(GRASS_SEG_HI, 1.0), pool: [] },
+  { upTo: GRASS_MID_DIST, geo: makeGrassGeometry(GRASS_SEG_LO, GRASS_BLADES),     mat: makeGrassMaterial(GRASS_SEG_LO, 1.0), pool: [] },
+  { upTo: GRASS_MAX_DIST, geo: makeGrassGeometry(GRASS_SEG_LO, GRASS_FAR_BLADES), mat: makeGrassMaterial(GRASS_SEG_LO, 2.2), pool: [] },
+];
+const grassGroup = new THREE.Group();
+scene.add(grassGroup);
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(),
       _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
-let lastGrassCellX = Infinity, lastGrassCellZ = Infinity;
-function updateGrass(px, pz){
-  const cellX = Math.round(px/GRASS_REBUILD), cellZ = Math.round(pz/GRASS_REBUILD);
-  if (cellX===lastGrassCellX && cellZ===lastGrassCellZ) return;
-  lastGrassCellX=cellX; lastGrassCellZ=cellZ;
-  // centre the field on the player's coarse cell, snapped to the blade lattice
-  const baseI = Math.round((cellX*GRASS_REBUILD)/GRASS_SPACING);
-  const baseJ = Math.round((cellZ*GRASS_REBUILD)/GRASS_SPACING);
-  let i=0; const half = Math.floor(GRASS_DIM/2);
-  for (let gx=-half; gx<half; gx++) for (let gz=-half; gz<half; gz++){
-    const lxi = baseI+gx, lzi = baseJ+gz;
-    const jx = (hash(lxi*1.3, lzi*7.7)-0.5)*GRASS_SPACING;
-    const jz = (hash(lxi*5.1, lzi*2.9)-0.5)*GRASS_SPACING;
-    const wx = lxi*GRASS_SPACING + jx, wz = lzi*GRASS_SPACING + jz;
-    const sc = 0.6 + hash(lxi*9.2, lzi*4.4)*0.7;   // varied heights
-    // grass inside the lane (between the picket fences at x = ±FENCE_HALF) is
-    // mowed short, like a cut path; the meadow outside stays tall. Lane clumps
-    // are made WIDER so the short blades overlap into a dense lawn, not bald patches.
-    const inLane = Math.abs(wx) < FENCE_HALF;
-    const sX = inLane ? sc * 1.6 : sc;
-    const sY = inLane ? sc * 0.30 : sc;
-    _p.set(wx, terrainHeight(wx, wz), wz);
-    _e.set(0, hash(lxi*3.7, lzi*8.1)*Math.PI*2, 0); _q.setFromEuler(_e);
-    _s.set(sX, sY, sX); _m.compose(_p,_q,_s);
-    grass.setMatrixAt(i++, _m);
+function updateGrass(t){
+  // mirror the scene's living light + fog into the grass materials
+  for (const tier of grassTiers){
+    const u = tier.mat.uniforms;
+    u.uTime.value = t;
+    u.uPlayer.value.set(player.x, 0, player.z);
+    u.uSunDir.value.copy(sunDirVec);
+    u.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity);
+    u.uHemiSky.value.copy(hemi.color).multiplyScalar(hemi.intensity);
+    u.uHemiGnd.value.copy(hemi.groundColor).multiplyScalar(hemi.intensity);
+    u.uFogColor.value.copy(scene.fog.color);
+    u.uFogRange.value.set(scene.fog.near, scene.fog.far);
+    u.uLane.value = FENCE_HALF;
   }
-  grass.count = i; grass.instanceMatrix.needsUpdate = true;
+  // place pooled patch meshes on the world grid around the player; the tier
+  // (and so the blade geometry) depends on distance to the nearest point of
+  // the patch, and three.js frustum-culls the rest via the bounding spheres
+  for (const m of grassGroup.children) m.visible = false;
+  const used = grassTiers.map(() => 0);
+  const bx = Math.floor(player.x / GRASS_PATCH) * GRASS_PATCH;
+  const bz = Math.floor(player.z / GRASS_PATCH) * GRASS_PATCH;
+  const R = Math.ceil(GRASS_MAX_DIST / GRASS_PATCH);
+  for (let cx = -R; cx <= R; cx++){
+    for (let cz = -R; cz <= R; cz++){
+      const px = bx + cx * GRASS_PATCH + GRASS_PATCH / 2;   // patch centre
+      const pz = bz + cz * GRASS_PATCH + GRASS_PATCH / 2;
+      const dx = Math.max(Math.abs(player.x - px) - GRASS_PATCH / 2, 0);
+      const dz = Math.max(Math.abs(player.z - pz) - GRASS_PATCH / 2, 0);
+      const d = Math.hypot(dx, dz);
+      const ti = grassTiers.findIndex((tier) => d <= tier.upTo);
+      if (ti < 0) continue;
+      const tier = grassTiers[ti];
+      if (used[ti] >= tier.pool.length){
+        const m = new THREE.Mesh(tier.geo, tier.mat);
+        tier.pool.push(m); grassGroup.add(m);
+      }
+      const m = tier.pool[used[ti]++];
+      m.position.set(px, 0, pz);
+      m.visible = true;
+    }
+  }
 }
 
 /* ============================================================
@@ -868,7 +1113,6 @@ function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(clock.getDelta(), 0.05);
   const t=clock.elapsedTime;
-  if(grassUniforms) grassUniforms.uTime.value = t;
   grade.uniforms.uTime.value = t;
 
   // movement
@@ -890,7 +1134,7 @@ function animate(){
 
   updateSky(t);
   updateTerrain(player.x, player.z);
-  updateGrass(player.x, player.z);
+  updateGrass(t);
   updateFence(player.z);
   updateHouse();
   updateFireflies(t);
@@ -923,7 +1167,7 @@ function resize(){
 window.addEventListener('resize', resize);
 
 updateSky(0);
-updateTerrain(0,0); updateGrass(0,0); updateFence(0); updateHouse();
+updateTerrain(0,0); updateGrass(0); updateFence(0); updateHouse();
 animate();
 
 const hud=document.getElementById('hud');
