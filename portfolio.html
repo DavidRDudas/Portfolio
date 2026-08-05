@@ -204,6 +204,15 @@ const SECTIONS = [
     ]
   },
   {
+    title: "Languages & Compilers",
+    blurb: "Language design and compiler engineering — rethinking how code is identified, changed, and trusted.",
+    items: [
+      { title:"rigid", cat:"Programming Language · Rust", img:"rigidlang.png",
+        desc:"A text-first, content-addressed language kernel: every definition is identified by the SHA-256 of its canonical form — local names erased, references replaced by the hashes of what they reference. The compiler keeps an exact dependency graph as a byproduct of compiling, so a rename can't silently change meaning, “what breaks if I touch this” is a query, tests re-run only when a dependency actually changed, and structured errors carry typed fixes a repair loop applies mechanically. Rust kernel with a spec, tutorial, in-browser WASM playground, workshop-paper draft, and a pre-registered study across five real Python codebases.",
+        tech:["Rust","Compilers","Language Design","Content Addressing","WASM"], link:"https://rigid.sh" },
+    ]
+  },
+  {
     title: "Simulations & Computational Art",
     blurb: "Interactive engines exploring physics, emergence, and the structure of code.",
     eq: "\\[ \\frac{d\\mathbf{x}_i}{dt} \\;=\\; \\sum_{j\\neq i} \\mathbf{f}_{ij}(\\mathbf{x}_i,\\mathbf{x}_j) \\]",

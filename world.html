@@ -895,6 +895,14 @@ const PROJECTS = {
     image: "./images/hydrogen.png",
     link: "./HydrogenAtom/index.html"
   },
+  rigid: {
+    title: "rigid",
+    category: "Programming Language · Rust",
+    desc: "A text-first, content-addressed language kernel: every definition is identified by the SHA-256 of its canonical structure, so names are metadata. Renames can't silently rebind, “what breaks if I touch this” is an exact query, tests re-run only when a dependency actually changed, and structured errors carry typed fixes a repair loop applies mechanically.",
+    tech: ["Rust", "Compilers", "Language Design", "Content Addressing"],
+    image: "./images/rigidlang.png",
+    link: "https://rigid.sh"
+  },
   cipher: {
     title: "Naive Cryptography",
     category: "Educational",
@@ -5201,6 +5209,77 @@ const propTickers = [];
   // and the notebook on the left (laptop edge ≈ x=-1.075, notebook ≈ x=-1.3)
   grp.position.set(-1.15, 1.1, -2.85);
   grp.rotation.y = 0.3;
+  root.add(grp);
+}
+
+// ==========================================================
+// DEPENDENCY GRAPH — rigid (desk model of a content-addressed
+// codebase: spheres are definitions, struts are references.
+// Every few seconds one leaf "changes" and a magenta pulse
+// climbs exactly its dependents — blast radius as sculpture.)
+// ==========================================================
+{
+  const grp = new THREE.Group();
+
+  // weighted base + stem, same family as the orbital model
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.018, 28),
+    matStandard(0x1e2028, 0.45, 0.55));
+  base.castShadow = true; grp.add(base);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.05, 10),
+    matStandard(0x2c3038, 0.4, 0.6));
+  stem.position.y = 0.032; grp.add(stem);
+
+  // a tiny DAG: node 0 is the root; edges run dependent -> dependency
+  const NODE_POS = [
+    [0, 0.165, 0],
+    [-0.058, 0.122, 0.024],
+    [0.052, 0.128, -0.032],
+    [0.024, 0.132, 0.058],
+    [-0.044, 0.078, -0.05],
+    [0.058, 0.074, 0.038]
+  ];
+  const EDGES = [[0, 1], [0, 2], [0, 3], [1, 4], [2, 5], [3, 5]];
+  // when node 5 changes, its dependents re-check: 2 and 3 (hop 1), then 0
+  const PULSE_HOPS = { 5: 0, 2: 1, 3: 1, 0: 2 };
+
+  const BLUE = new THREE.Color(0x3f7ddb), PINK = new THREE.Color(0xe0338a);
+  const nodes = NODE_POS.map((p, i) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(i === 0 ? 0.016 : 0.012, 14, 12),
+      matEmissive(0x6da8ff, 0x3f7ddb, 0.9));
+    m.position.set(p[0], p[1], p[2]);
+    m.castShadow = true;
+    grp.add(m);
+    return m;
+  });
+
+  // struts between the definitions — what makes the graph rigid
+  const strutMat = matStandard(0x8a8f9a, 0.35, 0.7);
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  EDGES.forEach(([a, b]) => {
+    A.fromArray(NODE_POS[a]); B.fromArray(NODE_POS[b]);
+    const len = A.distanceTo(B);
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, len, 6), strutMat);
+    strut.position.copy(A).add(B).multiplyScalar(0.5);
+    strut.quaternion.setFromUnitVectors(UP, B.clone().sub(A).normalize());
+    grp.add(strut);
+  });
+
+  grp.userData.tick = (t) => {
+    // a change pulses through exactly the dependents, then settles
+    const phase = (t % 5.0);
+    for (const [idx, hop] of Object.entries(PULSE_HOPS)) {
+      const d = phase - (0.7 + hop * 0.45);
+      const pulse = Math.exp(-d * d * 14);
+      const mat = nodes[idx].material;
+      mat.emissive.copy(BLUE).lerp(PINK, pulse);
+      mat.emissiveIntensity = 0.9 + pulse * 1.6;
+    }
+    grp.rotation.y = t * 0.14;
+  };
+  propTickers.push(grp.userData.tick);
+
+  makeInteractive(base, 'rigid', 'Dependency Graph · rigid');
+  grp.position.set(1.3, 1.06, -2.95);
   root.add(grp);
 }
 
