@@ -734,6 +734,15 @@ const PROJECTS = {
     image: "./images/hokku.png",
     link: "https://hokku.app"
   },
+  rasterTide: {
+    title: "Raster Tide",
+    category: "Creative Web App",
+    desc: "Browser-based studio that turns images and video into animated ASCII art. Tune the grid, character set, motion, direction, palette, exposure, and contrast, then export PNG, text, or WEBM — with media processed locally on-device.",
+    tech: ["React", "TypeScript", "Canvas", "Browser APIs", "Vite"],
+    image: "./images/rastertide.jpg",
+    link: "https://rastertide.com",
+    year: "2026"
+  },
   tv: {
     title: "Prism",
     category: "Indie Game · In Development",
@@ -1166,6 +1175,44 @@ function posterTexture() {
   ctx.fillText('GENERATIVE · 2024', 256, 105);
   ctx.fillStyle = 'rgba(255,224,194,0.6)'; ctx.font = '11px JetBrains Mono, monospace';
   ctx.fillText('procedural synthesis · ten layers · infinite forms', 256, 680);
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+function rasterTideTexture() {
+  const c = document.createElement('canvas'); c.width = 768; c.height = 480;
+  const ctx = c.getContext('2d');
+  // Light editorial masthead above a deep-ocean ASCII preview.
+  ctx.fillStyle = '#edf2ee'; ctx.fillRect(0, 0, 768, 118);
+  ctx.fillStyle = '#111727'; ctx.font = 'bold 30px Inter, sans-serif';
+  ctx.textAlign = 'left'; ctx.fillText('RASTER', 42, 62);
+  ctx.fillStyle = '#537884'; ctx.fillText('TIDE', 180, 62);
+  ctx.font = '12px JetBrains Mono, monospace'; ctx.fillStyle = '#4f5d62';
+  ctx.fillText('IMAGES AND VIDEO, REDRAWN AS TYPE.', 42, 91);
+
+  ctx.fillStyle = '#02072a'; ctx.fillRect(0, 118, 768, 362);
+  const chars = 'RASTERTIDE·';
+  ctx.font = '11px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  for (let row = 0; row < 26; row++) {
+    for (let col = 0; col < 68; col++) {
+      const x = 16 + col * 11;
+      const y = 138 + row * 13;
+      const wave = Math.sin(col * 0.19 + row * 0.34) * 0.5 + 0.5;
+      const dx = (col - 34) / 31;
+      const dy = (row - 13) / 11;
+      const portrait = Math.max(0, 1 - (dx * dx + dy * dy));
+      const alpha = 0.10 + wave * 0.22 + portrait * 0.62;
+      ctx.fillStyle = `rgba(126, 204, 221, ${alpha})`;
+      ctx.fillText(chars[(col * 3 + row * 5) % chars.length], x, y);
+    }
+  }
+  ctx.fillStyle = 'rgba(237,242,238,0.72)';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText('ANIMATED ASCII GENERATOR', 726, 455);
+
   const tex = new THREE.CanvasTexture(c);
   tex.encoding = THREE.sRGBEncoding;
   return tex;
@@ -5026,6 +5073,26 @@ const monitorAnim = monitorScreenTexture();
   // pushed further off the wall (0.14 instead of 0.08) so the frame's back
   // face doesn't z-fight with the back wall when the camera is zoomed way out
   grp.position.set(3.25, 3.0, -ROOM.d / 2 + 0.14);
+  root.add(grp);
+}
+
+// ==========================================================
+// FRAMED ASCII PRINT — Raster Tide (back wall, left of window)
+// ==========================================================
+{
+  const grp = new THREE.Group();
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.95, 1.25, 0.04), matStandard(0x111727, 0.45));
+  grp.add(frame);
+  const artMat = new THREE.MeshStandardMaterial({ map: rasterTideTexture(), roughness: 0.68 });
+  const art = new THREE.Mesh(new THREE.PlaneGeometry(1.82, 1.12), artMat);
+  art.position.z = 0.022;
+  grp.add(art);
+  // The procedural print keeps file:// previews working; the deployed site
+  // upgrades it to the live-app screenshot used by the catalogue card.
+  tryUpgradeImageTexture('./images/rastertide.jpg', artMat);
+  makeInteractive(art, 'rasterTide', 'Framed Print · Raster Tide');
+  // Mirror the Dream Weaver poster across the back-wall window.
+  grp.position.set(-3.18, 3.35, -ROOM.d / 2 + 0.14);
   root.add(grp);
 }
 
