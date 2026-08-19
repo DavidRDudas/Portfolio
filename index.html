@@ -38,12 +38,31 @@
 
   main{ flex:1 0 auto; display:flex; flex-direction:column; justify-content:center; padding:56px 0 40px; }
 
-  .hero{ text-align:center; margin-bottom:42px; }
+  .hero{
+    position:relative; isolation:isolate; overflow:hidden;
+    text-align:center; margin-bottom:34px; padding:64px 30px 56px;
+    border:1px solid rgba(211,204,189,.86); border-radius:18px;
+    background:#f4f1e9;
+    box-shadow:0 24px 64px -50px rgba(27,26,23,.65);
+  }
+  .hero-art{
+    position:absolute; inset:0; z-index:-2; width:100%; height:100%;
+    object-fit:cover; object-position:center 50%;
+    opacity:.76; filter:saturate(.88) contrast(.94);
+  }
+  .hero::after{
+    content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+    background:
+      linear-gradient(180deg, rgba(251,250,247,.18), rgba(251,250,247,.04) 45%, rgba(251,250,247,.22)),
+      radial-gradient(ellipse 47% 62% at 50% 48%, rgba(251,250,247,.92) 0%, rgba(251,250,247,.78) 40%, rgba(251,250,247,.30) 72%, rgba(251,250,247,.10) 100%);
+  }
+  .hero > :not(.hero-art){ position:relative; z-index:1; }
   .kicker{ font-family:"JetBrains Mono", monospace; font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:var(--faint); }
-  h1{ font-size:clamp(42px,8vw,60px); line-height:1; margin:.32em 0 .18em; font-weight:600; letter-spacing:-.015em; }
-  .roles{ font-size:17px; color:var(--muted); font-style:italic; }
+  .hero .kicker{ color:rgba(27,26,23,.65); }
+  h1{ font-size:clamp(42px,8vw,60px); line-height:1; margin:.32em 0 .18em; font-weight:600; letter-spacing:-.015em; text-shadow:0 1px 12px rgba(251,250,247,.95); }
+  .roles{ font-size:17px; color:#514c44; font-style:italic; text-shadow:0 1px 8px rgba(251,250,247,.92); }
   .roles strong{ color:var(--ink); font-weight:600; font-style:normal; }
-  .eqline{ margin-top:18px; color:var(--faint); font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.04em; }
+  .eqline{ margin-top:18px; color:rgba(27,26,23,.62); font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.04em; text-shadow:0 1px 7px rgba(251,250,247,.96); }
   .eqline span{ margin:0 9px; white-space:nowrap; }
 
   .prompt{ text-align:center; font-family:"JetBrains Mono", monospace; font-size:11.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--faint); margin-bottom:18px; }
@@ -77,6 +96,14 @@
   @media (max-width:600px){
     .cards{ grid-template-columns:1fr; }
     main{ padding:34px 0 24px; }
+    .hero{ margin-bottom:30px; padding:54px 18px 48px; border-radius:14px; }
+    .hero-art{ object-position:center 48%; }
+    .hero::after{
+      background:
+        linear-gradient(180deg, rgba(251,250,247,.18), rgba(251,250,247,.05) 45%, rgba(251,250,247,.22)),
+        radial-gradient(ellipse 72% 64% at 50% 48%, rgba(251,250,247,.94) 0%, rgba(251,250,247,.80) 42%, rgba(251,250,247,.30) 78%, rgba(251,250,247,.12) 100%);
+    }
+    .roles{ font-size:16px; }
     .card .art{ height:78px; } .card .art svg{ width:78px; height:78px; }
   }
 </style>
@@ -86,6 +113,7 @@
 <main>
   <div class="wrap">
     <div class="hero">
+      <img class="hero-art" src="images/interests-hero.jpg" alt="" aria-hidden="true" decoding="async" fetchpriority="high" />
       <div class="kicker">David R. Dudas</div>
       <h1>David Dudas</h1>
       <div class="roles"><strong>Software Architect</strong> · <strong>Creator</strong> · <strong>PhD Student</strong>, Computer Science</div>
