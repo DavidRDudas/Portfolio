@@ -49,10 +49,12 @@
 
   /* header */
   header.site{ padding:78px 0 34px; }
+  header.site .wrap{ max-width:840px; }
   .kicker{ font-family:"JetBrains Mono", monospace; font-size:11.5px; letter-spacing:.26em; text-transform:uppercase; color:var(--faint); }
   h1.name{ font-size:clamp(40px,7vw,52px); line-height:1.02; margin:.28em 0 .12em; font-weight:600; letter-spacing:-.012em; }
   .roles{ font-size:18.5px; color:var(--muted); font-style:italic; }
   .roles strong{ color:var(--ink); font-weight:600; font-style:normal; }
+  .affiliation{ white-space:nowrap; }
   .bio{ margin-top:24px; font-size:19px; max-width:64ch; }
   .bio em{ font-style:italic; }
 
@@ -70,10 +72,23 @@
 
   /* sections */
   section.sec{ padding:46px 0; border-top:1px solid var(--rule); }
+  .sec-toggle{ margin:0; }
+  .sec-summary{ position:relative; display:block; padding-right:50px; cursor:pointer; list-style:none; }
+  .sec-summary::-webkit-details-marker{ display:none; }
+  .sec-summary::after{
+    content:"+"; position:absolute; top:0; right:0; width:30px; height:30px;
+    border:1px solid var(--rule-strong); border-radius:50%; color:var(--accent);
+    font-family:"JetBrains Mono", monospace; font-size:18px; line-height:28px; text-align:center;
+    transition:transform .2s ease, background .15s ease;
+  }
+  .sec-summary:hover::after{ background:var(--accent-soft); }
+  .sec-summary:focus-visible{ outline:2px solid var(--accent); outline-offset:8px; border-radius:2px; }
+  .sec-toggle[open] > .sec-summary::after{ content:"−"; transform:rotate(180deg); }
   .sec-head{ display:flex; align-items:baseline; gap:13px; margin-bottom:4px; }
   .sec-num{ font-family:"JetBrains Mono", monospace; font-size:12px; color:var(--accent); letter-spacing:.06em; }
   .sec-title{ font-family:"JetBrains Mono", monospace; font-size:12.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); font-weight:500; }
-  .sec-blurb{ color:var(--muted); font-size:16.5px; margin:0 0 18px; max-width:62ch; }
+  .sec-blurb{ display:block; color:var(--muted); font-size:16.5px; margin:0; max-width:62ch; }
+  .sec-content{ padding-top:18px; }
   .sec-eq{ margin:2px 0 20px; color:var(--muted); }
   .sec-eq .katex{ font-size:1.05em; color:#403b33; }
 
@@ -108,6 +123,7 @@
     .proj{ grid-template-columns:1fr; gap:12px; }
     .thumb{ width:100%; height:160px; }
     header.site{ padding:54px 0 28px; }
+    .sec-summary{ padding-right:42px; }
   }
 </style>
 </head>
@@ -127,7 +143,7 @@
   <div class="wrap">
     <div class="kicker">Portfolio · 2026</div>
     <h1 class="name">David Dudas</h1>
-    <div class="roles"><strong>Software Architect</strong> · <strong>Creator</strong> · <strong>PhD Student</strong>, Computer Science — Mississippi State University</div>
+    <div class="roles"><strong>Software Architect</strong> · <strong>Creator</strong> · <strong>PhD Student</strong>, Computer Science — <span class="affiliation">Mississippi State University</span></div>
 
     <p class="bio">
       I build high-performance systems and computational tools, and study problems at the
@@ -352,13 +368,19 @@ const main = document.getElementById("content");
 main.innerHTML = SECTIONS.map((s, i) => `
   <section class="sec" id="sec-${i+1}">
     <div class="wrap">
-      <div class="sec-head">
-        <span class="sec-num">§${i+1}</span>
-        <span class="sec-title">${esc(s.title)}</span>
-      </div>
-      ${s.blurb ? `<p class="sec-blurb">${esc(s.blurb)}</p>` : ""}
-      ${s.eq ? `<div class="sec-eq">${s.eq}</div>` : ""}
-      ${s.items.map(projHTML).join("")}
+      <details class="sec-toggle"${i === 0 ? " open" : ""}>
+        <summary class="sec-summary">
+          <span class="sec-head">
+            <span class="sec-num">§${i+1}</span>
+            <span class="sec-title">${esc(s.title)}</span>
+          </span>
+          ${s.blurb ? `<span class="sec-blurb">${esc(s.blurb)}</span>` : ""}
+        </summary>
+        <div class="sec-content">
+          ${s.eq ? `<div class="sec-eq">${s.eq}</div>` : ""}
+          ${s.items.map(projHTML).join("")}
+        </div>
+      </details>
     </div>
   </section>
 `).join("");
