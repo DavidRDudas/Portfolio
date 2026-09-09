@@ -53,7 +53,16 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 .university{display:inline-block}
 .hero-link{margin-top:23px}
 .hero-figure{position:relative;margin-left:-68px;width:calc(100% + 68px)}
-.hero-art{width:100%;height:auto;aspect-ratio:1697/927;object-fit:contain;mix-blend-mode:multiply}
+.hero-figure picture{display:block}
+.hero-art{
+  --edge-fade:clamp(14px,2.4vw,30px);
+  width:100%;height:auto;aspect-ratio:1697/927;object-fit:contain;mix-blend-mode:multiply;
+  border-radius:clamp(20px,3vw,40px);
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent),linear-gradient(to bottom,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent);
+  -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(to right,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent),linear-gradient(to bottom,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent);
+  mask-composite:intersect;
+}
 .hero-figure figcaption{display:flex;justify-content:space-between;gap:14px;margin:20px 0 0 65px;padding-top:12px;border-top:1px solid var(--line);font-family:var(--mono);text-transform:uppercase;font-size:9px;letter-spacing:.08em;color:var(--muted)}
 .section-label{display:flex;align-items:center;gap:22px;margin-bottom:22px}
 .section-label h2{flex-shrink:0}
