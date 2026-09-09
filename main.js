@@ -102,7 +102,7 @@ class ProjectCarousel {
             // Determine the status tag
             let statusTag = '';
             if (!project.demoLink) {
-                if (project.title === 'Prism' || project.title === 'Hokku') {
+                if (project.title === 'Painted Crowns' || project.title === 'Hokku') {
                     statusTag = '<span class="status-tag in-development">In Development</span>';
                 } else {
                     statusTag = '<span class="status-tag private">Private Work</span>';

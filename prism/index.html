@@ -1060,7 +1060,7 @@ window.addEventListener('pointerup', endPointer);
 window.addEventListener('pointercancel', endPointer);
 window.addEventListener('keydown', e=>keys[e.code]=true);
 window.addEventListener('keyup',   e=>keys[e.code]=false);
-// Esc returns to the cabin when this game is embedded in the Prism TV overlay
+// Esc returns to the cabin when this game is embedded in the Painted Crowns TV overlay
 window.addEventListener('keydown', e=>{ if(e.key==='Escape') parent.postMessage({type:'prism-exit'},'*'); });
 
 /* ============================================================

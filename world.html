@@ -336,7 +336,7 @@
   #fp-ui.visible #fp-exit { pointer-events: auto; }
   #fp-exit:hover { color: #fff; border-color: rgba(255, 184, 122, 0.7); background: rgba(60, 30, 14, 0.78); }
 
-  /* ---------- PRISM TV PORTAL (Infinite Grass game overlay) ---------- */
+  /* ---------- PAINTED CROWNS TV PORTAL (Infinite Grass game overlay) ---------- */
   #prism-portal { position: fixed; inset: 0; z-index: 200; background: #000; opacity: 0; pointer-events: none; }
   #prism-portal.active { opacity: 1; pointer-events: auto; }
   #prism-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; opacity: 0; transition: opacity 0.55s ease; background: #8fc7ef; }
@@ -708,11 +708,11 @@
   <button id="fp-exit" type="button" aria-label="Exit first-person">Exit</button>
 </div>
 
-<!-- Prism TV → Infinite Grass game overlay (CRT zoom-in; exit anytime) -->
+<!-- Painted Crowns TV → Infinite Grass game overlay (CRT zoom-in; exit anytime) -->
 <div id="prism-portal">
   <div id="prism-crt"></div>
   <div id="prism-scan"></div>
-  <button id="prism-exit" type="button" aria-label="Exit Prism">↩ Exit Prism</button>
+  <button id="prism-exit" type="button" aria-label="Exit Painted Crowns">↩ Exit Painted Crowns</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -744,12 +744,12 @@ const PROJECTS = {
     year: "2026"
   },
   tv: {
-    title: "Prism",
+    title: "Painted Crowns",
     category: "Indie Game · In Development",
     desc: "An indie game I'm leading on art, music, design, and tech. A* pathfinding, complex AI decision-making, and a custom random-generation algorithm spawning up to 220 unique characters in a novel grid-based positioning system. Coming to PlayStation, Xbox, and PC.",
     tech: ["Unity", "C#", "Game Design", "AI", "Console Dev"],
     image: "./images/prism.png",
-    link: null
+    link: "https://store.steampowered.com/app/5192590/Painted_Crowns/"
   },
   console: {
     title: "Indie Game Development",
@@ -1377,7 +1377,7 @@ function whiteboardTexture() {
 }
 
 function tvScreenTexture() {
-  // CRT TV — animated PRiSM title screen on a green field. Pure procedural,
+  // CRT TV — animated Painted Crowns title screen on a green field. Pure procedural,
   // no external image load. Each frame redraws the field, the wandering
   // hero sprite, the title, and the press-start blink.
   const c = document.createElement('canvas'); c.width = 320; c.height = 240;
@@ -1480,13 +1480,13 @@ function tvScreenTexture() {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(px + (facing > 0 ? 0 : -1), py - 3, 1, 1);
 
-    // PRiSM title — drop shadow + main fill + subtle gleam
+    // Painted Crowns title — drop shadow + main fill + subtle gleam
     ctx.textAlign = 'center';
-    ctx.font = "bold 38px Inter, sans-serif";
+    ctx.font = "bold 23px Inter, sans-serif";
     ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    ctx.fillText('PRiSM', 162, 67);
+    ctx.fillText('PAINTED CROWNS', 162, 67);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('PRiSM', 160, 65);
+    ctx.fillText('PAINTED CROWNS', 160, 65);
     // animated press start blink
     ctx.font = "10px 'JetBrains Mono', monospace";
     const blink = (Math.sin(t * 0.005) + 1) / 2;
@@ -4353,7 +4353,7 @@ const tvAnim = tvScreenTexture();
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 0.78), screenMat);
   screen.position.set(0, 1.4, 0.53);
   stand.add(screen);
-  makeInteractive(screen, 'tv', 'CRT TV · Prism');
+  makeInteractive(screen, 'tv', 'CRT TV · Painted Crowns');
   // glow
   const glow = new THREE.PointLight(0xff7e51, 0.6, 3.5, 2);
   glow.position.set(0, 1.4, 0.7);
@@ -4368,7 +4368,7 @@ const tvAnim = tvScreenTexture();
     k.position.set(0.45 + i * 0.06, 0.96, 0.51);
     stand.add(k);
   }
-  // PRISM logo letters
+  // TV logo details
   const logoMat = matStandard(0xffe6c2, 0.4);
   // antenna rabbit ears
   const aMat = matStandard(0xaaaaaa, 0.4, 0.6);
@@ -7282,7 +7282,7 @@ const FP = {
   blockedSpot: null,     // the chair you just stood from (can't re-sit it until you step away)
   seat: null,            // active seat descriptor while sitting
   activeTarget: null,    // nearest interactable (for the E prompt/action)
-  portal: false,         // true while the Prism TV game overlay is open
+  portal: false,         // true while the Painted Crowns TV game overlay is open
   flashlight: false,     // head-mounted flashlight toggle (F)
   inBoat: false,         // rowing the boat on the water
 };
@@ -7301,7 +7301,7 @@ const FP_BOUNDS = { xMin: -16, xMax: 16, zMin: CLIFF_EDGE_Z + 3, zMax: 18 };
 const fpVignette = document.getElementById('fp-vignette');
 
 // ---- interactables: TV, camp chairs, dogs ----
-const TV_POS = new THREE.Vector3(3.6, 0, -2.6);              // CRT TV (Prism) on the right wall
+const TV_POS = new THREE.Vector3(3.6, 0, -2.6);              // CRT TV (Painted Crowns) on the right wall
 const CAMPFIRE_POS = new THREE.Vector3(-1.2, 0.4, -16);      // sitters in camp chairs face the fire
 const CAMP_SEAT_EYE = 1.35;
 // every chair you can sit in: the desk chair (back of the cabin), the side
@@ -7486,7 +7486,7 @@ function updateFpHint() {
     : t.kind === 'dog'       ? ('E — pet ' + (t.dog.userData.dogName || 'the dog'))
     : t.kind === 'owl'       ? 'E — pet the owl'
     : t.kind === 'boat'      ? 'E — board the boat'
-    : t.kind === 'tv'        ? 'E — play Prism'
+    : t.kind === 'tv'        ? 'E — play Painted Crowns'
     :                          'WASD move · Shift run · F light · ESC exit';
 }
 
@@ -7554,7 +7554,7 @@ function fpInteract() {
   else if (t.kind === 'boat') boardBoat();
 }
 
-// ---- Prism TV → Infinite Grass game overlay (CRT zoom-in, exit anytime) ----
+// ---- Painted Crowns TV → Infinite Grass game overlay (CRT zoom-in, exit anytime) ----
 function playPrism() {
   if (FP.portal) return;
   FP.portal = true;
@@ -7619,7 +7619,7 @@ class SimpleFPControls {
     this.locked = document.pointerLockElement === this.domEl;
     // if user hits ESC while in active FP, the browser unlocks pointer for us.
     // BUT don't drop out of FP when we deliberately released the pointer to
-    // open the Prism game overlay.
+    // open the Painted Crowns game overlay.
     if (!this.locked && FP.state === 'active' && !FP.portal) exitFirstPerson();
   }
   _mm(e) {
@@ -7838,7 +7838,7 @@ function updateFP(now) {
   }
 
   if (FP.state !== 'active') { fpHighlight.visible = false; return; }
-  // while the Prism game overlay is open, freeze the cabin camera entirely
+  // while the Painted Crowns game overlay is open, freeze the cabin camera entirely
   if (FP.portal) { fpHighlight.visible = false; return; }
 
   // ---- BOAT: rowing on the water (WASD), can only step off near land ----
@@ -7957,7 +7957,7 @@ function updateFP(now) {
 
 function setupFPKeys() {
   window.addEventListener('keydown', e => {
-    if (FP.portal) return; // Prism game overlay owns input while it's open
+    if (FP.portal) return; // Painted Crowns game overlay owns input while it's open
     if (FP.state !== 'active' && FP.state !== 'entering') {
       if (e.code === 'Escape' && FP.state === 'exiting') return;
       return;
@@ -7993,12 +7993,12 @@ const _fpExitBtn = document.getElementById('fp-exit');
 if (_fpExitBtn) _fpExitBtn.addEventListener('click', () => {
   if (FP.state === 'active') exitFirstPerson();
 });
-// Prism overlay exit (parent-side button + ESC when the cabin still has focus)
+// Painted Crowns overlay exit (parent-side button + ESC when the cabin still has focus)
 const _prismExitBtn = document.getElementById('prism-exit');
 if (_prismExitBtn) _prismExitBtn.addEventListener('click', exitPrism);
 window.addEventListener('keydown', e => { if (FP.portal && e.key === 'Escape') exitPrism(); });
 // if we're in first-person but the pointer isn't captured (e.g. just returned
-// from the Prism game, after the browser's post-Esc cooldown), a click re-locks it
+// from the Painted Crowns game, after the browser's post-Esc cooldown), a click re-locks it
 renderer.domElement.addEventListener('pointerdown', () => {
   if (FP.state === 'active' && !FP.portal && FP.controls && !FP.controls.locked) FP.controls.lock();
 });
@@ -8907,7 +8907,7 @@ window.addEventListener('resize', () => {
 const startTime = performance.now();
 function animate() {
   requestAnimationFrame(animate);
-  // Prism game overlay owns the screen — pause the cabin render to free the GPU
+  // Painted Crowns game overlay owns the screen — pause the cabin render to free the GPU
   if (FP.portal) return;
   const t = performance.now() - startTime;
   for (let i = 0; i < propTickers.length; i++) propTickers[i](t / 1000);
