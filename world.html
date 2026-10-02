@@ -759,6 +759,17 @@ const PROJECTS = {
     image: "./images/indiegames.png",
     link: null
   },
+  shatterwing: {
+    title: "Shatterwing",
+    category: "Bullet-Hell Shooter · Coming Soon",
+    status: "Coming soon on Steam",
+    year: "2026",
+    desc: "Vertical bullet-hell shooter built in Godot. Dash to leave mirrors that reflect enemy fire, or switch polarity to absorb matching bullets and release homing volleys. Includes a five-stage campaign, configurable ships, between-stage upgrades, boss runs, practice modes, and score leaderboards. A 120 Hz simulation supports seeded runs and input replays.",
+    tech: ["Godot", "GDScript", "Game Design", "Deterministic Simulation", "Steamworks"],
+    image: "./images/shatterwing.png",
+    imageFit: "contain",
+    link: "https://store.steampowered.com/app/5286270/Shatterwing"
+  },
   klast: {
     title: "Klast",
     category: "Twin-Stick Arcade Shooter",
@@ -5058,6 +5069,41 @@ const monitorAnim = monitorScreenTexture();
 }
 
 // ==========================================================
+// FRAMED GAME ART — Shatterwing (left wall, above the bookshelf)
+// ==========================================================
+{
+  const display = new THREE.Group();
+  const width = 2.1, height = width * 706 / 1232;
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(width + 0.12, height + 0.12, 0.07),
+    matStandard(0x182332, 0.5, 0.25));
+  display.add(frame);
+
+  // Procedural title card for file:// previews; HTTP loads the supplied capsule art.
+  const c = document.createElement('canvas'); c.width = 768; c.height = 440;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#070e1a'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#66d9e7'; ctx.lineWidth = 3;
+  ctx.strokeRect(22, 22, 724, 396);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#d8e8ff';
+  ctx.font = 'bold 64px monospace'; ctx.fillText('SHATTERWING', 384, 190);
+  ctx.fillStyle = '#66d9e7'; ctx.font = '22px monospace';
+  ctx.fillText('DASH. REFLECT. BREAK THROUGH.', 384, 246);
+  const fallback = new THREE.CanvasTexture(c);
+  fallback.encoding = THREE.sRGBEncoding;
+  const screenMat = new THREE.MeshBasicMaterial({ map: fallback });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(width, height), screenMat);
+  screen.position.z = 0.036;
+  display.add(screen);
+  tryUpgradeImageTexture('./images/shatterwing.png', screenMat);
+  makeInteractive(screen, 'shatterwing', 'Framed Game Art · Shatterwing');
+
+  // Clear the camera and ant farm on the shelf, beside the research whiteboard.
+  display.position.set(-ROOM.w / 2 + 0.14, 3.78, -1.5);
+  display.rotation.y = Math.PI / 2;
+  root.add(display);
+}
+
+// ==========================================================
 // WALL POSTER — Dream Weaver
 // ==========================================================
 {
@@ -8833,6 +8879,7 @@ function openModal(key) {
   modalCategory.textContent = p.category;
   modalTech.innerHTML = p.tech.map(t => `<span>${t}</span>`).join('');
   modalImage.style.backgroundImage = p.image ? `url("${p.image}")` : 'none';
+  modalImage.style.backgroundSize = p.imageFit || '';
   modalImage.style.display = p.image ? '' : 'none';
   modalActions.innerHTML = '';
   if (p.link) {

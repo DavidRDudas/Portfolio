@@ -59,6 +59,9 @@ const PORTFOLIO_SECTIONS = [
     title: "Games",
     blurb: "Original titles spanning design, art, music, AI, and engine work.",
     items: [
+      { title:"Shatterwing", cat:"Bullet-Hell Shooter · Coming Soon", img:"shatterwing.png",
+        desc:"Vertical bullet-hell shooter built in Godot. Dash to leave mirrors that reflect enemy fire, or switch polarity to absorb matching bullets and release homing volleys. Includes a five-stage campaign, configurable ships, between-stage upgrades, boss runs, practice modes, and score leaderboards. A 120 Hz simulation supports seeded runs and input replays.",
+        tech:["Godot","GDScript","Game Design","Deterministic Simulation","Steamworks"], link:"https://store.steampowered.com/app/5286270/Shatterwing" },
       { title:"Painted Crowns", cat:"Indie Game · In Development", img:"prism.png",
         desc:"An indie game I lead on art, music, design, and tech. A* pathfinding, complex AI decision-making, and a custom random-generation algorithm spawning up to 220 unique characters in a novel grid-based positioning system. Coming to PlayStation, Xbox, and PC.",
         tech:["Unity","C#","Game Design","AI","Console Dev"], link:"https://store.steampowered.com/app/5192590/Painted_Crowns/" },
