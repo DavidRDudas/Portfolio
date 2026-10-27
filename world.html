@@ -1230,7 +1230,7 @@ function fitHomeView(aspect) {
   ORBIT_FOV = 46 + narrow * 12;
   // a tall screen also looks down more steeply, so the cabin's floor plan
   // fills the height instead of sky and sea
-  _homeDir.copy(HOME_OFFSET).setY(HOME_OFFSET.y + narrow * 9).setLength(HOME_OFFSET.length() * (1 + narrow * 0.95));
+  _homeDir.copy(HOME_OFFSET).setY(HOME_OFFSET.y + narrow * 9).setLength(HOME_OFFSET.length() * (1 + narrow * 1.08));
   HOME_CAM.copy(HOME_TARGET).add(_homeDir);
 }
 fitHomeView(camera.aspect);
@@ -14857,7 +14857,7 @@ const guide = (() => {
                 line: 'The game room: Painted Crowns on the TV and Klast in the arcade cabinet. 🎮' },
     bedroom:  { pos: () => new THREE.Vector3(-1.5, 4.2, 6.2), target: () => new THREE.Vector3(-5.2, 0.8, 3.2), xray: true,
                 line: 'The bedroom. Luna is usually asleep on the futon.' },
-    kitchen:  { pos: () => new THREE.Vector3(3.2, 4.4, 5.6), target: () => new THREE.Vector3(-0.6, 0.9, 3.4), xray: true,
+    kitchen:  { pos: () => new THREE.Vector3(0.9, 3.4, 0.9), target: () => new THREE.Vector3(-0.3, 1.0, 6.2), xray: true,
                 line: 'The kitchen and the dining table.' },
     living:   { pos: () => new THREE.Vector3(1.0, 4.0, 6.0), target: () => new THREE.Vector3(5.0, 0.8, 2.6), xray: true,
                 line: 'The living room, by the fire. Ellie is usually chasing her ball here. 🔥' },
