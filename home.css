@@ -1,0 +1,167 @@
+/* Landing page only. Shared pieces (header, footer, entry cards, featured
+   grid) come from portfolio-site.css; this adds the hero, the live orbital
+   plate, the opening, the worlds band and the discipline index. */
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:center;gap:48px;min-height:min(calc(100svh - 89px),860px);padding-block:56px 52px}
+.hero-text{position:relative;z-index:1}
+.hero-eyebrow{display:flex;align-items:center;gap:10px;color:var(--green)}
+.hero-title{font-size:clamp(76px,8.8vw,132px);line-height:.9;letter-spacing:-.06em;margin:26px 0 26px;font-weight:500}
+.hero-title .accent-dot{color:var(--rust)}
+.hero-lede{font-size:19px;line-height:1.6;letter-spacing:-.015em;max-width:26ch}
+.hero-note{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;margin-top:20px;font-size:12.5px;line-height:1.8;color:var(--muted)}
+.hero-note .note-mark{font-size:20px;line-height:1;color:var(--rust);margin-right:6px}
+.hero-actions{display:flex;flex-wrap:wrap;align-items:center;gap:18px 30px;margin-top:34px}
+.hero-actions .button{gap:22px}
+
+/* ---------- orbital plate (the live figure) ---------- */
+.orbital-figure{position:relative;margin:0;justify-self:end;width:min(100%,600px)}
+.orbital-plate{position:relative;aspect-ratio:1/1;width:100%;background:radial-gradient(closest-side,rgba(38,63,52,.045),rgba(38,63,52,0) 72%)}
+.orbital-plate canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.plate-mark{position:absolute;width:16px;height:16px;border-color:rgba(32,43,41,.38);border-style:solid;border-width:0;pointer-events:none}
+.plate-mark.tl{left:0;top:0;border-left-width:1px;border-top-width:1px}
+.plate-mark.tr{right:0;top:0;border-right-width:1px;border-top-width:1px}
+.plate-mark.bl{left:0;bottom:0;border-left-width:1px;border-bottom-width:1px}
+.plate-mark.br{right:0;bottom:0;border-right-width:1px;border-bottom-width:1px}
+/* the quantisation axis the cloud turns about */
+.plate-axis{position:absolute;left:50%;top:7%;bottom:7%;width:0;border-left:1px dashed rgba(32,43,41,.16);pointer-events:none}
+.plate-axis::before{content:"z";position:absolute;top:-18px;left:-3px;font-family:var(--serif);font-style:italic;font-size:13px;color:rgba(32,43,41,.42)}
+.orbital-excite{position:absolute;inset:0;z-index:2;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:pointer;border-radius:50%}
+.orbital-excite:focus-visible{outline:2px solid var(--rust);outline-offset:-10px}
+.orbital-excite[disabled]{cursor:default}
+.orbital-fallback{display:none}
+.no-webgl .orbital-fallback{display:block;position:absolute;inset:6%}
+.no-webgl .orbital-fallback img{width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply}
+.no-webgl .plate-axis,.no-webgl .caption-hint,.no-webgl .orbital-excite{display:none}
+
+.orbital-caption{display:grid;gap:4px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;line-height:1.7;letter-spacing:.04em;color:var(--muted)}
+.caption-fig{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--rust)}
+.caption-main{font-family:var(--serif);font-size:19px;letter-spacing:-.01em;color:var(--ink)}
+.caption-main sub{font-size:.6em;letter-spacing:.06em}
+.caption-actions{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 18px;margin-top:6px}
+.caption-hint{color:var(--green)}
+.caption-link{color:var(--ink);border-bottom:1px solid var(--line)}
+.caption-link:hover{color:var(--rust);border-color:currentColor}
+.orbital-caption [data-swap]{transition:opacity .25s ease}
+.orbital-caption .is-swapping{opacity:0}
+
+/* ---------- the opening ---------- */
+.intro-veil,.intro-skip{display:none}
+html.intro body{overflow:hidden}
+html.intro .intro-veil{display:block;position:fixed;inset:0;z-index:60;background:var(--paper);transition:opacity .5s ease}
+html.intro .hero-title{opacity:0}
+html.intro-reveal .intro-veil{opacity:0;pointer-events:none}
+html.intro-reveal .hero-title{opacity:1;transition:opacity .45s ease}
+.intro-canvas{position:absolute;left:0;top:0;z-index:61;pointer-events:none}
+.intro-caption{position:absolute;left:50%;top:calc(50% + var(--intro-r,26vmin) + 30px);transform:translateX(-50%);width:min(calc(100vw - 40px),680px);display:grid;justify-items:center;gap:12px;text-align:center}
+.intro-ket,.intro-status{margin:0;font-family:var(--mono);color:var(--ink);opacity:0;transition:opacity .5s ease}
+.intro-ket{font-size:12px;letter-spacing:.06em;line-height:1.9}
+.intro-ket .ket-psi{color:var(--rust)}
+.intro-status{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+.intro-count{display:inline-block;min-width:7ch;text-align:left;font-variant-numeric:tabular-nums;color:var(--green)}
+html.intro .intro-veil.show-text .intro-ket{opacity:.78}
+html.intro .intro-veil.show-text .intro-status{opacity:1}
+html.intro .intro-veil.measured .intro-ket{opacity:0}
+html.intro .intro-skip{display:block;position:fixed;right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));z-index:62;padding:10px 14px;border:1px solid var(--line);border-radius:3px;background:rgba(248,246,239,.85);font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);transition:opacity .4s ease}
+html.intro .intro-skip:hover{color:var(--rust);border-color:currentColor}
+html.intro-reveal .intro-skip{opacity:0;pointer-events:none}
+/* never strand the page if the opening script fails */
+html.intro-failsafe body{overflow:auto}
+html.intro-failsafe .intro-veil,html.intro-failsafe .intro-skip,html.intro-failsafe .intro-canvas{display:none!important}
+html.intro-failsafe .hero-title{opacity:1}
+/* reduced motion: a quiet fade instead of the animation */
+html.intro-calm .intro-ket,html.intro-calm .intro-status{display:none}
+
+/* ---------- worlds band (the watercolor) ---------- */
+.worlds-section{padding-top:84px}
+.worlds-figure{display:grid;grid-template-columns:minmax(0,.42fr) minmax(0,1fr);align-items:end;gap:44px;margin:0}
+.worlds-figure picture{order:2;display:block}
+.worlds-art{
+  --edge-fade:clamp(14px,2.4vw,30px);
+  width:100%;height:auto;aspect-ratio:1697/927;object-fit:contain;mix-blend-mode:multiply;
+  border-radius:clamp(20px,3vw,40px);
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent),linear-gradient(to bottom,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent);
+  -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(to right,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent),linear-gradient(to bottom,transparent,#000 var(--edge-fade),#000 calc(100% - var(--edge-fade)),transparent);
+  mask-composite:intersect;
+}
+.worlds-caption{order:1;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.worlds-caption h2{font-size:clamp(34px,3.6vw,46px);letter-spacing:-.04em;line-height:1.05}
+.worlds-caption p{margin-top:14px;font-size:14px;line-height:1.75;color:var(--muted);max-width:30ch}
+
+/* ---------- discipline index ---------- */
+.index-section{padding-block:10px 84px}
+.discipline-index{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;column-gap:56px;border-top:1px solid var(--line)}
+.discipline-index li{border-bottom:1px solid var(--line)}
+.discipline-index a{display:grid;grid-template-columns:34px minmax(0,1fr) auto 22px;align-items:baseline;gap:14px;padding:17px 2px}
+.di-num{font-family:var(--mono);font-size:10px;color:var(--rust)}
+.di-title{font-family:var(--serif);font-size:23px;letter-spacing:-.025em;line-height:1.25;transition:color .2s}
+.di-count{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+.di-arrow{font-size:17px;line-height:1;color:var(--green);transition:transform .2s}
+.discipline-index a:hover .di-title{color:var(--rust)}
+.discipline-index a:hover .di-arrow{transform:translate(2px,-2px)}
+
+/* ---------- responsive ---------- */
+@media(max-width:1050px){
+  .hero{gap:28px;min-height:0;padding-block:44px 52px}
+  .hero-title{font-size:clamp(68px,10vw,104px)}
+  .hero-lede{font-size:17px}
+  .worlds-figure{gap:30px}
+  .discipline-index{column-gap:32px}
+}
+@media(max-width:760px){
+  /* phones: name → line → live orbital → note + actions, so the cloud is
+     in the first screen rather than below a stack of buttons */
+  .hero{display:flex;flex-direction:column;align-items:stretch;gap:0;padding-block:30px 34px}
+  .hero-text{display:contents}
+  .hero-eyebrow{order:1}.hero-title{order:2}.hero-lede{order:3}
+  .orbital-figure{order:4;margin-top:22px}
+  .hero-note{order:5}.hero-actions{order:6}
+  .intro-ket .ket-break{display:block}
+  .hero-title{font-size:clamp(64px,19vw,92px);margin:20px 0 18px}
+  .hero-lede{font-size:16.5px}
+  .hero-note{margin-top:26px;font-size:12px}
+  .hero-note-sep{display:none}
+  .hero-note .university{flex-basis:100%;padding-left:26px}
+  .hero-actions{margin-top:26px;gap:16px 24px}
+  .orbital-figure{justify-self:auto;width:100%;max-width:420px;margin-inline:auto}
+  .caption-main{font-size:17px}
+  .worlds-section{padding-top:56px}
+  .worlds-figure{display:flex;flex-direction:column;align-items:stretch;gap:18px}
+  .worlds-figure picture{margin-inline:-10px}
+  .worlds-caption{padding-bottom:14px}
+  .worlds-caption h2{font-size:32px}
+  .discipline-index{grid-template-columns:1fr}
+  .discipline-index a{grid-template-columns:28px minmax(0,1fr) auto 18px;gap:10px;padding:15px 2px}
+  .di-title{font-size:21px}
+  .index-section{padding-bottom:60px}
+}
+@media(max-width:440px){
+  .caption-actions{flex-direction:column;align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+  html.intro .intro-veil{transition:opacity .6s ease!important}
+  html.intro-reveal .hero-title{transition:opacity .6s ease!important}
+}
+@media print{
+  .intro-veil,.intro-skip,.intro-canvas,.orbital-figure{display:none!important}
+  .hero{display:block;min-height:0}
+}
+
+/* 3D World card: a real glimpse of the cabin instead of the cube glyph */
+.home-page .world-thumb{position:absolute;right:26px;top:62px;width:150px;height:auto;aspect-ratio:360/259;object-fit:cover;border-radius:6px;box-shadow:0 10px 24px -14px #263f3480,0 0 0 1px #263f3418;transform:rotate(1.5deg);transition:transform .3s}
+.home-page .entry-world:hover .world-thumb{transform:rotate(0) scale(1.04)}
+.home-page .entry-world h3,.home-page .entry-world p{padding-right:176px}
+@media(max-width:1050px){
+  .home-page .world-thumb{width:118px;right:20px;top:70px}
+  .home-page .entry-world h3,.home-page .entry-world p{padding-right:140px}
+}
+@media(max-width:760px){
+  .home-page .world-thumb{width:112px;right:22px;top:64px}
+  .home-page .entry-world h3,.home-page .entry-world p{padding-right:128px}
+}
+@media(max-width:440px){
+  .home-page .world-thumb{width:96px;right:18px;top:66px}
+  .home-page .entry-world h3{max-width:none;padding-right:108px}
+  .home-page .entry-world p{padding-right:108px}
+}

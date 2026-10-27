@@ -377,6 +377,78 @@
   #prism-portal.loaded #prism-exit { opacity: 0.9; pointer-events: auto; }
   #prism-exit:hover { background: rgba(40, 60, 40, 0.8); border-color: rgba(255, 255, 255, 0.7); }
 
+  /* ---------- BYTE — the robot guide ---------- */
+  #guide { position: fixed; left: 18px; bottom: 16px; z-index: 16; pointer-events: none; font-family: inherit; }
+  #guide > * { pointer-events: auto; }
+  body.fp-active #guide, body.ui-hidden #guide { display: none !important; }
+  .guide-bot { display: block; width: 76px; height: 76px; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .guide-bot svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35)); }
+  .guide-bot:focus-visible { outline: 2px solid #ffb87a; outline-offset: 2px; border-radius: 50%; }
+  .byte-float { animation: byteBob 3.4s ease-in-out infinite; transform-origin: 36px 40px; }
+  .guide-bot:hover .byte-float { animation-duration: 1.5s; }
+  #guide.hop .byte-float { animation: byteHop 0.5s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes byteBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-3px) rotate(2deg); } }
+  @keyframes byteHop { 0% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-9px) scale(0.94, 1.08); } 65% { transform: translateY(0) scale(1.08, 0.93); } 100% { transform: translateY(0) scale(1, 1); } }
+  .byte-shadow { animation: byteShadow 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes byteShadow { 0%, 100% { transform: scaleX(1); opacity: 0.3; } 50% { transform: scaleX(0.82); opacity: 0.18; } }
+  .byte-eyes { transform: translate(var(--ex, 0px), var(--ey, 0px)); transition: transform 0.18s ease-out; }
+  .byte-eye { transform-box: fill-box; transform-origin: center; animation: byteBlink 5.3s infinite; }
+  @keyframes byteBlink { 0%, 92%, 100% { transform: scaleY(1); } 94.5% { transform: scaleY(0.1); } }
+  .byte-mouth-open { opacity: 0; }
+  #guide.talking .byte-mouth { animation: byteTalkA 0.3s steps(1) infinite; }
+  #guide.talking .byte-mouth-open { animation: byteTalkB 0.3s steps(1) infinite; }
+  @keyframes byteTalkA { 0% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes byteTalkB { 0% { opacity: 0; } 50% { opacity: 1; } }
+  .byte-bulb { transition: fill 0.2s; }
+  #guide.talking .byte-bulb, #guide.open .byte-bulb { animation: byteBulb 0.55s ease-in-out infinite alternate; }
+  @keyframes byteBulb { from { fill: #ffb87a; } to { fill: #fff4dc; } }
+  .guide-bubble { position: absolute; left: 8px; bottom: 84px; width: max-content; max-width: min(330px, calc(100vw - 44px)); padding: 13px 34px 13px 16px; background: rgba(24, 16, 11, 0.93); border: 1px solid rgba(255, 200, 140, 0.28); border-radius: 16px 16px 16px 5px; color: #f0d9b6; font-size: 13px; line-height: 1.55; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0; transform: translateY(10px) scale(0.95); transform-origin: bottom left; transition: opacity 0.2s ease, transform 0.28s cubic-bezier(.2, .9, .25, 1.25); pointer-events: none; }
+  .guide-bubble.visible { opacity: 1; transform: none; pointer-events: auto; }
+  .guide-tag { display: block; margin-bottom: 4px; font-size: 9px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: #ffb87a; }
+  .guide-tag:empty { display: none; }
+  .guide-bubble p { margin: 0; min-height: 1.55em; }
+  .guide-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .guide-actions:empty { display: none; }
+  .guide-btn { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255, 200, 140, 0.34); background: rgba(255, 200, 140, 0.07); color: #ffd9a8; font: 600 11px/1.1 inherit; font-family: inherit; letter-spacing: 0.03em; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s; touch-action: manipulation; }
+  .guide-btn:hover { background: rgba(255, 184, 122, 0.16); border-color: rgba(255, 184, 122, 0.6); color: #fff; }
+  .guide-btn:active { transform: scale(0.96); }
+  .guide-btn.primary { background: #ffb87a; color: #1c1612; border-color: #ffd9a8; }
+  .guide-btn.primary:hover { background: #ffc890; color: #1c1612; }
+  .guide-x { position: absolute; top: 7px; right: 8px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #d4c5ad; font-size: 17px; line-height: 1; cursor: pointer; opacity: 0.6; font-family: inherit; }
+  .guide-x:hover { opacity: 1; color: #fff; background: rgba(255, 200, 140, 0.1); }
+  .guide-panel { position: absolute; left: 4px; bottom: 86px; width: 350px; max-width: calc(100vw - 36px); max-height: min(64vh, 540px); display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(32, 22, 16, 0.97), rgba(20, 14, 10, 0.97)); border: 1px solid rgba(255, 200, 140, 0.22); border-radius: 18px; box-shadow: 0 26px 70px rgba(0, 0, 0, 0.6); overflow: hidden; animation: guidePanelIn 0.22s cubic-bezier(.2, .9, .25, 1.15); transform-origin: bottom left; }
+  .guide-panel[hidden] { display: none; }
+  @keyframes guidePanelIn { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
+  .guide-head { display: flex; align-items: center; gap: 10px; padding: 13px 44px 12px 16px; border-bottom: 1px solid rgba(255, 200, 140, 0.12); position: relative; }
+  .guide-head .guide-title { flex: 1; min-width: 0; }
+  .guide-head strong { display: block; color: #fff; font-size: 14px; letter-spacing: 0.01em; }
+  .guide-head span { display: block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #ffb87a; opacity: 0.85; margin-top: 2px; }
+  .guide-head .guide-x { top: 50%; transform: translateY(-50%); right: 10px; }
+  .guide-quiet { padding: 6px 10px; font-size: 10px; }
+  .guide-log { flex: 1; min-height: 120px; overflow-y: auto; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; scrollbar-color: rgba(255, 184, 122, 0.35) transparent; overscroll-behavior: contain; }
+  .guide-msg { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 12.5px; line-height: 1.5; white-space: pre-line; }
+  .guide-msg.bot { align-self: flex-start; background: rgba(255, 200, 140, 0.07); border: 1px solid rgba(255, 200, 140, 0.14); color: #f0d9b6; border-bottom-left-radius: 5px; }
+  .guide-msg.me { align-self: flex-end; background: #ffb87a; color: #1c1612; border-bottom-right-radius: 5px; font-weight: 500; }
+  .guide-msg .guide-actions { margin-top: 8px; }
+  .guide-head, .guide-chips, .guide-form { flex-shrink: 0; }
+  .guide-chips { display: flex; gap: 6px; padding: 8px 16px 2px; overflow-x: auto; scrollbar-width: none; }
+  .guide-chips::-webkit-scrollbar { display: none; }
+  .guide-chips .guide-btn { flex: 0 0 auto; }
+  .guide-form { display: flex; gap: 8px; padding: 10px 14px 14px; }
+  .guide-form input { flex: 1; min-width: 0; height: 40px; padding: 0 15px; border-radius: 999px; border: 1px solid rgba(255, 200, 140, 0.24); background: rgba(0, 0, 0, 0.28); color: #fff; font: 14px inherit; font-family: inherit; outline: none; }
+  .guide-form input:focus { border-color: rgba(255, 184, 122, 0.7); }
+  .guide-form input::placeholder { color: rgba(240, 217, 182, 0.45); }
+  .guide-form button { flex: 0 0 40px; height: 40px; border-radius: 50%; border: 0; background: #ffb87a; color: #1c1612; font-size: 17px; font-weight: 700; cursor: pointer; }
+  @media (max-width: 700px) {
+    #guide { left: 8px; top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
+    .guide-bot { width: 58px; height: 58px; }
+    .guide-bubble { top: 64px; bottom: auto; left: 4px; transform-origin: top left; border-radius: 5px 16px 16px 16px; max-width: calc(100vw - 72px); font-size: 12.5px; }
+    .guide-panel { position: fixed; left: 8px; right: 8px; top: calc(72px + env(safe-area-inset-top)); bottom: auto; width: auto; max-width: none; max-height: 62vh; transform-origin: top left; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .byte-float, .byte-shadow, .byte-eye, #guide.talking .byte-mouth, #guide.talking .byte-mouth-open, #guide.talking .byte-bulb { animation: none !important; }
+  }
+
   /* ---------- RESPONSIVE / TOUCH ---------- */
   /* coarse pointer = touch device. Hover-tooltips never trigger so suppress
      them to avoid empty rendering, and grow tap targets where useful. */
@@ -740,6 +812,59 @@
   <div id="prism-crt"></div>
   <div id="prism-scan"></div>
   <button id="prism-exit" type="button" aria-label="Exit Painted Crowns">↩ Exit Painted Crowns</button>
+</div>
+
+<!-- BYTE — the robot guide: tips, a little chat, and guided camera tours -->
+<div id="guide">
+  <div id="guide-bubble" class="guide-bubble" role="status" aria-live="polite">
+    <span class="guide-tag" id="guide-tag"></span>
+    <p id="guide-text"></p>
+    <div class="guide-actions" id="guide-actions"></div>
+    <button class="guide-x" id="guide-bubble-x" type="button" aria-label="Dismiss">×</button>
+  </div>
+  <div id="guide-panel" class="guide-panel" role="dialog" aria-label="Chat with Byte, your guide" hidden>
+    <div class="guide-head">
+      <div class="guide-title"><strong>Byte</strong><span>your cabin guide</span></div>
+      <button class="guide-btn guide-quiet" id="guide-quiet" type="button">Mute tips</button>
+      <button class="guide-x" id="guide-close" type="button" aria-label="Close chat">×</button>
+    </div>
+    <div class="guide-log" id="guide-log" aria-live="polite"></div>
+    <div class="guide-chips" id="guide-chips"></div>
+    <form class="guide-form" id="guide-form" autocomplete="off">
+      <input id="guide-input" type="text" enterkeyhint="send" maxlength="160" placeholder="Ask about games, physics, books…" aria-label="Ask Byte a question">
+      <button type="submit" aria-label="Send">↑</button>
+    </form>
+  </div>
+  <button id="guide-bot" class="guide-bot" type="button" aria-label="Chat with Byte, your guide" aria-expanded="false" aria-controls="guide-panel">
+    <svg viewBox="0 0 72 72" aria-hidden="true">
+      <defs>
+        <radialGradient id="byteGlow"><stop offset="0" stop-color="#ffd9a8" stop-opacity="0.95"/><stop offset="1" stop-color="#ffb87a" stop-opacity="0"/></radialGradient>
+        <linearGradient id="byteShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff5e4"/><stop offset="1" stop-color="#e2c8a4"/></linearGradient>
+        <linearGradient id="byteFace" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1d16"/><stop offset="1" stop-color="#140e0a"/></linearGradient>
+      </defs>
+      <ellipse class="byte-shadow" cx="36" cy="69" rx="14" ry="2.6" fill="#000"/>
+      <g class="byte-float">
+        <line x1="36" y1="15" x2="36" y2="7.5" stroke="#8a6646" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="36" cy="6" r="6.5" fill="url(#byteGlow)"/>
+        <circle class="byte-bulb" cx="36" cy="6" r="3.2" fill="#ffb87a"/>
+        <rect x="6.5" y="25.5" width="6.5" height="14" rx="3.25" fill="#c9a37a"/>
+        <rect x="59" y="25.5" width="6.5" height="14" rx="3.25" fill="#c9a37a"/>
+        <rect x="11" y="14" width="50" height="38" rx="15" fill="url(#byteShell)" stroke="#8a6646" stroke-width="1.6"/>
+        <rect x="17" y="21" width="38" height="24" rx="10" fill="url(#byteFace)"/>
+        <path d="M21 24.5 Q24 22.6 29 22.4" stroke="#fff" stroke-opacity="0.12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <g class="byte-eyes">
+          <ellipse class="byte-eye" cx="28" cy="32" rx="3.6" ry="4.5" fill="#ffc48a"/>
+          <ellipse class="byte-eye" cx="44" cy="32" rx="3.6" ry="4.5" fill="#ffc48a"/>
+        </g>
+        <path class="byte-mouth" d="M32.5 39.6 Q36 42.4 39.5 39.6" stroke="#ffc48a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <ellipse class="byte-mouth-open" cx="36" cy="40.4" rx="2.6" ry="2" fill="#ffc48a"/>
+        <circle cx="21.6" cy="39" r="2.2" fill="#ff8f7a" opacity="0.45"/>
+        <circle cx="50.4" cy="39" r="2.2" fill="#ff8f7a" opacity="0.45"/>
+        <rect x="24" y="51" width="24" height="11.5" rx="5.75" fill="url(#byteShell)" stroke="#8a6646" stroke-width="1.6"/>
+        <circle class="byte-bulb" cx="36" cy="56.8" r="2.1" fill="#ffb87a"/>
+      </g>
+    </svg>
+  </button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -3532,6 +3657,8 @@ while (treePositions.length < 110 && attempts < 2400) {
     requestAnimationFrame(() => placeTreesInChunks(positions, end, forest));
   } else {
     replaceSnowCaps(bakeStaticMeshes(forest, { allowTransparent: true }));
+    // the merged forest bends gently in the wind (see FX)
+    for (const m of forest.children) if (m.userData.baked) addWindSway(m.material, 0.035);
     outsideGroup.add(forest);
   }
 })(treePositions, 0, new THREE.Group());
@@ -4025,24 +4152,8 @@ let campfireWetness = 0;
   fire.add(fireGlow);
   campfireGlowLight = fireGlow;
 
-  // SMOKE — gray puffs that rise from the wet logs when it's raining or
-  // storming and the fire's been put out. Hidden under clear/cloudy/snow.
-  for (let i = 0; i < 14; i++) {
-    const s = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22 + Math.random() * 0.10, 8, 6),
-      new THREE.MeshBasicMaterial({
-        color: 0x9c9c9c, transparent: true, opacity: 0,
-        depthWrite: false
-      })
-    );
-    s.userData = {
-      age: Math.random() * 3.5,           // staggered initial ages
-      seed: Math.random() * Math.PI * 2,
-      baseY: 0.4
-    };
-    fire.add(s);
-    campfireSmoke.push(s);
-  }
+  // SMOKE from the wet logs (rain / storm) is a soft GPU particle plume —
+  // see FX below; campfireSmoke stays empty for the legacy loop.
   // campsite is in front of the cabin (porch / ocean side, -Z), in the
   // grass strip between the back porch (z = -7) and the cliff edge (z = -30)
   fire.position.set(-1.2, 0, -16);
@@ -6888,8 +6999,10 @@ function syncAmbient() {
 // react to weather changes (setWeather already exists; wrap it)
 const _origSetWeather = setWeather;
 setWeather = function(name) {
+  const changed = weather.target !== name;
   _origSetWeather(name);
   syncAmbient();
+  if (changed) window.dispatchEvent(new CustomEvent('world:weather', { detail: name }));
 };
 // also call syncAmbient periodically so day/night transitions update ambient
 setInterval(syncAmbient, 4000);
@@ -7079,7 +7192,7 @@ function attachInfoIcon(mesh) {
   const iconSize = touchDevice ? 0.36 : 0.22;
   sprite.scale.set(iconSize, iconSize, 1);
   sprite.renderOrder = 999;
-  sprite.userData = { mesh, yOffset, bob: Math.random() * Math.PI * 2 };
+  sprite.userData = { mesh, yOffset, bob: Math.random() * Math.PI * 2, size: iconSize };
   scene.add(sprite);
   infoIcons.push(sprite);
 }
@@ -7216,26 +7329,7 @@ const fireplaceInteriorParts = [];
   fireLight.position.set(massFrontX - 0.4, 0.8, FIRE_Z);
   root.add(fireLight);
 
-  // ---------- chimney smoke (exits the cap) ----------
-  const baseSmokeMat = new THREE.MeshBasicMaterial({
-    color: 0xb8b6b3, transparent: true, opacity: 0.55, depthWrite: false
-  });
-  const smokeBaseY = stackY + stackH / 2 + 0.18;
-  for (let i = 0; i < 14; i++) {
-    const s = new THREE.Mesh(
-      new THREE.SphereGeometry(0.20 + Math.random() * 0.14, 8, 6),
-      baseSmokeMat.clone()
-    );
-    s.userData = {
-      age: Math.random() * 4.0,
-      seed: Math.random() * Math.PI * 2,
-      baseX: FIRE_X,
-      baseY: smokeBaseY,
-      baseZ: FIRE_Z
-    };
-    root.add(s);
-    smokeParticles.push(s);
-  }
+  // chimney smoke is a soft GPU particle plume — see FX below
 }
 
 // ==========================================================
@@ -7504,13 +7598,17 @@ function flyCameraHome() {
   if (camera.position.distanceToSquared(HOME_CAM) < 0.01 &&
       controls.target.distanceToSquared(HOME_TARGET) < 0.01) return;
   controls.enabled = false;
+  // the guide's close-ups lower the zoom limit — keep it low for the flight
+  // (OrbitControls would otherwise yank the camera outward) and restore after
+  controls.minDistance = Math.min(controls.minDistance, 5.5);
   cameraAnim = {
     fromPos: camera.position.clone(),
     toPos: HOME_CAM.clone(),
     fromTarget: controls.target.clone(),
     toTarget: HOME_TARGET.clone(),
     startT: performance.now() - startTime,
-    duration: 1400 // ms
+    duration: 1400, // ms
+    onDone: () => { controls.minDistance = 5.5; }
   };
 }
 
@@ -8099,6 +8197,7 @@ function updateFP(now) {
       } else {
         FP.state = 'orbit';
         document.body.classList.remove('fp-active'); // restore the orbit menu/dock
+        window.dispatchEvent(new CustomEvent('world:fp-exit'));
         if (fpVignette) fpVignette.style.opacity = '0';
         controls.target.copy(HOME_TARGET);
         controls.enabled = true;
@@ -8678,7 +8777,11 @@ function applyTime(t) {
 
   // only touch the DOM when the label actually changes
   const label = timeLabel(t);
-  if (label !== _timeLabelText) { _timeLabelText = label; tlabel.textContent = label; }
+  if (label !== _timeLabelText) {
+    _timeLabelText = label;
+    tlabel.textContent = label;
+    window.dispatchEvent(new CustomEvent('world:time', { detail: label }));
+  }
 }
 
 // Final sky colors, every frame: the time-of-day horizon/zenith pair, washed
@@ -8975,44 +9078,24 @@ if (discResetBtn) {
   });
 }
 
-// ----- ONBOARDING HINT -----
-// First-time visitors get a small banner pointing out that objects in the
-// scene are clickable. Dismissed on first discovery OR on close button OR
-// after 14 seconds. Stored in localStorage so return visitors don't see it.
+// ----- ONBOARDING -----
+// Byte (the robot guide, see below) welcomes first-time visitors and points
+// out that objects are clickable. The welcome counts as seen on the first
+// discovery or once they pick an option; stored in localStorage so return
+// visitors get a short "welcome back" instead.
 let hintShown = false;
 function dismissOnboardingHint() {
-  const el = document.getElementById('onboarding-hint');
-  if (!el || !hintShown) return;
+  if (!hintShown) return;
   hintShown = false;
-  el.classList.remove('visible');
   try { localStorage.setItem(HINT_STORAGE_KEY, '1'); } catch (e) {}
-  setTimeout(() => el.parentNode && el.parentNode.removeChild(el), 400);
 }
 function maybeShowOnboardingHint() {
-  let seen = false;
-  try { seen = !!localStorage.getItem(HINT_STORAGE_KEY); } catch (e) {}
-  if (seen || discoveredKeys.size > 0) return;
-  hintShown = true;
-  const hint = document.createElement('div');
-  hint.id = 'onboarding-hint';
-  hint.innerHTML = `
-    <div class="hint-arrow"></div>
-    <div class="hint-body">
-      <strong>${QUALITY.coarse ? 'Tap' : 'Click'} anything to explore</strong>
-      <span>Each object opens a project. Find them all to unlock the firework show.</span>
-    </div>
-    <button class="hint-x" type="button" aria-label="Dismiss">×</button>
-  `;
-  document.body.appendChild(hint);
-  // animate in next frame
-  requestAnimationFrame(() => hint.classList.add('visible'));
-  hint.querySelector('.hint-x').addEventListener('click', e => { e.stopPropagation(); dismissOnboardingHint(); });
-  // auto-dismiss after 14 s
-  setTimeout(() => dismissOnboardingHint(), 14000);
+  // wait for the loading screen to clear so the welcome is actually seen
+  const loader = document.getElementById('loading');
+  if (loader && !loader.classList.contains('hidden')) { setTimeout(maybeShowOnboardingHint, 400); return; }
+  guide.greet();
 }
-// kick it off after the loading screen fades — defer slightly so it doesn't
-// fight the load animation
-setTimeout(maybeShowOnboardingHint, 1400);
+setTimeout(maybeShowOnboardingHint, 1800);
 // ----- Persistence: discoveries are saved to localStorage so progress
 // survives page reloads. The hint banner is also gated by this so it only
 // shows for genuinely-new visitors.
@@ -9095,6 +9178,7 @@ function markDiscovered(key) {
   saveDiscoveries();
   // dismiss the onboarding hint as soon as the user has clicked anything
   dismissOnboardingHint();
+  window.dispatchEvent(new CustomEvent('world:discover', { detail: { key, count: discoveredKeys.size } }));
   // wait until the user closes the LAST project modal before celebrating —
   // that way they get to read the final project, then we fly the camera out
   // to a panoramic view and start the firework show.
@@ -9124,6 +9208,10 @@ function getFireworkMesh(color) {
   }
   m.material.color.setHex(color);
   m.material.opacity = 1.0;
+  // additive sparks glow against a night sky but wash out to white puffs in
+  // daylight — use plain colored sparks while the sky is bright
+  const night = starsPoints ? starsPoints.userData.targetOpacity || 0 : 0;
+  m.material.blending = night > 0.4 ? THREE.AdditiveBlending : THREE.NormalBlending;
   m.visible = true;
   return m;
 }
@@ -9155,6 +9243,9 @@ let celebrationActive = false;
 function triggerCelebration() {
   if (celebrationActive) return;
   celebrationActive = true;
+  window.dispatchEvent(new CustomEvent('world:celebrate'));
+  // a confetti fountain over the roof to go with the fireworks
+  for (let i = 0; i < 5; i++) setTimeout(() => fxBurst(new THREE.Vector3((Math.random() - 0.5) * 6, ROOM.h + 3.5, (Math.random() - 0.5) * 6), 'confetti', 90), 300 + i * 650);
   // banner
   const banner = document.getElementById('celebration');
   banner.classList.add('visible');
@@ -9228,15 +9319,22 @@ renderer.domElement.addEventListener('pointerup', e => {
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   checkHover();
   if (!hovered) return;
-  if (hovered.userData.key === 'door') {
+  const hit = hovered;
+  if (hit.userData.key === 'door') {
     markDoorVisited(); // dim the door icon like other interactives (no counter)
     setSeeThrough(true); // X-ray ON so user can see in once camera arrives
     flyCameraHome();
-  } else if (hovered.userData.key === 'enterFP') {
+  } else if (hit.userData.key === 'enterFP') {
     enterFirstPerson();
   } else {
-    markDiscovered(hovered.userData.key);
-    openModal(hovered.userData.key);
+    // a little juice: the object pops and throws sparkles (confetti for a
+    // brand-new find), and the card opens a beat later so you see it
+    const key = hit.userData.key;
+    const isNew = !discoveredKeys.has(key);
+    popMesh(hit);
+    fxBurst(new THREE.Box3().setFromObject(hit).getCenter(new THREE.Vector3()), isNew ? 'confetti' : 'sparkle', isNew ? 70 : 34);
+    markDiscovered(key);
+    setTimeout(() => openModal(key), 220);
   }
   // touch screens have no hover-out, so drop the highlight + tooltip now
   // rather than leaving the tapped object glowing after its card closes
@@ -9348,6 +9446,480 @@ function flyCameraToCelebration() {
 modalClose.onclick = closeModal;
 modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
 window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ==========================================================
+// FX — WIND, GRASS & PARTICLES
+// The living layer of the world: wind-swept grass that parts around you in
+// first-person, embers rising off the fires, soft chimney smoke, fireflies
+// after dark, pollen drifting through the sunlight, rain splashes, glints on
+// the water and sparkle bursts when you discover something. Everything
+// animates on the GPU from a few shared uniforms, so the per-frame CPU cost
+// is close to zero; phones get smaller particle counts.
+// ==========================================================
+const FX = {
+  time: { value: 0 },                                  // seconds
+  wind: { value: 1 },                                  // gust strength — storms blow harder
+  light: { value: new THREE.Color(1, 1, 1) },          // scene light level for unlit effects
+  pxScale: { value: 600 },                             // world size → pixels at unit depth
+  player: { value: new THREE.Vector3(0, -100, 0) },    // first-person feet (grass parts around them)
+  snow: { value: 0 },
+};
+const fxCount = (desktop, phone) => (QUALITY.mobile ? phone : desktop);
+
+// ---- GRASS ----
+// Tufts of single-triangle blades scattered around the cabin, lit like the
+// ground they grow from (Lambert + the sun's shadow map, normals pointing
+// up), with wind, snow and first-person pushing injected into the vertex
+// shader.
+function grassBlocked(x, z) {
+  if (Math.abs(x) < 4.75 && z > -4.75 && z < 4.75) return true;      // cabin
+  if (Math.abs(x) < 3.3 && z > -8.0 && z <= -4.5) return true;       // back porch + steps
+  if ((x + 1.2) ** 2 + (z + 16) ** 2 < 1.4 ** 2) return true;         // fire ring
+  if ((x + 5.3) ** 2 + (z + 17) ** 2 < 1.9 ** 2) return true;         // tent
+  const tx = x - 8.5, tz = z - 4.5, c = Math.cos(0.35), s = Math.sin(0.35);
+  if (Math.abs(tx * c + tz * s) < 1.2 && Math.abs(-tx * s + tz * c) < 2.45) return true;   // truck
+  if (x > -5.8 && x < -1.6 && z < -27.8) return true;                // stair deck
+  return z < CLIFF_EDGE_Z + 0.9;                                     // cliff lip
+}
+const grass = (() => {
+  const TUFTS = fxCount(7000, 2400);
+  const MAX_BLADES = TUFTS * 4;
+  const pos = new Float32Array(MAX_BLADES * 9), nor = new Float32Array(MAX_BLADES * 9);
+  const col = new Float32Array(MAX_BLADES * 9), base = new Float32Array(MAX_BLADES * 9), tip = new Float32Array(MAX_BLADES * 3);
+  let v = 0, tufts = 0, guard = 0;
+  while (tufts < TUFTS && guard++ < TUFTS * 12) {
+    const x = (Math.random() * 2 - 1) * 27, z = -28 + Math.random() * 53;
+    const r = Math.hypot(x, z);
+    if (Math.random() > Math.min(1, 1.25 - r / 28)) continue;          // thins out away from the cabin
+    if (grassBlocked(x, z)) continue;
+    tufts++;
+    // the same broad meadow patches as the ground's vertex colors
+    const patch = Math.sin(x * 0.047 + 1.3) * Math.cos(z * 0.053 - 0.7) + 0.5 * Math.sin((x - z) * 0.019 + 2.1);
+    const dry = Math.max(0, Math.sin(x * 0.021 - z * 0.034 + 0.4)) * 0.6 + Math.random() * 0.15;
+    const blades = 3 + Math.floor(Math.random() * 2);
+    for (let b = 0; b < blades; b++) {
+      const bx = x + (Math.random() - 0.5) * 0.16, bz = z + (Math.random() - 0.5) * 0.16;
+      const by = terrainHeight(bx, bz);
+      const h = 0.2 + Math.random() * 0.26 + Math.min(0.12, r * 0.004);
+      const w = 0.035 + Math.random() * 0.03;
+      const a = Math.random() * Math.PI;
+      const cx = Math.cos(a) * w, cz = Math.sin(a) * w;
+      const lx = (Math.random() - 0.5) * 0.14, lz = (Math.random() - 0.5) * 0.14;
+      // linear albedo close to the ground texture's green: dark roots, brighter tips
+      const g = 0.92 + patch * 0.08 + (Math.random() - 0.5) * 0.14;
+      const cr = 0.115 * g + dry * 0.06, cg = 0.21 * g + dry * 0.025, cb = 0.042 * g;
+      const verts = [[bx - cx, by, bz - cz, 0.72], [bx + cx, by, bz + cz, 0.72], [bx + lx, by + h, bz + lz, 1.5]];
+      for (let k = 0; k < 3; k++) {
+        const [px, py, pz, shade] = verts[k];
+        pos.set([px, py, pz], v * 3);
+        nor.set([0, 1, 0], v * 3);
+        col.set([cr * shade, cg * shade, cb * shade], v * 3);
+        base.set([bx, by, bz], v * 3);
+        tip[v] = k === 2 ? 1 : 0;
+        v++;
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, v * 3), 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor.subarray(0, v * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col.subarray(0, v * 3), 3));
+  geo.setAttribute('aBase', new THREE.BufferAttribute(base.subarray(0, v * 3), 3));
+  geo.setAttribute('aTip', new THREE.BufferAttribute(tip.subarray(0, v), 1));
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  mat.onBeforeCompile = shader => {
+    shader.uniforms.uTime = FX.time;
+    shader.uniforms.uWind = FX.wind;
+    shader.uniforms.uPlayer = FX.player;
+    shader.uniforms.uSnow = FX.snow;
+    shader.vertexShader = `uniform float uTime, uWind, uSnow;
+uniform vec3 uPlayer;
+attribute vec3 aBase;
+attribute float aTip;
+` + shader.vertexShader
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+  float bladeH = transformed.y - aBase.y;
+  // rolling gusts sweep across the meadow, plus a quick per-blade flutter
+  float gust = sin(uTime * 1.25 - aBase.x * 0.16 + aBase.z * 0.11) * 0.5 + 0.5;
+  float flutter = sin(uTime * 5.3 + aBase.x * 3.1 + aBase.z * 2.7);
+  float bend = (0.14 + gust * 0.36 + flutter * 0.06) * uWind * bladeH;
+  transformed.x += bend * 0.9;
+  transformed.z += bend * 0.42;
+  transformed.y -= bend * bend * 0.8;
+  // first-person: the blades part around your feet
+  vec2 away = aBase.xz - uPlayer.xz;
+  float dist = length(away);
+  float push = (1.0 - smoothstep(0.1, 1.15, dist)) * bladeH;
+  transformed.xz += away / max(dist, 0.001) * push * 0.85;
+  transformed.y -= push * 0.55;
+  // snow weighs them down
+  transformed.y = mix(transformed.y, aBase.y + (transformed.y - aBase.y) * 0.35, uSnow);`)
+      .replace('#include <color_vertex>', `#include <color_vertex>
+  vColor = mix(vColor, vec3(0.86, 0.88, 0.92), uSnow * aTip * 0.85);`);
+    // both faces share the up-facing light (no dark back faces)
+    shader.fragmentShader = '#undef DOUBLE_SIDED\n' + shader.fragmentShader;
+  };
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+})();
+
+// ---- shared point-sprite shaders ----
+// Point size = world size × FX.pxScale / depth, clamped; the fragment turns
+// each point into a soft round dot (or a ring for rain splashes).
+const FX_SOFT_DOT = `
+  varying vec3 vColor;
+  varying float vAlpha;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float a = smoothstep(0.5, 0.0, d) * vAlpha;
+    if (a < 0.004) discard;
+    gl_FragColor = vec4(vColor, a);
+  }`;
+function fxPoints(count, attrs, vertexShader, { additive = true, uniforms = {}, fragmentShader = FX_SOFT_DOT, renderOrder = 30 } = {}) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(attrs.position, 3));
+  for (const [name, [arr, size]] of Object.entries(attrs)) {
+    if (name !== 'position') geo.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  const mat = new THREE.ShaderMaterial({
+    uniforms: Object.assign({ uTime: FX.time, uScale: FX.pxScale, uLight: FX.light, uIntensity: { value: 1 }, uMinPx: { value: 0 } }, uniforms),
+    vertexShader, fragmentShader,
+    transparent: true, depthWrite: false,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  pts.renderOrder = renderOrder;
+  scene.add(pts);
+  return pts;
+}
+const FX_POINT_HEAD = `
+  uniform float uTime, uScale, uIntensity, uMinPx;
+  uniform vec3 uLight;
+  attribute vec4 aSeed;
+  varying vec3 vColor;
+  varying float vAlpha;
+  void place(vec3 p, float worldSize) {
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    // uMinPx keeps tiny far-away sparks from vanishing below a pixel
+    gl_PointSize = clamp(worldSize * uScale / max(-mv.z, 0.1), uMinPx, 220.0);
+    gl_Position = projectionMatrix * mv;
+  }`;
+function fxSeeds(n, fill) {
+  const position = new Float32Array(n * 3), seed = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) fill(i, position, seed);
+  return { position, aSeed: [seed, 4] };
+}
+
+// ---- EMBERS — sparks spiralling up off the fireplace and the campfire ----
+const EMBER_VS = FX_POINT_HEAD + `
+  uniform float uRise;
+  void main() {
+    float life = fract(uTime * aSeed.y + aSeed.x);
+    vec3 p = position;
+    p.y += life * uRise;
+    p.x += sin(uTime * 2.3 + aSeed.x * 31.0) * aSeed.z * life;
+    p.z += cos(uTime * 1.9 + aSeed.x * 17.0) * aSeed.z * life;
+    vAlpha = smoothstep(0.0, 0.08, life) * (1.0 - life) * uIntensity * 1.4;
+    vColor = mix(vec3(1.0, 0.86, 0.48), vec3(1.0, 0.32, 0.06), life);
+    place(p, aSeed.w * (1.0 - life * 0.55));
+  }`;
+function makeEmbers(n, x, y, z, spread, rise) {
+  return fxPoints(n, fxSeeds(n, (i, p, s) => {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * spread;
+    p.set([x + Math.cos(a) * r, y, z + Math.sin(a) * r], i * 3);
+    s.set([Math.random(), 0.35 + Math.random() * 0.5, 0.1 + Math.random() * 0.25, 0.035 + Math.random() * 0.04], i * 4);
+  }), EMBER_VS, { uniforms: { uRise: { value: rise }, uMinPx: { value: 1.6 } } });
+}
+const fireplaceSparks = makeEmbers(fxCount(36, 18), FIRE_X - 0.42, 0.34, FIRE_Z, 0.32, 0.85);
+const campfireSparks = makeEmbers(fxCount(70, 34), -1.2, 0.35, -16, 0.28, 2.6);
+
+// ---- SMOKE — soft, lit puffs from the chimney and (when wet) the campfire ----
+const SMOKE_VS = FX_POINT_HEAD + `
+  uniform float uRise;
+  uniform vec3 uTint;
+  void main() {
+    float life = fract(uTime * aSeed.y + aSeed.x);
+    vec3 p = position;
+    p.y += life * uRise;
+    // drifts downwind as it rises, with a lazy wobble
+    p.x += life * life * 1.6 + sin(uTime * 0.7 + aSeed.x * 9.0) * 0.18 * life;
+    p.z += life * life * 0.5 + cos(uTime * 0.6 + aSeed.x * 7.0) * 0.18 * life;
+    vAlpha = smoothstep(0.0, 0.12, life) * (1.0 - life) * uIntensity * 0.62;
+    vColor = uTint * clamp(uLight, 0.14, 1.15);
+    place(p, aSeed.w * (0.7 + life * 2.4));
+  }`;
+function makeSmoke(n, x, y, z, rise, tint) {
+  return fxPoints(n, fxSeeds(n, (i, p, s) => {
+    p.set([x + (Math.random() - 0.5) * 0.25, y, z + (Math.random() - 0.5) * 0.25], i * 3);
+    s.set([i / n, 0.1 + Math.random() * 0.05, 0, 0.55 + Math.random() * 0.35], i * 4);
+  }), SMOKE_VS, { additive: false, renderOrder: 25, uniforms: { uRise: { value: rise }, uTint: { value: new THREE.Color(tint) } } });
+}
+const chimneySmoke = makeSmoke(fxCount(26, 16), FIRE_X, ROOM.h + 3.55, FIRE_Z, 4.2, 0xd8d2ca);
+const campfireSmokeFx = makeSmoke(fxCount(22, 14), -1.2, 0.35, -16, 3.2, 0x9c9a96);
+
+// ---- FIREFLIES — wander and blink around the yard after dark ----
+const FIREFLY_VS = FX_POINT_HEAD + `
+  void main() {
+    float t = uTime * aSeed.y + aSeed.x * 6.2832;
+    vec3 p = position + vec3(sin(t) * aSeed.z, sin(t * 1.37 + 1.0) * 0.4, cos(t * 0.83) * aSeed.z);
+    float blink = pow(0.5 + 0.5 * sin(uTime * (1.1 + aSeed.y * 2.0) + aSeed.x * 40.0), 3.0);
+    vAlpha = uIntensity * (0.15 + 0.85 * blink);
+    vColor = vec3(0.78, 1.0, 0.42);
+    place(p, aSeed.w * (0.7 + 0.3 * blink));
+  }`;
+const fireflies = fxPoints(fxCount(70, 32), fxSeeds(fxCount(70, 32), (i, p, s) => {
+  let x, z;
+  do { const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * 20; x = Math.cos(a) * r; z = Math.sin(a) * r; }
+  while (grassBlocked(x, z));
+  p.set([x, terrainHeight(x, z) + 0.4 + Math.random() * 1.6, z], i * 3);
+  s.set([Math.random(), 0.12 + Math.random() * 0.2, 0.6 + Math.random() * 1.4, 0.16 + Math.random() * 0.1], i * 4);
+}), FIREFLY_VS, { uniforms: { uMinPx: { value: 3.5 } } });
+
+// ---- POLLEN + DUST — specks drifting on the breeze, catching the light ----
+const DRIFT_VS = FX_POINT_HEAD + `
+  uniform vec3 uBoxMin, uBoxSize, uTint;
+  uniform float uDrift;
+  void main() {
+    vec3 p = position;
+    p.x += uTime * uDrift * (0.5 + aSeed.y);
+    p.z += uTime * uDrift * 0.35 * (0.5 + aSeed.y);
+    p.y += sin(uTime * (0.3 + aSeed.y) + aSeed.x * 20.0) * 0.25;
+    p = uBoxMin + mod(p - uBoxMin, uBoxSize);       // wrap inside the box
+    float tw = 0.6 + 0.4 * sin(uTime * 2.0 + aSeed.x * 50.0);
+    vAlpha = uIntensity * tw;
+    vColor = uTint;
+    place(p, aSeed.w);
+  }`;
+function makeDrift(n, min, size, drift, tint, sizeRange) {
+  return fxPoints(n, fxSeeds(n, (i, p, s) => {
+    p.set([min[0] + Math.random() * size[0], min[1] + Math.random() * size[1], min[2] + Math.random() * size[2]], i * 3);
+    s.set([Math.random(), Math.random(), 0, sizeRange[0] + Math.random() * (sizeRange[1] - sizeRange[0])], i * 4);
+  }), DRIFT_VS, { uniforms: {
+    uBoxMin: { value: new THREE.Vector3(...min) }, uBoxSize: { value: new THREE.Vector3(...size) },
+    uDrift: { value: drift }, uTint: { value: new THREE.Color(tint) },
+  } });
+}
+const pollen = makeDrift(fxCount(240, 100), [-26, 0.2, -27], [52, 4.6, 48], 0.35, 0xfff1cc, [0.035, 0.07]);
+const roomDust = makeDrift(fxCount(90, 40), [-4.3, 0.3, -4.3], [8.6, 4.4, 8.6], 0.04, 0xffe2b8, [0.02, 0.035]);
+
+// ---- RAIN SPLASHES — rings that open and fade on the ground ----
+const splashTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(255,255,255,1)'; g.lineWidth = 5;
+  g.beginPath(); g.arc(32, 32, 25, 0, Math.PI * 2); g.stroke();
+  return new THREE.CanvasTexture(c);
+})();
+const SPLASH_VS = FX_POINT_HEAD + `
+  void main() {
+    float cycle = uTime * (1.6 + aSeed.y) + aSeed.x;
+    float life = fract(cycle);
+    float k = floor(cycle);
+    vec3 p = position;
+    p.x += (fract(sin(k * 12.9898 + aSeed.x * 78.2) * 43758.5) - 0.5) * 1.2;
+    p.z += (fract(sin(k * 39.3468 + aSeed.x * 11.1) * 24634.6) - 0.5) * 1.2;
+    float on = step(aSeed.z, uIntensity);           // light rain → fewer splashes
+    vAlpha = on * (1.0 - life) * 0.55;
+    vColor = vec3(0.85, 0.9, 1.0) * clamp(uLight, 0.3, 1.0);
+    place(p, aSeed.w * (0.25 + life));
+  }`;
+const rainSplashes = fxPoints(fxCount(260, 110), fxSeeds(fxCount(260, 110), (i, p, s) => {
+  let x, z;
+  do { const a = Math.random() * Math.PI * 2, r = 5.4 + Math.random() * 18; x = Math.cos(a) * r; z = Math.sin(a) * r; }
+  while (grassBlocked(x, z) || (Math.abs(x) < 6 && z > -8.5 && z < 6));
+  p.set([x, terrainHeight(x, z) + 0.03, z], i * 3);
+  s.set([Math.random(), Math.random() * 0.6, Math.random(), 0.32 + Math.random() * 0.2], i * 4);
+}), SPLASH_VS, { uniforms: { uTex: { value: splashTex } }, fragmentShader: `
+  uniform sampler2D uTex;
+  varying vec3 vColor;
+  varying float vAlpha;
+  void main() {
+    float a = texture2D(uTex, gl_PointCoord).a * vAlpha;
+    if (a < 0.004) discard;
+    gl_FragColor = vec4(vColor, a);
+  }` });
+
+// ---- GLINTS — sparkles dancing on the open water ----
+const GLINT_VS = FX_POINT_HEAD + `
+  void main() {
+    float s = pow(max(0.0, sin(uTime * (0.8 + aSeed.y * 1.6) + aSeed.x * 60.0)), 18.0);
+    vAlpha = s * uIntensity;
+    vColor = uLight;
+    place(position, aSeed.w * (0.5 + s));
+  }`;
+const oceanGlints = fxPoints(fxCount(460, 170), fxSeeds(fxCount(460, 170), (i, p, s) => {
+  p.set([(Math.random() - 0.5) * 280, WATER_Y + 0.12, BEACH_FAR_Z - 3 - Math.pow(Math.random(), 1.6) * 200], i * 3);
+  s.set([Math.random(), Math.random(), 0, 0.35 + Math.random() * 0.45], i * 4);
+}), GLINT_VS, { uniforms: { uMinPx: { value: 1.5 } } });
+
+// ---- BURSTS — sparkles when you open a project, confetti on a new find ----
+const BURST_VS = `
+  uniform float uTime, uScale;
+  attribute vec3 aVel;
+  attribute vec3 aColor;
+  attribute vec2 aStart;   // start time, size
+  varying vec3 vColor;
+  varying float vAlpha;
+  void main() {
+    float age = uTime - aStart.x;
+    if (age < 0.0 || age > 1.6) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+    // velocity decays (air drag), gravity pulls the confetti back down
+    float drag = (1.0 - exp(-2.6 * age)) / 2.6;
+    vec3 p = position + aVel * drag;
+    p.y -= 1.6 * age * age;
+    vAlpha = 1.0 - smoothstep(0.7, 1.6, age);
+    vColor = aColor;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_PointSize = min(aStart.y * uScale / max(-mv.z, 0.1), 160.0);
+    gl_Position = projectionMatrix * mv;
+  }`;
+const bursts = (() => {
+  const N = fxCount(600, 300);
+  const position = new Float32Array(N * 3), vel = new Float32Array(N * 3), color = new Float32Array(N * 3), start = new Float32Array(N * 2);
+  for (let i = 0; i < N; i++) start[i * 2] = -100;
+  const pts = fxPoints(N, { position, aVel: [vel, 3], aColor: [color, 3], aStart: [start, 2] }, BURST_VS, { renderOrder: 40 });
+  return { pts, N, head: 0 };
+})();
+const BURST_PALETTES = {
+  sparkle: [0xffe2a8, 0xffb87a, 0xfff6e0],
+  confetti: [0xff5a3a, 0xffb84a, 0xfff4a3, 0x9affb3, 0x6cd1ff, 0xb47adf, 0xff8cb6],
+};
+const _burstCol = new THREE.Color();
+function fxBurst(at, kind = 'sparkle', count = 40) {
+  const g = bursts.pts.geometry, pal = BURST_PALETTES[kind] || BURST_PALETTES.sparkle;
+  const P = g.attributes.position, V = g.attributes.aVel, C = g.attributes.aColor, S = g.attributes.aStart;
+  const confetti = kind === 'confetti';
+  for (let k = 0; k < count; k++) {
+    const i = bursts.head;
+    bursts.head = (bursts.head + 1) % bursts.N;
+    const u = Math.random() * 2 - 1, phi = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u);
+    const speed = (confetti ? 2.2 : 1.4) * (0.5 + Math.random());
+    P.setXYZ(i, at.x, at.y, at.z);
+    V.setXYZ(i, r * Math.cos(phi) * speed, Math.abs(u) * speed + (confetti ? 1.8 : 0.8), r * Math.sin(phi) * speed);
+    _burstCol.setHex(pal[Math.floor(Math.random() * pal.length)]);
+    C.setXYZ(i, _burstCol.r, _burstCol.g, _burstCol.b);
+    S.setXY(i, FX.time.value + Math.random() * 0.06, (confetti ? 0.07 : 0.05) * (0.6 + Math.random() * 0.8));
+  }
+  P.needsUpdate = V.needsUpdate = C.needsUpdate = S.needsUpdate = true;
+}
+
+// ---- POP — a quick squash-and-stretch on the object you just opened ----
+const popping = new Map();   // mesh → start time (ms)
+function popMesh(m) {
+  if (!m.userData.baseScale) m.userData.baseScale = m.scale.clone();
+  popping.set(m, performance.now());
+}
+function updatePops(now) {
+  for (const [m, t0] of popping) {
+    const a = (now - t0) / 450;
+    if (a >= 1) { m.scale.copy(m.userData.baseScale); popping.delete(m); continue; }
+    m.scale.copy(m.userData.baseScale).multiplyScalar(1 + Math.sin(a * Math.PI * 2) * 0.12 * (1 - a));
+  }
+}
+
+// ---- TREE SWAY — the merged forest bends gently with the same wind ----
+function addWindSway(material, strength) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.uTime = FX.time;
+    shader.uniforms.uWind = FX.wind;
+    shader.vertexShader = 'uniform float uTime, uWind;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  float swayH = max(0.0, transformed.y - 0.9);
+  float swayT = uTime * 1.05 + transformed.x * 0.13 + transformed.z * 0.09;
+  transformed.x += sin(swayT) * ${strength.toFixed(3)} * swayH * uWind;
+  transformed.z += cos(swayT * 0.83) * ${(strength * 0.7).toFixed(3)} * swayH * uWind;`);
+  };
+  material.needsUpdate = true;
+}
+
+// ---- CONTACT SHADOWS — soft dark pools under furniture and around the cabin ----
+// The sun's shadow map barely reaches the interior, so without these the
+// furniture looks like it floats. One procedural rounded-blob texture; the
+// decals are merged into a single mesh per darkness level.
+const contactShadows = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), img = g.createImageData(128, 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+    const u = Math.abs(x / 63.5 - 1), v = Math.abs(y / 63.5 - 1);
+    const d = Math.pow(Math.pow(u, 4) + Math.pow(v, 4), 0.25);            // rounded-rectangle distance
+    const t = Math.min(1, Math.max(0, (d - 0.3) / 0.7));
+    img.data[(y * 128 + x) * 4 + 3] = Math.round(255 * (1 - t * t * (3 - 2 * t)));
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  const group = new THREE.Group();
+  const mats = {};
+  const matFor = opacity => mats[opacity] || (mats[opacity] = new THREE.MeshBasicMaterial({
+    map: tex, color: 0x000000, transparent: true, opacity, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  }));
+  const add = (x, z, w, d, rot = 0, y = 0.012, opacity = 0.5) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), matFor(opacity));
+    m.rotation.set(-Math.PI / 2, 0, rot);
+    m.position.set(x, y, z);
+    group.add(m);
+  };
+  // interior
+  add(0, -3.38, 4.1, 1.95);                 // desk
+  add(0, -2.5, 1.25, 1.25);                 // desk chair
+  add(-2.6, 2.5, 1.75, 2.6);                // bed
+  add(-4.12, -1.5, 0.95, 2.45);             // bookshelf
+  add(3.55, -2.6, 1.45, 2.15);              // TV stand
+  add(-3.62, 0.6, 1.3, 1.5);                // monitor table
+  add(-3.76, 3.76, 1.2, 1.2, Math.PI / 4);  // arcade cabinet
+  add(2.5, -1.6, 1.5, 1.15, 0.15);          // console + cases
+  add(-3.3, 3.0, 0.85, 0.85);               // plant
+  add(-3.68, -3.68, 0.85, 0.6, -0.6);       // briefcase
+  add(FIRE_X - 0.55, FIRE_Z, 1.05, 2.45);   // hearth
+  // exterior — a soft skirt around the cabin, the porch, truck, tent, camp
+  // (one shared darkness so the exterior decals merge into a single mesh)
+  add(0, 0, 11.6, 11.6, 0, -0.03, 0.36);
+  add(0, -6.1, 7.2, 3.4, 0, -0.03, 0.36);
+  add(8.5, 4.5, 2.9, 5.4, -0.35, -0.03, 0.36);
+  add(-5.3, -17, 2.7, 3.4, -0.45, -0.03, 0.36);
+  add(-1.2, -16, 2.3, 2.3, 0, -0.03, 0.36);
+  add(-1.15, 5.15, 1.9, 1.15, 0, -0.03, 0.36);
+  scene.add(group);
+  return group;   // merged with the rest of the static batching below
+})();
+
+// ---- per-frame FX state ----
+const _fxSize = new THREE.Vector2();
+let fxWind = 1;
+function updateFX(t) {
+  FX.time.value = t / 1000;
+  // pixels per world unit at unit depth — tracks resolution, FOV and render scale
+  renderer.getDrawingBufferSize(_fxSize);
+  FX.pxScale.value = _fxSize.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  // one light level for the unlit effects (smoke, splashes, glints)
+  FX.light.value.copy(ambient.color).multiplyScalar(ambient.intensity * 0.9)
+    .add(_tintCol.copy(sunLight.color).multiplyScalar(sunLight.intensity * 0.55));
+  const w = weather.target;
+  fxWind += ((w === 'storm' ? 2.3 : w === 'rain' ? 1.5 : w === 'overcast' ? 1.2 : 1) - fxWind) * easeK(0.01);
+  FX.wind.value = fxWind;
+  FX.snow.value = snowAccum;
+  // first-person feet part the grass; otherwise park the pusher far away
+  if (FP.state === 'active' && !FP.inBoat) FX.player.value.set(camera.position.x, 0, camera.position.z);
+  else FX.player.value.set(0, -100, 9999);
+
+  const night = starsPoints ? starsPoints.userData.targetOpacity || 0 : 0;
+  const fair = w === 'clear' || w === 'overcast';
+  const dryness = 1 - campfireWetness;
+  const set = (pts, k) => { pts.material.uniforms.uIntensity.value = k; pts.visible = k > 0.01; };
+  set(fireplaceSparks, flames.length && flames[0].visible ? 1 : 0);   // hidden with the right wall in X-ray
+  set(campfireSparks, dryness);
+  set(chimneySmoke, 1);
+  set(campfireSmokeFx, campfireWetness);
+  set(fireflies, fair ? night * (w === 'clear' ? 1 : 0.6) : 0);
+  set(pollen, fair ? (1 - night) * 0.55 : 0);
+  set(roomDust, 0.35 + (1 - night) * 0.25);
+  set(rainSplashes, rainSystem ? Math.min(1, rainSystem.intensity / 1.2) : 0);
+  set(oceanGlints, (0.25 + (1 - night) * 0.75) * (1 - skyWeather * 0.8));
+  bursts.pts.visible = true;
+}
 
 // ==========================================================
 // LIGHT GLOWS — soft additive halos on the fires, lamps and lanterns so
@@ -9600,7 +10172,474 @@ function replaceSnowCaps(replaced) {
   }
   // each cloud's puffs share one material, so a cloud can be a single mesh
   for (const cl of clouds) bakeStaticMeshes(cl, { allowTransparent: true });
+  bakeStaticMeshes(contactShadows, { allowTransparent: true });
 }
+
+// ==========================================================
+// BYTE — THE ROBOT GUIDE
+// A small companion in the corner: greets visitors, drops tips and fun facts,
+// reacts to what's happening (discoveries, nightfall, storms), answers simple
+// questions about David's work and flies the camera to places — including a
+// guided tour of the cabin. It's scripted (keyword matching over the project
+// list), not an AI service, so it works offline on a static site. Other code
+// talks to it through 'world:*' window events to stay decoupled.
+// ==========================================================
+const guide = (() => {
+  const $ = id => document.getElementById(id);
+  const el = $('guide'), bot = $('guide-bot'), bubble = $('guide-bubble');
+  const bubbleTag = $('guide-tag'), bubbleText = $('guide-text'), bubbleActions = $('guide-actions');
+  const panel = $('guide-panel'), log = $('guide-log'), chips = $('guide-chips');
+  const form = $('guide-form'), input = $('guide-input'), quietBtn = $('guide-quiet');
+  const QUIET_KEY = 'portfolio.guideQuiet';
+  const verb = QUALITY.coarse ? 'Tap' : 'Click';
+  let quiet = false;
+  try { quiet = localStorage.getItem(QUIET_KEY) === '1'; } catch (e) {}
+  let hideTimer = 0, typeTimer = 0, talkTimer = 0;
+  let lastActivity = performance.now(), lastSpoke = performance.now(), idleSaid = 0;
+  let greeted = false, bubbleHasActions = false;
+  const once = new Set();
+  const tour = { active: false, i: -1 };
+  const pick = list => list[Math.floor(Math.random() * list.length)];
+
+  // ---------- speech bubble ----------
+  function renderActions(container, actions) {
+    container.innerHTML = '';
+    for (const a of actions) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'guide-btn' + (a.primary ? ' primary' : '');
+      b.textContent = a.label;
+      b.addEventListener('click', e => { e.stopPropagation(); lastActivity = performance.now(); a.run(); });
+      container.appendChild(b);
+    }
+  }
+  function hop() {
+    el.classList.remove('hop');
+    void el.offsetWidth;          // restart the animation
+    el.classList.add('hop');
+    setTimeout(() => el.classList.remove('hop'), 520);
+  }
+  // say(): speak in the bubble (or the chat, when it's open). Unprompted
+  // remarks stay silent while muted, touring, walking around or chatting.
+  function say(text, { actions = [], tag = 'Byte', hold, unprompted = false } = {}) {
+    if (unprompted && (!greeted || quiet || tour.active || FP.state !== 'orbit' || !panel.hidden ||
+        modalBackdrop.classList.contains('visible') ||
+        (bubbleHasActions && bubble.classList.contains('visible')))) return false;
+    addMessage('bot', text, actions);
+    lastSpoke = performance.now();
+    el.classList.add('talking');
+    clearTimeout(talkTimer);
+    talkTimer = setTimeout(() => el.classList.remove('talking'), Math.min(2600, 380 + text.length * 22));
+    if (!panel.hidden) return true;
+    clearTimeout(hideTimer);
+    clearInterval(typeTimer);
+    bubbleTag.textContent = tag;
+    renderActions(bubbleActions, actions);
+    bubbleHasActions = actions.length > 0;
+    bubble.classList.add('visible');
+    // typewriter, by code point so emoji never split
+    const chars = Array.from(text);
+    const step = Math.max(1, Math.round(chars.length / 45));
+    let n = 0;
+    bubbleText.textContent = '';
+    typeTimer = setInterval(() => {
+      n = Math.min(chars.length, n + step);
+      bubbleText.textContent = chars.slice(0, n).join('');
+      if (n >= chars.length) clearInterval(typeTimer);
+    }, 16);
+    hop();
+    const ms = hold != null ? hold : actions.length ? 18000 : Math.min(12000, 4200 + text.length * 45);
+    hideTimer = setTimeout(hideBubble, ms);
+    return true;
+  }
+  function hideBubble() {
+    clearTimeout(hideTimer);
+    bubble.classList.remove('visible');
+  }
+  bubble.addEventListener('pointerenter', () => clearTimeout(hideTimer));
+  bubble.addEventListener('pointerleave', () => {
+    if (!tour.active) hideTimer = setTimeout(hideBubble, 5000);
+  });
+  $('guide-bubble-x').addEventListener('click', e => {
+    e.stopPropagation();
+    hideBubble();
+    if (hintShown) dismissOnboardingHint();
+  });
+
+  // ---------- chat panel ----------
+  function addMessage(who, text, actions = []) {
+    const m = document.createElement('div');
+    m.className = 'guide-msg ' + who;
+    m.textContent = text;
+    if (actions.length && who === 'bot') {
+      const row = document.createElement('div');
+      row.className = 'guide-actions';
+      renderActions(row, actions);
+      m.appendChild(row);
+    }
+    log.appendChild(m);
+    while (log.children.length > 50) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+  }
+  function openPanel() {
+    hideBubble();
+    closeAllDockPopovers(null);
+    panel.hidden = false;
+    el.classList.add('open');
+    bot.setAttribute('aria-expanded', 'true');
+    if (!log.children.length) addMessage('bot', 'Hi! Ask me about David\'s work, or pick something below. 🙂');
+    log.scrollTop = log.scrollHeight;
+    if (!QUALITY.coarse) input.focus();
+  }
+  function closePanel() {
+    panel.hidden = true;
+    el.classList.remove('open');
+    bot.setAttribute('aria-expanded', 'false');
+  }
+  bot.addEventListener('click', e => {
+    e.stopPropagation();
+    hop();
+    if (panel.hidden) openPanel(); else closePanel();
+  });
+  $('guide-close').addEventListener('click', e => { e.stopPropagation(); closePanel(); });
+  panel.addEventListener('click', e => e.stopPropagation());
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q) return;
+    input.value = '';
+    addMessage('me', q);
+    setTimeout(() => respond(q), 260);
+  });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !panel.hidden) closePanel();
+  });
+  function refreshQuiet() {
+    quietBtn.textContent = quiet ? 'Unmute tips' : 'Mute tips';
+    quietBtn.setAttribute('aria-pressed', String(quiet));
+  }
+  quietBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    quiet = !quiet;
+    try { localStorage.setItem(QUIET_KEY, quiet ? '1' : '0'); } catch (err) {}
+    refreshQuiet();
+    addMessage('bot', quiet ? 'Okay, I\'ll keep quiet. Tap me whenever you need me.' : 'Yay! I\'ll pop up with tips now and then.');
+  });
+  refreshQuiet();
+
+  // ---------- getting around ----------
+  const findMesh = key => interactives.find(m => m.userData.key === key);
+  const centerOf = obj => new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
+  // hand-picked close-ups (camera spots inside the room with a clear line of sight)
+  const CLOSEUPS = {
+    laptop: [-1.75, 2.25, -1.85], rigid: [2.55, 1.95, -1.45], orbital: [1.45, 1.8, -1.55],
+    klast: [-1.55, 2.15, 1.45], shatterwing: [-0.95, 3.35, -0.45], tv: [0.85, 2.1, -1.95],
+    bookCharlie: [-1.35, 1.85, -0.55], bookCognitive: [-1.35, 1.85, -0.55], bookWheel: [-1.35, 2.2, -0.65],
+    whiteboard: [-0.95, 3.0, 1.95], monitor: [-1.3, 1.95, 1.05], lavaLamp: [-0.35, 2.1, -1.7],
+    poster: [1.55, 2.6, -0.65], rasterTide: [-1.45, 2.85, -0.7], blueprint: [1.0, 3.05, -1.55],
+  };
+  function closeup(key) {
+    const mesh = findMesh(key);
+    if (!mesh) return null;
+    const target = centerOf(mesh);
+    let pos;
+    if (CLOSEUPS[key]) pos = new THREE.Vector3(...CLOSEUPS[key]);
+    else {
+      // otherwise: back off toward the middle of the room, a little above
+      const dir = new THREE.Vector3(-target.x, 0, -target.z);
+      if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
+      pos = target.clone().addScaledVector(dir.normalize(), 2.7);
+      pos.y = target.y + 0.8;
+      pos.x = THREE.MathUtils.clamp(pos.x, -3.9, 3.9);
+      pos.z = THREE.MathUtils.clamp(pos.z, -3.9, 3.9);
+    }
+    return { mesh, target, pos };
+  }
+  function fly(pos, target, { xray = true, near = false, duration = 1650, onDone } = {}) {
+    if (FP.state !== 'orbit') return false;
+    if (modalBackdrop.classList.contains('visible')) closeModal();
+    setSeeThrough(xray);
+    controls.enabled = false;
+    controls.minDistance = 1.2;   // close-ups sit inside the normal zoom limit
+    cameraAnim = {
+      fromPos: camera.position.clone(), toPos: pos.clone(),
+      fromTarget: controls.target.clone(), toTarget: target.clone(),
+      startT: performance.now() - startTime, duration,
+      onDone: () => {
+        if (!near) controls.minDistance = 5.5;
+        if (onDone) onDone();
+      }
+    };
+    return true;
+  }
+  function goHome() { fly(HOME_CAM, HOME_TARGET); }
+  function show(key, then) {
+    const c = closeup(key);
+    if (!c) return;
+    fly(c.pos, c.target, { near: true, onDone: () => {
+      popMesh(c.mesh);
+      fxBurst(c.target, 'sparkle', 28);
+      if (then) then();
+    } });
+  }
+  function openProject(key) {
+    const mesh = findMesh(key);
+    if (mesh && !discoveredKeys.has(key)) fxBurst(centerOf(mesh), 'confetti', 60);
+    markDiscovered(key);
+    setTimeout(() => openModal(key), 220);
+  }
+  const PLACES = {
+    cabin:    { pos: () => HOME_CAM, target: () => HOME_TARGET, xray: true, line: 'Home sweet cabin. 🏡' },
+    campfire: { pos: () => new THREE.Vector3(3.6, 3.1, -9.6), target: () => new THREE.Vector3(-1.5, 0.7, -16.3), xray: false,
+                line: 'The campfire. In first person you can pull up a chair — it\'s cozy at night.' },
+    beach:    { pos: () => new THREE.Vector3(7.5, 2.4, -27.2), target: () => new THREE.Vector3(-5, -10.4, -41), xray: false,
+                line: 'Down the cliff stairs: the beach, the dock, and a rowboat you can take out in first person. 🚣' },
+    view:     { pos: () => new THREE.Vector3(18, 15, 24), target: () => new THREE.Vector3(0, 2, -18), xray: false,
+                line: 'The whole place — the cabin on its cliff, the ocean and the mountains.' },
+  };
+  function goTo(name) {
+    const p = PLACES[name];
+    if (!p) return;
+    if (fly(p.pos(), p.target(), { xray: p.xray })) say(p.line, { actions: name === 'cabin' ? [] : [{ label: 'Back to the cabin', run: () => goTo('cabin') }] });
+  }
+
+  // ---------- the guided tour ----------
+  const TOUR = [
+    { key: 'laptop', line: 'This is where David works. On the laptop: Hokku, his real-time ticketing platform built for heavy enterprise traffic.' },
+    { key: 'rigid', line: 'This little graph is rigid — a programming language he\'s building where every definition is a SHA-256 hash, so a rename can never silently break things.' },
+    { key: 'orbital', line: 'The atom is the Hydrogen Orbital Explorer: exact quantum states drawn as up to a million grains.' },
+    { key: 'tv', line: 'The TV is running Painted Crowns, his indie game. In first person you can actually play it!' },
+    { key: 'klast', line: 'Klast! A neon twin-stick shooter — rescue missions, arena battles, and fights on fully spherical planets.' },
+    { key: 'shatterwing', line: 'Shatterwing: a bullet-hell where you dash to leave mirrors that bounce enemy fire back. Coming to Steam.' },
+    { key: 'bookCharlie', line: 'He writes, too. Charlie & Pip, Cognitive Blindspot and The Wheel are all on this shelf.' },
+    { key: 'monitor', line: 'The old monitor shows Code Constellation — source code drawn as a night sky. Recursion gets a ring, dead code becomes a black hole.' },
+    { key: 'whiteboard', line: 'Research scribbles: physics, AI and the math underneath.' },
+    { key: 'lavaLamp', line: 'Last stop: the lava lamp is his particle physics simulator. Everything in here is a project — find all of them for a firework show! 🎆' },
+  ];
+  function startTour() {
+    if (FP.state !== 'orbit') { say('Step out of first person first (Exit, top-right) and I\'ll show you around.'); return; }
+    closePanel();
+    if (hintShown) dismissOnboardingHint();
+    tour.active = true;
+    tour.i = -1;
+    nextStop();
+  }
+  function nextStop() {
+    if (!tour.active) return;
+    tour.i++;
+    if (tour.i >= TOUR.length) { endTour(true); return; }
+    const stop = TOUR[tour.i];
+    const last = tour.i === TOUR.length - 1;
+    show(stop.key);
+    say(stop.line, { tag: `Tour · ${tour.i + 1} of ${TOUR.length}`, hold: 600000, actions: [
+      { label: 'Open project', primary: true, run: () => openProject(stop.key) },
+      { label: last ? 'Finish' : 'Next →', run: nextStop },
+      { label: 'End tour', run: () => endTour(false) },
+    ] });
+  }
+  function endTour(finished) {
+    tour.active = false;
+    goHome();
+    const left = DISC_TOTAL - discoveredKeys.size;
+    say(finished
+      ? `That's the tour! ${left > 0 ? `${left} projects are still waiting to be found — look for the bright “i” markers.` : 'And you\'ve found everything. 🎉'}`
+      : `Okay! ${verb} anything with an “i” to explore on your own.`);
+  }
+  function showUnfound() {
+    const keys = [...new Set(interactives.map(m => m.userData.key))]
+      .filter(k => k && k !== 'door' && k !== 'enterFP' && !discoveredKeys.has(k));
+    if (!keys.length) { say('You\'ve found every project already! 🎉'); return; }
+    const key = pick(keys);
+    show(key);
+    say(`Here's one you haven't opened: ${PROJECTS[key].title}.`, { actions: [
+      { label: 'Open it', primary: true, run: () => openProject(key) },
+      { label: 'Another', run: showUnfound },
+    ] });
+  }
+
+  // ---------- understanding questions ----------
+  const firstSentence = text => (text.match(/^.*?[.!?](\s|$)/) || [text])[0].trim();
+  function describe(key) {
+    const p = PROJECTS[key];
+    say(`${p.title} — ${p.category}. ${firstSentence(p.desc)}`, { actions: [
+      { label: 'Show me', primary: true, run: () => show(key) },
+      { label: 'Open project', run: () => openProject(key) },
+    ] });
+  }
+  const CATEGORIES = [
+    { words: ['game', 'games', 'shooter', 'indie', 'studio', 'steam', 'arcade'], label: 'games', keys: ['shatterwing', 'klast', 'tv', 'console', 'bearUrsavus', 'gameCase'] },
+    { words: ['physic', 'simulat', 'science', 'quantum', 'atom', 'particle', 'math', 'generative', 'emergen', 'crypto'], label: 'simulations & science', keys: ['orbital', 'lavaLamp', 'antFarm', 'monitor', 'vinyl', 'poster', 'cipher'] },
+    { words: ['language', 'compiler', 'rust'], label: 'languages', keys: ['rigid'] },
+    { words: ['web', 'app', 'software', 'platform', 'enterprise', 'ios', 'business', 'startup', 'saas'], label: 'software & apps', keys: ['laptop', 'rasterTide', 'phone', 'notebook', 'clipboard', 'neutralhq', 'blueprint'] },
+    { words: ['book', 'writ', 'author', 'read', 'novel', 'story'], label: 'books', keys: ['bookCharlie', 'bookCognitive', 'bookWheel'] },
+    { words: ['photo', 'camera', 'picture'], label: 'photography', keys: ['camera'] },
+    { words: ['research', 'paper', ' ai', 'deep learning', 'alignment', 'neuro'], label: 'research', keys: ['whiteboard'] },
+  ];
+  const ALIASES = {
+    aco: 'antFarm', 'ant colony': 'antFarm', 'ant farm': 'antFarm', 'code constellation': 'monitor', constellation: 'monitor',
+    'dream weaver': 'poster', 'color wave': 'vinyl', 'colour wave': 'vinyl', opin: 'notebook', compresslite: 'phone',
+    cognitive: 'bookCognitive', charlie: 'bookCharlie', pip: 'bookCharlie', wheel: 'bookWheel', limitshift: 'gameCase',
+    'dudas engineering': 'blueprint', engineering: 'blueprint', neutral: 'neutralhq', 'resource management': 'clipboard',
+    'naive': 'cipher', cryptograph: 'cipher', hydrogen: 'orbital', orbital: 'orbital', 'particle physics': 'lavaLamp',
+    'painted crowns': 'tv', 'raster tide': 'rasterTide', ursavus: 'bearUrsavus', rigid: 'rigid', hokku: 'laptop',
+    shatterwing: 'shatterwing', klast: 'klast', photography: 'camera',
+  };
+  const TIPS = [
+    () => `Tip: drag to look around, ${QUALITY.coarse ? 'pinch' : 'scroll'} to zoom. Zoom way out to see the cliffs and the ocean.`,
+    () => 'Tip: the sun-and-cloud button changes the weather. Try a storm… then snow. ❄️',
+    () => `Tip: ${verb.toLowerCase()} the person at the desk to walk around in first person. There's a boat at the bottom of the cliff stairs!`,
+    () => 'Fun fact: rigid names every definition by the SHA-256 of its canonical form — renames can\'t silently change meaning.',
+    () => 'Fun fact: Shatterwing simulates at 120 Hz, so every run can be replayed exactly.',
+    () => 'Fun fact: Painted Crowns can spawn up to 220 unique characters on its grid.',
+    () => 'Fun fact: Raster Tide turns images and video into animated ASCII art, right on your device.',
+    () => 'Ellie, Luna and Nova are named after real dogs. Nova has never stopped jumping.',
+    () => 'Psst — in first person, the TV actually plays Painted Crowns. 🎮',
+    () => 'Every project you open dims its little “i”, so you can see what\'s left to find.',
+    () => 'Tip: the speaker button turns on ambient sound — rain, crickets and a crackling fireplace.',
+    () => 'Fun fact: the Hydrogen explorer samples |ψ|² with no rejection — two 1D lookups and a free angle.',
+  ];
+  const JOKES = [
+    'Why do programmers prefer dark mode? Because light attracts bugs. 🐛',
+    'I\'d tell you a UDP joke, but you might not get it.',
+    'There are 10 kinds of people: those who understand binary and those who don\'t.',
+    'A robot walks into a bar. “What\'ll it be?” “Something to loosen my bolts.” 🔩',
+  ];
+  function setTimeOfDay(t, line) {
+    applyTime(t);
+    slider.value = String(t);
+    autoPauseUntil = performance.now() + 25000;   // hold it a while before the cycle resumes
+    say(line);
+  }
+  function respond(raw) {
+    const q = ' ' + raw.toLowerCase().replace(/[^a-z0-9&' ]+/g, ' ') + ' ';
+    const has = (...w) => w.some(x => q.includes(x));
+    if (has(' tour', 'show me around', 'guide me', 'walk me')) return startTour();
+    if (/^ (hi|hey|hello|yo|hiya|howdy|sup)\b/.test(q)) return say('Hey there! 👋 I can give you a tour, find a project, or change the weather.', { actions: [{ label: 'Give me the tour', primary: true, run: startTour }] });
+    if (has('your name', 'who are you', 'what are you', 'are you ai', 'are you a bot')) return say('I\'m Byte — a tiny scripted robot who lives in this cabin. I\'m not a real AI, but I know where everything is. 🤖');
+    if (has('thank', 'thx', 'cool', 'awesome', 'nice')) return say(pick(['Anytime! 🤖', 'Happy to help!', 'Beep boop — you\'re welcome!']));
+    if (has('joke', 'funny', 'laugh')) return say(pick(JOKES));
+    if (has('contact', 'email', 'hire', 'reach', 'message him', 'linkedin', 'github')) return say('You can email David at daviddudas@outlook.com — his code lives on GitHub.', { actions: [
+      { label: 'Email David', primary: true, run: () => { window.location.href = 'mailto:daviddudas@outlook.com'; } },
+      { label: 'GitHub ↗', run: () => window.open('https://github.com/davidrdudas', '_blank', 'noopener') },
+    ] });
+    if (has('who is', 'about david', 'about him', 'bio', 'background', 'phd', 'university', 'school', 'who made', 'who built')) return say('David Dudas is a software architect, creator and Computer Science PhD student at Mississippi State. He builds software, games and computational tools — every glowing object here is one of them.', { actions: [
+      { label: 'Full portfolio ↗', primary: true, run: () => { window.location.href = 'portfolio.html'; } },
+      { label: 'Give me the tour', run: startTour },
+    ] });
+    if (has('how do', 'move', 'walk', 'first person', 'first-person', 'controls', 'navigate', 'wasd', 'zoom')) {
+      const how = QUALITY.coarse
+        ? 'Drag to look, pinch to zoom. Tap the person at the desk to walk around: your left thumb walks, drag to look, and a button appears for doors, chairs and dogs.'
+        : 'Drag to look, scroll to zoom. Click the person at the desk to walk around: WASD to move, Shift to run, E to interact, F for a flashlight, Esc to leave.';
+      return say(how, { actions: [{ label: 'Walk around now', primary: true, run: () => { closePanel(); hideBubble(); enterFirstPerson(); } }] });
+    }
+    for (const kind of ['storm', 'snow', 'rain', 'clear', 'cloud']) {
+      if (q.includes(kind)) {
+        const preset = kind === 'cloud' ? 'overcast' : kind;
+        setWeather(preset);
+        return say({ storm: 'Storm incoming! ⛈️ Watch the campfire go out.', snow: 'Let it snow! ❄️ Give it a moment to pile up on the roofs and trees.', rain: 'Rain it is. 🌧️ Turn on ambient sound for the full effect.', clear: 'Clear skies! ☀️', overcast: 'Clouds rolling in. ☁️' }[preset]);
+      }
+    }
+    if (has('weather')) return say('What\'ll it be?', { actions: ['clear', 'rain', 'storm', 'snow'].map(k => ({ label: k[0].toUpperCase() + k.slice(1), run: () => respond(k) })) });
+    if (has('night', 'dark', 'star', 'firefl')) return setTimeOfDay(0.93, 'Night time. ✨ Fireflies come out after dark — look around the trees.');
+    if (has('sunset', 'dusk', 'evening')) return setTimeOfDay(0.555, 'Golden hour. 🌅');
+    if (has('sunrise', 'dawn', 'morning')) return setTimeOfDay(0.25, 'Good morning! ☀️');
+    if (has(' day', 'noon', 'sunny', 'light')) return setTimeOfDay(0.42, 'Broad daylight. ☀️');
+    if (has('music', 'song', 'playlist')) { toggleDockPopover('music'); return say('Here\'s the music player — press play for some lo-fi. 🎵'); }
+    if (has('sound', 'audio', 'ambient', 'noise')) { toggleDockPopover('sfx'); return say('Flip ambient sound on for birds, rain and the fireplace. 🔊'); }
+    if (has('beach', 'boat', 'dock', 'ocean', ' sea', 'water', 'shore')) return goTo('beach');
+    if (has('campfire', 'camp fire', 'tent', 'camp ')) return goTo('campfire');
+    if (has('outside', 'view', 'mountain', 'everything', 'zoom out', 'overview', 'cliff')) return goTo('view');
+    if (has('home', ' back', 'cabin', 'inside', 'room')) { goTo('cabin'); return; }
+    if (has('secret', 'easter', 'firework', 'hidden', 'how many', 'progress', 'left', 'remaining', 'missed', 'unfound', 'find')) {
+      const n = discoveredKeys.size;
+      return say(n >= DISC_TOTAL ? 'You\'ve found all of them — legend. 🎆' : `You've found ${n} of ${DISC_TOTAL}. Find them all and there's a firework show. 🎆`, n < DISC_TOTAL ? { actions: [{ label: 'Show me one I missed', primary: true, run: showUnfound }] } : {});
+    }
+    if (has('random', 'surprise', 'anything', 'bored', 'something cool')) return describe(pick(Object.keys(PROJECTS)));
+    // a specific project?
+    for (const [alias, key] of Object.entries(ALIASES)) if (q.includes(alias)) return describe(key);
+    for (const key of Object.keys(PROJECTS)) {
+      if (q.includes(' ' + PROJECTS[key].title.toLowerCase().replace(/[^a-z0-9&' ]+/g, ' ').trim() + ' ')) return describe(key);
+    }
+    // a whole category?
+    for (const c of CATEGORIES) {
+      if (has(...c.words)) {
+        return say(`David's ${c.label}: ${c.keys.map(k => PROJECTS[k].title).join(', ')}. Want me to show you one?`, {
+          actions: c.keys.slice(0, 6).map(k => ({ label: PROJECTS[k].title, run: () => describe(k) })),
+        });
+      }
+    }
+    say('Hmm, I\'m a simple robot. 🤖 Try “tour”, “games”, “physics”, “books”, “make it snow” or “take me to the beach”.');
+  }
+  const CHIPS = [
+    ['Give me a tour', startTour], ['Games', () => respond('games')], ['Physics & sims', () => respond('physics')],
+    ['Books', () => respond('books')], ['Surprise me', () => respond('surprise')], ['Make it snow', () => respond('snow')],
+    ['Night time', () => respond('night')], ['Take me to the beach', () => respond('beach')], ['How do I walk around?', () => respond('how do i walk')],
+    ['Contact David', () => respond('contact')],
+  ];
+  renderActions(chips, CHIPS.map(([label, run]) => ({ label, run: () => { addMessage('me', label); setTimeout(run, 200); } })));
+
+  // ---------- greeting + reactions ----------
+  function greet() {
+    greeted = true;
+    let seen = false;
+    try { seen = !!localStorage.getItem(HINT_STORAGE_KEY); } catch (e) {}
+    const n = discoveredKeys.size;
+    if (!seen && n === 0) {
+      hintShown = true;   // first discovery (or a choice here) marks the welcome as seen
+      say(`Hi, I'm Byte! 👋 This cabin is David's portfolio — every glowing “i” is a real project. ${verb} one to open it, or let me show you around.`, {
+        tag: 'Your guide', hold: 30000, actions: [
+          { label: 'Give me the tour', primary: true, run: startTour },
+          { label: 'I\'ll explore', run: () => { dismissOnboardingHint(); hideBubble(); } },
+        ] });
+    } else if (!quiet) {
+      say(n >= DISC_TOTAL ? 'Welcome back! You found everything last time. 🎆'
+        : n ? `Welcome back! You've found ${n} of ${DISC_TOTAL} projects.` : `Welcome back! ${verb} me anytime for a tour.`, {
+        actions: n && n < DISC_TOTAL ? [{ label: 'Show me one I missed', primary: true, run: showUnfound }] : [{ label: 'Give me the tour', primary: true, run: startTour }],
+      });
+    }
+  }
+  const sayOnce = (id, text, opts) => {
+    if (once.has(id)) return;
+    if (say(text, Object.assign({ unprompted: true }, opts))) once.add(id);
+  };
+  window.addEventListener('world:discover', e => {
+    const n = e.detail.count, left = DISC_TOTAL - n;
+    if (n === 1) sayOnce('first', `Nice find! That's 1 of ${DISC_TOTAL}. Open them all and there's a firework show at the end. 🎆`);
+    else if (left === 1) sayOnce('one-left', 'Just ONE project left to find! 👀', { actions: [{ label: 'Give me a hint', run: showUnfound }] });
+    else if (n % 5 === 0 && left > 0) sayOnce('m' + n, pick([`${n} down, ${left} to go! 🔍`, `Ooh, ${n} found! You're good at this.`, `${n} of ${DISC_TOTAL}! Keep going. ✨`]));
+  });
+  window.addEventListener('world:celebrate', () => say('You found every single project! 🎆 Thanks for exploring — these fireworks are for you.', { tag: 'Byte', hold: 9000 }));
+  window.addEventListener('world:time', e => {
+    if (e.detail === 'Night') sayOnce('night', 'It\'s getting dark… fireflies come out at night. ✨');
+    else if (e.detail === 'Sunset') sayOnce('sunset', 'Golden hour! 🌅 Best light in the cabin.');
+  });
+  window.addEventListener('world:weather', e => {
+    if (performance.now() - lastActivity > 120000) return;   // nobody's watching
+    const lines = { storm: 'Storm\'s rolling in ⛈️ — the campfire won\'t last.', snow: 'It\'s snowing! ❄️ Watch the roofs and trees turn white.', rain: 'Rain! 🌧️ Ambient sound makes it extra cozy.' };
+    if (lines[e.detail]) sayOnce('w-' + e.detail, lines[e.detail]);
+  });
+  window.addEventListener('world:fp-exit', () => sayOnce('fp-exit', 'Welcome back! Did you find the rowboat down by the beach? 🚣'));
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    window.addEventListener(ev, () => { lastActivity = performance.now(); }, { passive: true, capture: true });
+  }
+  // idle chatter: a tip or fun fact after a quiet spell, a handful per visit
+  const tipsLeft = TIPS.slice().sort(() => Math.random() - 0.5);
+  setInterval(() => {
+    const now = performance.now();
+    if (idleSaid >= 6 || !tipsLeft.length) return;
+    if (now - lastActivity < 22000 || now - lastSpoke < 48000 || document.hidden) return;
+    if (say(tipsLeft[0](), { unprompted: true })) { tipsLeft.shift(); idleSaid++; }
+  }, 5000);
+  // the eyes follow the pointer a little
+  window.addEventListener('pointermove', e => {
+    const r = bot.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 260);
+    bot.style.setProperty('--ex', (dx / d * 2.4 * k).toFixed(2) + 'px');
+    bot.style.setProperty('--ey', (dy / d * 1.6 * k).toFixed(2) + 'px');
+  }, { passive: true });
+  return { say, greet, startTour, goTo, show, respond, get touring() { return tour.active; } };
+})();
 
 // ==========================================================
 // RESIZE
@@ -9734,8 +10773,10 @@ function animate() {
     camera.position.lerpVectors(cameraAnim.fromPos, cameraAnim.toPos, ease);
     controls.target.lerpVectors(cameraAnim.fromTarget, cameraAnim.toTarget, ease);
     if (p >= 1) {
+      const done = cameraAnim.onDone;
       cameraAnim = null;
       controls.enabled = true;
+      if (done) done();
     }
   }
 
@@ -10239,9 +11280,14 @@ function animate() {
     icon.position.y += icon.userData.yOffset + Math.sin(t * 0.003 + icon.userData.bob) * 0.025;
     const isDoor = m.userData.key === 'door';
     icon.visible = !modalOpen && m !== hovered && (seeThrough || isDoor);
+    // shrink markers the camera is right up against (guide close-ups, first person)
+    const k = icon.userData.size * Math.min(1, Math.max(0.38, icon.position.distanceTo(camera.position) / 7));
+    icon.scale.set(k, k, 1);
   }
 
   updateLightGlows();
+  updateFX(t);
+  if (popping.size) updatePops(frameNow);
 
   // phones refresh the sun's shadow map every other frame (QUALITY.shadowEvery)
   if (QUALITY.shadowEvery > 1 && ++_shadowTick >= QUALITY.shadowEvery) {
