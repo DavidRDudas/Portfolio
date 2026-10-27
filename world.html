@@ -3095,16 +3095,31 @@ const exteriorLampParts = [];    // { light, glassMat, lanternMat } — flickere
 let lampBaseI = 0;               // current day/night lamp intensity; the flicker rides on this
 function makeLamp(x, baseY, z, postH = 1.6) {
   const g = new THREE.Group();
-  const dark = matStandard(0x2a2622, 0.6, 0.3);            // post + cap = dark metal
-  const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, postH, 0.1), dark); post.position.y = postH / 2; g.add(post);
+  const dark = matStandard(0x2a2622, 0.6, 0.3);            // post, frame + roof = dark metal
+  // (no shadows: the lamps stand far outside the sun's shadow map, which
+  // only covers the cabin, so casting would only cost shadow-pass triangles)
+  const part = (geo, mat, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; g.add(m); return m; };
+  // flared cast foot, slim round post, a collar under the lantern
+  part(lathe([[0.15, 0], [0.15, 0.04], [0.12, 0.07], [0.075, 0.13], [0.055, 0.22], [0, 0.22]], 12), dark);
+  part(rcyl(0.042, postH - 0.1, 0.012, 10, 1), dark, postH / 2 + 0.05);
+  part(lathe([[0, 0], [0.06, 0], [0.075, 0.025], [0.11, 0.04], [0.11, 0.06], [0, 0.06]], 12), dark, postH - 0.04);
   // glowing lantern body — warm emissive so it reads as a LIT lamp, not a black box
+  // (a six-sided housing, flaring toward the top like a carriage lantern)
   const lanternMat = new THREE.MeshStandardMaterial({ color: 0x3a2a18, emissive: 0xff9a38, emissiveIntensity: 0.9, roughness: 0.5, transparent: true, opacity: 0.9 });
-  const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.24), lanternMat); lantern.position.y = postH + 0.18; g.add(lantern);
-  // bright inner flame core
+  part(new THREE.CylinderGeometry(0.125, 0.095, 0.3, 6), lanternMat, postH + 0.18);
+  // bright inner flame core — a soft teardrop
   const glassMat = new THREE.MeshStandardMaterial({ color: 0xffe6a8, emissive: 0xffcf72, emissiveIntensity: 1.6, transparent: true, opacity: 0.95 });
-  const glass = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.22, 0.17), glassMat);
-  glass.position.y = postH + 0.18; g.add(glass);
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.21, 0.16, 4), dark); cap.position.y = postH + 0.42; cap.rotation.y = Math.PI / 4; g.add(cap);
+  part(lathe([[0, -0.08], [0.045, -0.06], [0.06, -0.02], [0.05, 0.03], [0.025, 0.07], [0, 0.1]], 10), glassMat, postH + 0.17);
+  // frame: corner bars, a base plate, a peaked roof with a ball finial
+  for (let i = 0; i < 6; i++) {                               // on the housing's corners
+    const a = i / 6 * Math.PI * 2;
+    const bar = part(capsule(0.011, 0.28, 2, 5), dark, postH + 0.18);
+    bar.position.x = Math.sin(a) * 0.112; bar.position.z = Math.cos(a) * 0.112;
+    bar.rotation.set(Math.cos(a) * 0.1, 0, -Math.sin(a) * 0.1);   // lean out with the housing's flare
+  }
+  part(lathe([[0, 0], [0.11, 0], [0.12, 0.02], [0.1, 0.035], [0, 0.035]], 6), dark, postH + 0.01);
+  part(lathe([[0, 0], [0.165, 0], [0.165, 0.025], [0.09, 0.09], [0.035, 0.15], [0, 0.16]], 6), dark, postH + 0.33);
+  part(new THREE.SphereGeometry(0.03, 8, 6), dark, postH + 0.5);
   const light = new THREE.PointLight(0xffd29c, 0.0, 13, 2); light.position.y = postH + 0.18; g.add(light);
   exteriorLamps.push(light);
   exteriorLampParts.push({ light, glassMat, lanternMat });
@@ -3128,6 +3143,172 @@ function fpStairY(x, z) {
     return STAIR_Y_MID + (STAIR_Y_BOT - STAIR_Y_MID) * b;
   }
   return null;
+}
+// ROWBOAT — a hull lofted from cross-sections along the keel (bow toward +Z,
+// keel bottom at y = 0): a round-bilged planked shell with a raked transom,
+// rounded gunwale rails, keel + stem, thwarts, floorboards and a pair of
+// shipped oars. Shared by the boat moored at the dock and the beached one.
+// `sole` is the height of the flat floor inside (kept clear of the water and
+// the surf foam around each boat); `cover` adds a depth-only lid over the
+// opening (see below).
+function makeRowboat({ len, beam, depth, bowRise = 0.2, sternRise = 0.08, transom = 0.55, sole, cover = false,
+                       hullCol, hullCol2, innerCol, trimCol, seatCol, thwarts = [0.2, 0.47, 0.72] }) {
+  const g = new THREE.Group();
+  const hullMats = [matStandard(hullCol, 0.78), matStandard(hullCol2, 0.78)];
+  const innerMat = matStandard(innerCol, 0.88), trimMat = matStandard(trimCol, 0.7), seatMat = matStandard(seatCol, 0.8);
+  const NS = 20, NJ = 8, EXP = 2 / 2.4, TH = 0.045, RAKE = 0.16, TM = 0.42, half = beam / 2;
+  // half-beam at the gunwale, sheer (gunwale height) and keel line, t = 0 stern … 1 bow
+  const hb = t => t <= TM
+    ? half * (transom + (1 - transom) * (1 - Math.pow(1 - t / TM, 2)))
+    : half * Math.pow(Math.cos(Math.PI / 2 * (t - TM) / (1 - TM)), 0.75);
+  const sheer = t => depth + bowRise * Math.pow(t, 2.6) + sternRise * Math.pow(1 - t, 3);
+  const bottom = t => 0.04 * Math.pow(1 - t, 2) + (t > 0.6 ? Math.pow((t - 0.6) / 0.4, 2.2) * sheer(1) * 0.72 : 0);
+  const zAt = t => -len / 2 + t * len;
+  // a point on the cross-section at t: u = 0 keel … 1 gunwale, side ±1, a
+  // rounded-square (superellipse) bilge; `inset` gives the inner skin and
+  // `raked` leans the transom station back toward the top
+  const sect = (t, u, side, inset, raked, v) => {
+    const b = Math.max(0, hb(t) - inset), y0 = bottom(t) + inset, y1 = sheer(t);
+    const phi = u * Math.PI / 2, f = 1 - Math.pow(Math.cos(phi), EXP);
+    return v.set(side * b * Math.pow(Math.sin(phi), EXP), y0 + (y1 - y0) * f, zAt(t) - (raked ? RAKE * f : 0));
+  };
+  // inner half-width at station t, height y (fits the floor and thwarts)
+  const innerHalf = (t, y) => {
+    const b = Math.max(0, hb(t) - TH), y0 = bottom(t) + TH, f = Math.min(1, Math.max(0, (y - y0) / (sheer(t) - y0)));
+    const c = Math.pow(1 - f, 1 / EXP);
+    return b * Math.pow(Math.sqrt(Math.max(0, 1 - c * c)), EXP);
+  };
+  const add = (geo, mat, x = 0, y = 0, z = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m;
+  };
+  // a strip of skin between section columns j0…j1 (column NJ is the keel),
+  // stations t0 … 1; `inner` turns the faces inward
+  const skin = (j0, j1, inset, t0, inner) => {
+    const pos = [], idx = [], v = new THREE.Vector3(), cols = j1 - j0 + 1;
+    for (let i = 0; i <= NS; i++) {
+      const t = t0 + (1 - t0) * i / NS;
+      for (let j = j0; j <= j1; j++) {
+        const s = j / NJ - 1;
+        sect(t, Math.abs(s), s < 0 ? -1 : 1, inset, i === 0, v);
+        pos.push(v.x, v.y, v.z);
+      }
+    }
+    for (let i = 0; i < NS; i++) for (let j = 0; j < cols - 1; j++) {
+      const a = i * cols + j, b = a + 1, c = a + cols, d = c + 1;
+      if (inner) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  };
+  // outer planking in bands of two alternating tones: the bottom, then three
+  // strakes up each side
+  [[NJ - 2, NJ + 2], [NJ - 4, NJ - 2], [NJ + 2, NJ + 4], [NJ - 6, NJ - 4], [NJ + 4, NJ + 6], [0, NJ - 6], [NJ + 6, 2 * NJ]]
+    .forEach(([j0, j1], k) => add(skin(j0, j1, 0, 0, false), hullMats[((k + 1) >> 1) % 2]));
+  add(skin(0, 2 * NJ, TH, TH / len, true), innerMat);
+  // transom boards closing the stern, outside (facing aft) and inside
+  const transomPanel = (inset, t, facing) => {
+    const v = new THREE.Vector3(), pts = [];
+    for (let j = 0; j <= 2 * NJ; j++) { const s = j / NJ - 1; pts.push(sect(t, Math.abs(s), s < 0 ? -1 : 1, inset, true, v).clone()); }
+    const idx = [];
+    for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(pts.map(p => new THREE.Vector2(p.x, p.y)), [])) {
+      const cross = (pts[b].x - pts[a].x) * (pts[c].y - pts[a].y) - (pts[b].y - pts[a].y) * (pts[c].x - pts[a].x);
+      if ((cross > 0) === (facing > 0)) idx.push(a, b, c); else idx.push(a, c, b);
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    geo.setIndex(idx); geo.computeVertexNormals();
+    return geo;
+  };
+  add(transomPanel(0, 0, -1), hullMats[1]);
+  add(transomPanel(TH, TH / len, 1), innerMat);
+  // rounded gunwale rails over the planking's top edge, a cap across the transom
+  for (const side of [-1, 1]) {
+    const pts = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12;
+      pts.push(new THREE.Vector3(side * Math.max(0, hb(t) - TH / 2), sheer(t) + 0.006, zAt(t) - (i === 0 ? RAKE - TH / 2 : 0)));
+    }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.034, 6), trimMat);
+  }
+  add(rbox(2 * hb(0) + 0.05, 0.045, TH + 0.045, 0.018, 1), trimMat, 0, sheer(0) + 0.006, zAt(0) - RAKE + TH / 2);
+  // keel strip running forward and curving up into the stem, with round ends
+  {
+    const pts = [];
+    for (let i = 0; i <= 10; i++) pts.push(new THREE.Vector3(0, bottom(i / 10) - 0.012, zAt(i / 10) + (i === 10 ? 0.012 : 0)));
+    for (const f of [0.35, 0.7, 1]) pts.push(new THREE.Vector3(0, bottom(1) + (sheer(1) + 0.03 - bottom(1)) * f, len / 2 + 0.012));
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.03, 6), trimMat);
+    add(new THREE.SphereGeometry(0.046, 10, 8), trimMat, 0, sheer(1) + 0.03, len / 2 + 0.012);
+    add(new THREE.SphereGeometry(0.031, 8, 6), trimMat, 0, bottom(0) - 0.012, zAt(0));
+  }
+  // thwarts fitted to the inside of the hull
+  for (const t of thwarts) {
+    const y = sheer(t) - 0.15;
+    add(rbox(2 * innerHalf(t, y) + 0.02, 0.045, 0.22, 0.018, 1), seatMat, 0, y, zAt(t));
+  }
+  // the floor: trace the inside of the hull at its height, from the (raked)
+  // transom up one side to where it closes toward the bow, and back down the
+  // other; floorboards lie on it
+  {
+    const t0 = TH / len, y0 = bottom(t0) + TH, side = [];
+    for (let i = 0; i <= 16; i++) {
+      const t = t0 + (1 - t0) * i / 16, w = innerHalf(t, sole);
+      if (w < 1e-3) break;
+      side.push([w, zAt(t) - (i === 0 ? RAKE * (sole - y0) / (sheer(t0) - y0) : 0)]);
+    }
+    const s = new THREE.Shape();
+    s.moveTo(side[0][0], -side[0][1]);                     // shape y = -z (see the rotation below)
+    for (const [x, z] of side.slice(1)) s.lineTo(x, -z);
+    for (const [x, z] of side.reverse()) s.lineTo(-x, -z);
+    const floor = new THREE.ShapeGeometry(s);
+    floor.rotateX(-Math.PI / 2);                           // lies flat, face up
+    add(floor, innerMat, 0, sole, 0);
+  }
+  for (const x of [-0.13 * beam, 0, 0.13 * beam]) add(rbox(0.1, 0.022, 0.52 * len, 0.008, 1), seatMat, x, sole + 0.012, zAt(0.36));
+  // oarlocks at the rowing thwart and the oars shipped inside, blades forward
+  const tr = thwarts[1], yr = sheer(tr) - 0.15;
+  for (const side of [-1, 1]) {
+    const lock = add(new THREE.TorusGeometry(0.035, 0.009, 5, 10, Math.PI), trimMat,
+      side * (hb(tr) - TH / 2), sheer(tr) + 0.035, zAt(tr));
+    lock.rotation.y = Math.PI / 2;
+    const oar = new THREE.Group(), oarLen = len * 0.58;
+    const shaft = new THREE.Mesh(capsule(0.021, oarLen * 0.62, 3, 8), seatMat);
+    shaft.rotation.x = Math.PI / 2; shaft.position.z = -oarLen * 0.12; oar.add(shaft);
+    const neck = new THREE.Mesh(taper(0.021, 0.03, 0.12, 3, 8), seatMat);
+    neck.rotation.x = Math.PI / 2; neck.position.z = oarLen * 0.24; oar.add(neck);
+    const blade = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 6), seatMat);
+    blade.scale.set(0.085, 0.014, oarLen * 0.15); blade.position.z = oarLen * 0.24 + 0.06 + oarLen * 0.14; oar.add(blade);
+    const grip = new THREE.Mesh(capsule(0.026, 0.1, 3, 8), trimMat);
+    grip.rotation.x = Math.PI / 2; grip.position.z = -oarLen * 0.43 - 0.07; oar.add(grip);
+    // resting on the rowing thwart and the bow thwart, blades toed in toward the narrowing bow
+    const tb = thwarts[2], yb = sheer(tb) - 0.15;
+    oar.position.set(side * innerHalf(tr, yr) * 0.55, yr + 0.045, zAt(tr) + oarLen * 0.12);
+    oar.rotation.set(-Math.atan2(yb - yr, zAt(tb) - zAt(tr)), -side * 0.12, side * 0.3);
+    g.add(oar);
+  }
+  if (cover) {
+    // An invisible lid across the opening, just under the rails. It's drawn
+    // after the boat (renderOrder 1) and writes depth only, so the see-through
+    // surf foam, drawn later still, can't wash over the inside of a boat
+    // sitting in the shallows (the foam rides 0.6 m above the water).
+    const pos = [], idx = [], t0 = TH / len;
+    for (let i = 0; i <= 16; i++) {
+      const t = t0 + (1 - t0) * i / 16, w = Math.max(0, hb(t) - TH), y = sheer(t) - 0.005;
+      const z = zAt(t) - (i === 0 ? RAKE : 0);              // reach back to the raked transom's top
+      pos.push(-w, y, z, w, y, z);
+    }
+    for (let i = 0; i < 16; i++) { const a = 2 * i; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    const lid = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ colorWrite: false }));   // faces up
+    lid.renderOrder = 1;
+    g.add(lid);
+  }
+  // no shadow flags on any part: both boats sit on the beach, far outside the
+  // sun's shadow map (it only covers the cabin)
+  return g;
 }
 let boatObj = null;
 {
@@ -3166,43 +3347,59 @@ let boatObj = null;
   // lamp at the top of the stairs
   makeLamp(STAIR_XR + 1.9, 0, -29.8, 1.7);
 
-  // ----- BOAT DOCK — planks on pilings reaching from the sand out over the water -----
+  // ----- BOAT DOCK — boards on stringers and round pilings, reaching from the sand out over the water -----
+  // (no shadow flags: the sun's shadow map only covers the cabin, so down here
+  // they'd only add shadow-pass triangles)
   {
     const plankMat = matStandard(0x6a4a30, 0.85);
-    const deck2 = new THREE.Mesh(new THREE.BoxGeometry(DOCK_HW * 2, 0.12, DOCK_Z0 - DOCK_Z1), plankMat);
-    deck2.position.set(DOCK_X, DOCK_Y, (DOCK_Z0 + DOCK_Z1) / 2);
-    deck2.castShadow = true; deck2.receiveShadow = true; outsideGroup.add(deck2);
+    const plankMat2 = matStandard(0x75533a, 0.85);   // every third board a shade lighter
+    const beamMat = matStandard(0x4e3622, 0.9);
+    // deck boards run across the dock with slim gaps; the walkway top stays at DOCK_Y + 0.06
+    const board = rbox(DOCK_HW * 2, 0.06, 0.2, 0.016, 1);
+    let k = 0;
+    for (let zz = DOCK_Z0 - 0.11; zz > DOCK_Z1; zz -= 0.2275) {
+      const b = new THREE.Mesh(board, k++ % 3 === 1 ? plankMat2 : plankMat);
+      b.position.set(DOCK_X + (Math.random() - 0.5) * 0.05, DOCK_Y + 0.03, zz);
+      b.rotation.y = (Math.random() - 0.5) * 0.015;
+      outsideGroup.add(b);
+    }
+    for (const sx of [-1, 1]) {   // stringers under the board ends
+      const s = new THREE.Mesh(rbox(0.12, 0.14, DOCK_Z0 - DOCK_Z1, 0.03, 1), beamMat);
+      s.position.set(DOCK_X + sx * (DOCK_HW - 0.14), DOCK_Y - 0.07, (DOCK_Z0 + DOCK_Z1) / 2);
+      outsideGroup.add(s);
+    }
+    // round pilings along both edges, their rounded tops standing above the deck
+    const pile = rcyl(0.085, 2.3, 0.035, 12, 2);
     for (let zz = DOCK_Z0 - 0.4; zz >= DOCK_Z1; zz -= 1.6) {
       for (const sx of [-1, 1]) {
-        const pile = new THREE.Mesh(new THREE.BoxGeometry(0.13, 2.0, 0.13), plankMat);
-        pile.position.set(DOCK_X + sx * (DOCK_HW - 0.1), DOCK_Y - 1.0, zz);
-        pile.castShadow = true; outsideGroup.add(pile);
+        const p = new THREE.Mesh(pile, beamMat);
+        p.position.set(DOCK_X + sx * (DOCK_HW + 0.05), DOCK_Y - 0.85, zz);
+        outsideGroup.add(p);
       }
     }
+    // a mooring cleat by the boat with a coil of rope beside it
+    const ropeMat = matStandard(0xc9b48a, 0.95);
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.026, 6, 18), ropeMat);
+    coil.rotation.x = Math.PI / 2; coil.position.set(DOCK_X - DOCK_HW + 0.32, DOCK_Y + 0.085, -42.1);
+    const coil2 = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.024, 6, 16), ropeMat);
+    coil2.rotation.x = Math.PI / 2; coil2.position.set(DOCK_X - DOCK_HW + 0.33, DOCK_Y + 0.13, -42.08);
+    const cleat = new THREE.Mesh(capsule(0.03, 0.22, 3, 8), beamMat);
+    cleat.rotation.x = Math.PI / 2; cleat.position.set(DOCK_X - DOCK_HW + 0.18, DOCK_Y + 0.1, -42.75);
+    for (const m of [coil, coil2, cleat]) outsideGroup.add(m);
     makeLamp(DOCK_X + DOCK_HW - 0.2, DOCK_Y, DOCK_Z1 + 0.4, 1.5);   // lamp at the end of the dock
   }
 
-  // ----- ROWBOAT — moored alongside the dock -----
+  // ----- ROWBOAT — moored alongside the dock (FP can board it and row) -----
+  // Its keel sits a little under the waterline so the hull floats IN the water,
+  // and the gunwales ride high enough to stay above the surf foam (0.6 m up)
+  // even in the troughs of the rowing bob (±0.17 m), where its foam cover works.
+  // The floor is raised clear of the water through the bob too (the ocean
+  // would otherwise show through the bottom of the boat).
   const boat = new THREE.Group();
-  const hullMat = matStandard(0x7a4a28, 0.7);
-  const innerMat = matStandard(0x9a6a3a, 0.85);
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.5, 3.4), hullMat);
-  hull.position.y = 0.25; hull.castShadow = true; boat.add(hull);
-  const inner = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.4, 2.9), innerMat);
-  inner.position.y = 0.46; boat.add(inner);
-  const bow = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.5, 0.6), hullMat);
-  bow.position.set(0, 0.32, 1.85); bow.rotation.x = -0.45; boat.add(bow);
-  const stern = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.5, 0.6), hullMat);
-  stern.position.set(0, 0.32, -1.85); stern.rotation.x = 0.45; boat.add(stern);
-  for (const sz of [-0.6, 0.7]) {
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.22), innerMat);
-    seat.position.set(0, 0.52, sz); boat.add(seat);
-  }
-  // a pair of oars resting across the gunwales
-  for (const sx of [-1, 1]) {
-    const oar = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.2), railMat);
-    oar.position.set(sx * 0.5, 0.56, 0.1); oar.rotation.y = sx * 0.25; boat.add(oar);
-  }
+  const hull = makeRowboat({ len: 3.6, beam: 1.3, depth: 0.8, bowRise: 0.2, sternRise: 0.08, transom: 0.6, cover: true, sole: 0.26,
+    hullCol: 0x7a4a28, hullCol2: 0x83512e, innerCol: 0x9a6a3a, trimCol: 0x553a22, seatCol: 0xad7f4c });
+  hull.position.y = -0.06;
+  boat.add(hull);
   boat.position.set(DOCK_X - 1.9, WATER_Y, (DOCK_Z0 + DOCK_Z1) / 2);   // moored alongside the dock
   boat.castShadow = true;
   outsideGroup.add(boat);
@@ -3333,112 +3530,20 @@ const seaRocks = [];
   seaRocks.push({ ...smallRings });
 }
 
-// ----- BEACHED ROWBOAT — brown wooden rowboat at the water's edge.
-// Hull + interior are built from extruded boat-shaped silhouettes so the
-// boat actually has the curved gunwale + pointed bow + flat stern profile
-// of a real rowboat.
+// ----- BEACHED ROWBOAT — brown wooden rowboat at the water's edge, the same
+// lofted hull as the dock boat (curved gunwale, pointed bow, raked transom)
 {
-  const boat = new THREE.Group();
-  const hullMat = matStandard(0x6e4a2c, 0.88);   // medium brown wood
-  const innerMat = matStandard(0x402818, 0.92);  // dark wet interior
-  const trimMat = matStandard(0x4a3018, 0.82);   // dark gunwale rim
-  const seatMat = matStandard(0x8a6a45, 0.80);   // lighter bench wood
-
-  const LEN = 4.6;     // bow-to-stern
-  const BEAM = 1.7;    // widest beam
-  const RISE = 0.55;   // hull side height
-  const STERN = 0.55;  // transom width as fraction of beam
-
-  // top-down boat outline — bow at +X, stern (transom) at -X
-  function boatProfile(scaleW = 1, scaleL = 1) {
-    const s = new THREE.Shape();
-    const len = LEN * scaleL;
-    const beam = BEAM * scaleW;
-    // start at stern, port side
-    s.moveTo(-len / 2, -beam * STERN / 2);
-    // straight transom across the back
-    s.lineTo(-len / 2,  beam * STERN / 2);
-    // port side curving from transom to bow
-    s.bezierCurveTo(
-      -len * 0.18,  beam / 2,        // shoulder
-       len * 0.30,  beam / 2,        // mid hull bulge
-       len / 2,     0                 // bow point
-    );
-    // starboard side back to stern
-    s.bezierCurveTo(
-       len * 0.30, -beam / 2,
-      -len * 0.18, -beam / 2,
-      -len / 2,    -beam * STERN / 2
-    );
-    return s;
-  }
-
-  // OUTER HULL — extruded boat profile at full height
-  const outerGeo = new THREE.ExtrudeGeometry(
-    boatProfile(1, 1), { depth: RISE, bevelEnabled: false, curveSegments: 24 });
-  outerGeo.rotateX(-Math.PI / 2);   // lay shape flat (X = length, Z = beam)
-  outerGeo.computeVertexNormals();
-  const hull = new THREE.Mesh(outerGeo, hullMat);
-  hull.castShadow = true; hull.receiveShadow = true;
-  boat.add(hull);
-
-  // INNER COCKPIT — smaller boat profile, dark color, slightly raised so
-  // its top sits just below the gunwale rim and reads as the open inside
-  const innerGeo = new THREE.ExtrudeGeometry(
-    boatProfile(0.78, 0.85), { depth: RISE * 0.85, bevelEnabled: false, curveSegments: 24 });
-  innerGeo.rotateX(-Math.PI / 2);
-  innerGeo.computeVertexNormals();
-  const interior = new THREE.Mesh(innerGeo, innerMat);
-  interior.position.y = RISE * 0.18;     // top sits ~just under gunwale
-  boat.add(interior);
-
-  // GUNWALE RIM — flat ring tracing the top edge of the hull (subtle dark
-  // stripe at the top of the boat, classic visual cue for a wooden rowboat)
-  const rimShape = boatProfile(1, 1);
-  const rimHole = boatProfile(0.85, 0.92);
-  rimShape.holes.push(rimHole);
-  const rimGeo = new THREE.ExtrudeGeometry(
-    rimShape, { depth: 0.07, bevelEnabled: false, curveSegments: 24 });
-  rimGeo.rotateX(-Math.PI / 2);
-  const rim = new THREE.Mesh(rimGeo, trimMat);
-  rim.position.y = RISE - 0.07;
-  boat.add(rim);
-
-  // BENCH SEATS — two thwarts across the cockpit
-  for (const fx of [-0.30, 0.20]) {
-    const bench = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.05, BEAM * 0.55), seatMat);
-    bench.position.set(fx * LEN * 0.5, RISE - 0.02, 0);
-    bench.castShadow = true;
-    boat.add(bench);
-  }
-
-  // KEEL STRIP — narrow dark plank running bow-to-stern along the bottom
-  const keel = new THREE.Mesh(
-    new THREE.BoxGeometry(LEN * 0.85, 0.06, 0.10), trimMat);
-  keel.position.set(0, 0.025, 0);
-  boat.add(keel);
-
-  // OARS — laid across the gunwales, blades over the side
-  for (const sz of [-1, 1]) {
-    const oar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.045, 0.045, LEN * 0.78, 8), seatMat);
-    oar.rotation.z = Math.PI / 2;
-    oar.rotation.y = sz * 0.15;
-    oar.position.set(0.10 * sz, RISE + 0.05, sz * 0.30);
-    oar.castShadow = true;
-    boat.add(oar);
-    const blade = new THREE.Mesh(
-      new THREE.BoxGeometry(0.50, 0.03, 0.20), seatMat);
-    blade.position.set(LEN * 0.40 - 0.05, RISE + 0.05, sz * 0.42);
-    blade.rotation.y = sz * 0.15;
-    boat.add(blade);
-  }
-
-  // place on the sand near the water, angled like it was dragged up
+  // (a raised floor: the surf foam washes 0.15 m up over the sand here, and
+  // would show through a deeper inside)
+  const boat = makeRowboat({ len: 4.6, beam: 1.7, depth: 0.55, bowRise: 0.2, sternRise: 0.08, transom: 0.55, sole: 0.2,
+    hullCol: 0x6e4a2c, hullCol2: 0x77512f,   // medium brown wood
+    innerCol: 0x402818,                      // dark wet interior
+    trimCol: 0x4a3018,                       // dark gunwale rails + keel
+    seatCol: 0x8a6a45 });                    // lighter bench wood
+  // place on the sand near the water, angled like it was dragged up, leaning
+  // a little onto its side
   boat.position.set(8, BEACH_Y + 0.4, BEACH_FAR_Z + 2.4);
-  boat.rotation.y = -0.55;     // bow points partially toward water
-  boat.rotation.z = 0.03;
+  boat.rotation.set(0.02, -0.55 + Math.PI / 2, 0.05);   // bow toward the cliff, transom to the water
   outsideGroup.add(boat);
 }
 
@@ -4329,20 +4434,39 @@ root.add(deskGroup);
 // ==========================================================
 {
   const chair = new THREE.Group();
-  const seatMat = matStandard(0x4a3a2c, 0.85);
   const cushionMat = matStandard(0x6b3d2a, 0.9);
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.12, 0.75), cushionMat);
-  seat.position.y = 0.5; seat.castShadow = true;
-  chair.add(seat);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.0, 0.1), cushionMat);
-  back.position.set(0, 1.0, -0.33); back.castShadow = true;
-  chair.add(back);
   const legMat = matStandard(0x2a2a2a, 0.4, 0.6);
-  for (const [lx, lz] of [[-0.33, -0.33], [0.33, -0.33], [-0.33, 0.33], [0.33, 0.33]]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 8), legMat);
-    leg.position.set(lx, 0.25, lz); leg.castShadow = true;
-    chair.add(leg);
+  // a slim metal frame from a to b
+  const up = new THREE.Vector3(0, 1, 0);
+  const rod = (a, b, r0, r1) => {
+    const d = b.clone().sub(a), m = new THREE.Mesh(taper(r0, r1, d.length(), 2, 8), legMat);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(up, d.normalize());
+    m.castShadow = true;
+    chair.add(m);
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  // plump seat cushion on a thin apron
+  const seat = new THREE.Mesh(rbox(0.75, 0.11, 0.74, 0.05), cushionMat);
+  seat.position.y = 0.505; seat.castShadow = true;
+  chair.add(seat);
+  const apron = new THREE.Mesh(rbox(0.7, 0.045, 0.68, 0.018, 1), legMat);
+  apron.position.y = 0.43; apron.castShadow = true;
+  chair.add(apron);
+  // legs splay a touch toward the feet; the back pair carries on up as the
+  // posts that hold the back cushion
+  for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    rod(V(lx * 0.345, 0.0, lz * 0.335), V(lx * 0.31, 0.44, lz * 0.3), 0.017, 0.023);
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 5), legMat);
+    foot.scale.y = 0.6; foot.position.set(lx * 0.345, 0.01, lz * 0.335); foot.castShadow = true;
+    chair.add(foot);
   }
+  for (const lx of [-1, 1]) rod(V(lx * 0.31, 0.44, -0.3), V(lx * 0.32, 1.42, -0.4), 0.021, 0.019);
+  rod(V(-0.32, 0.79, -0.345), V(0.32, 0.79, -0.345), 0.013, 0.013);    // stretcher under the back cushion
+  // cushioned back, leaning back a little between the posts
+  const back = new THREE.Mesh(rbox(0.7, 0.62, 0.085, 0.042), cushionMat);
+  back.position.set(0, 1.1, -0.375); back.rotation.x = -0.1; back.castShadow = true;
+  chair.add(back);
   // outside the cabin, in front of the front wall, to the left of the door
   // (door is at x=1.6). Back of the chair toward the wall, sitter looks outward.
   chair.position.set(-1.5, 0, ROOM.d / 2 + 0.6);
@@ -4356,50 +4480,64 @@ root.add(deskGroup);
 // ==========================================================
 {
   const pot = new THREE.Group();
-  // terracotta pot — tapered cylinder (wider at top)
+  // terracotta pot turned on a lathe: tapered body, rolled rim, soil
   const potMat = matStandard(0xa6552d, 0.85);
   const rimMat = matStandard(0x8a4422, 0.85);
   const dirtMat = matStandard(0x3a2618, 0.95);
   const stemMat = matStandard(0x356b32, 0.9);
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.16, 0.32, 18), potMat);
-  body.position.y = 0.16; body.castShadow = true; body.receiveShadow = true;
+  const body = new THREE.Mesh(lathe([[0, 0], [0.15, 0], [0.163, 0.014], [0.2, 0.27], [0.204, 0.28], [0, 0.28]], 20), potMat);
+  body.castShadow = true; body.receiveShadow = true;
   pot.add(body);
-  // rim ring (slightly wider band at top)
-  const rim = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.235, 0.225, 0.05, 18), rimMat);
-  rim.position.y = 0.305; pot.add(rim);
-  // dirt fill — a thin disk just below the rim
-  const dirt = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.215, 0.215, 0.03, 18), dirtMat);
-  dirt.position.y = 0.30; pot.add(dirt);
-  // a few flowers — stems with bright sphere blooms in mixed colors
+  pot.add(new THREE.Mesh(lathe([[0.199, 0.262], [0.226, 0.268], [0.236, 0.284], [0.236, 0.31], [0.227, 0.326],
+    [0.21, 0.33], [0.203, 0.318], [0.2, 0.3]], 20), rimMat));
+  pot.add(new THREE.Mesh(lathe([[0.205, 0.292], [0.16, 0.302], [0.08, 0.312], [0, 0.315]], 16), dirtMat));
+  // a few flowers in mixed colors: curving stems, five-petalled cupped blooms
+  // with a contrasting middle, and spear leaves round the base
   const flowerColors = [0xe24a4a, 0xf2b73a, 0xf28cb6, 0xb47adf, 0xf6f0ce];
+  const middleMat = matStandard(0xf2c94c, 0.7), darkMiddleMat = matStandard(0x5a3a1a, 0.8);
+  const bloomGeo = new THREE.SphereGeometry(1, 15, 4);
+  {
+    const P = bloomGeo.attributes.position;
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      const lobe = 0.62 + 0.38 * Math.abs(Math.cos(2.5 * Math.atan2(z, x)));   // five petals
+      const r = Math.hypot(x, z);
+      P.setXYZ(i, x * lobe, y * 0.3 + r * r * 0.45, z * lobe);                  // flat, cupped up at the tips
+    }
+    bloomGeo.computeVertexNormals();
+  }
+  const middleGeo = new THREE.SphereGeometry(0.017, 6, 4);
   for (let i = 0; i < 7; i++) {
     const ang = (i / 7) * Math.PI * 2 + Math.random() * 0.5;
-    const r = 0.05 + Math.random() * 0.1;
-    const stemH = 0.22 + Math.random() * 0.18;
-    const stem = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.014, stemH, 6), stemMat);
-    const sx = Math.cos(ang) * r;
-    const sz = Math.sin(ang) * r;
-    stem.position.set(sx, 0.30 + stemH / 2, sz);
-    stem.rotation.z = (Math.random() - 0.5) * 0.2;
-    stem.rotation.x = (Math.random() - 0.5) * 0.2;
-    pot.add(stem);
-    const bloom = new THREE.Mesh(
-      new THREE.SphereGeometry(0.045 + Math.random() * 0.015, 10, 8),
-      matStandard(flowerColors[i % flowerColors.length], 0.7));
-    bloom.position.set(sx, 0.30 + stemH + 0.02, sz);
+    const r = 0.04 + Math.random() * 0.09;
+    const stemH = 0.2 + Math.random() * 0.18;
+    const sx = Math.cos(ang) * r, sz = Math.sin(ang) * r, lean = 0.25 + Math.random() * 0.35;
+    const tip = new THREE.Vector3(sx * (1 + lean * 2.2), 0.31 + stemH, sz * (1 + lean * 2.2));
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(sx, 0.3, sz),
+      new THREE.Vector3(sx * (1 + lean * 0.5), 0.31 + stemH * 0.55, sz * (1 + lean * 0.5)),
+      tip]);
+    pot.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 6, 0.008, 5), stemMat));
+    // the bloom faces up and a little outward, along the stem's end
+    const bloom = new THREE.Mesh(bloomGeo, matStandard(flowerColors[i % flowerColors.length], 0.7));
+    const s = 0.052 + Math.random() * 0.016;
+    bloom.scale.setScalar(s);
+    bloom.position.copy(tip);
+    bloom.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(1));
+    bloom.rotateY(Math.random() * Math.PI);
     pot.add(bloom);
-    // small leaf
-    if (i % 2 === 0) {
-      const leaf = new THREE.Mesh(
-        new THREE.SphereGeometry(0.05, 6, 4), stemMat);
-      leaf.scale.set(1, 0.4, 0.6);
-      leaf.position.set(sx * 0.5, 0.30 + stemH * 0.5, sz * 0.5);
-      pot.add(leaf);
-    }
+    const mid = new THREE.Mesh(middleGeo, i % flowerColors.length === 1 ? darkMiddleMat : middleMat);
+    mid.position.copy(tip).addScaledVector(curve.getTangent(1), s * 0.35);
+    pot.add(mid);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + 0.3;
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), stemMat);
+    leaf.scale.set(0.03, 0.01, 0.1);
+    leaf.position.set(Math.cos(a) * 0.1, 0.36, Math.sin(a) * 0.1);
+    leaf.rotation.set(0, -a + Math.PI / 2, 0);
+    leaf.rotateX(-0.9);                 // spear up and outward
+    pot.add(leaf);
   }
   // place on the porch slab to the right of the chair (chair at x=-1.5).
   // chair seat is 0.75 wide → right edge ≈ -1.13. pot at x=-0.7 leaves a gap.
@@ -4418,33 +4556,76 @@ let campfireEmbers = null;
 // weather target each frame so transitions aren't instantaneous.
 let campfireWetness = 0;
 {
+  // (nothing out here casts or receives the sun's shadow: its shadow map only
+  // covers the cabin, so the flags would only cost shadow-pass triangles)
   // ----- CAMPFIRE -----
   const fire = new THREE.Group();
-  const stoneMat = matStandard(0x6a6a6a, 0.96, 0.05);
-  // ring of stones around the pit
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2;
-    const stone = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), stoneMat);
-    stone.position.set(Math.cos(a) * 0.7, 0.12, Math.sin(a) * 0.7);
-    stone.scale.set(1.1 + Math.random() * 0.4, 0.65 + Math.random() * 0.25, 1.1 + Math.random() * 0.4);
-    stone.rotation.y = Math.random() * Math.PI * 2;
-    stone.castShadow = true;
-    fire.add(stone);
+  // the meadow dips a little here, so the ring is built on the real ground:
+  // two courses of smooth river stones around a mound of ash that the ember
+  // bed rests on
+  {
+    // (dark-ish grays: the fire's light right beside them washes them out)
+    const stoneMats = [matStandard(0x4d4a46, 0.95, 0.05), matStandard(0x5b5852, 0.95, 0.05), matStandard(0x413f3b, 0.95, 0.05)];
+    const ground = (lx, lz) => terrainHeight(-1.2 + lx, -16 + lz);
+    // one stone: a sphere with a gentle lumpy wobble and a flattened underside;
+    // `base` is the height of whatever it rests on
+    const stone = (a, r, w, h, d, base) => {
+      const geo = new THREE.SphereGeometry(1, 10, 7);
+      const P = geo.attributes.position, k1 = Math.random() * 6, k2 = Math.random() * 6;
+      for (let i = 0; i < P.count; i++) {
+        const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+        const n = 1 + 0.09 * Math.sin(x * 2.3 + k1) * Math.cos(z * 2.1 + k2) + 0.05 * Math.sin(y * 3 + k2);
+        P.setXYZ(i, x * n, Math.max(y, -0.55) * n, z * n);
+      }
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, stoneMats[Math.floor(Math.random() * 3)]);
+      m.scale.set(w, h, d);
+      m.rotation.y = -a + (Math.random() - 0.5) * 0.3;   // long side along the ring
+      m.position.set(Math.cos(a) * r, base + h * 0.5, Math.sin(a) * r);
+      fire.add(m);
+      return m;
+    };
+    const tops = [];
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+      const x = Math.cos(a) * 0.72, z = Math.sin(a) * 0.72;
+      const h = 0.13 + Math.random() * 0.03;
+      stone(a, 0.72, 0.19 + Math.random() * 0.04, h, 0.16 + Math.random() * 0.03, ground(x, z) - 0.03);
+      tops.push(ground(x, z) - 0.03 + h * 1.5);
+    }
+    for (let i = 0; i < 10; i++) {   // the upper course sits in the dips between the lower stones
+      const a = ((i + 0.5) / 10) * Math.PI * 2 + (Math.random() - 0.5) * 0.1;
+      const below = Math.min(tops[Math.floor(i * 1.1) % 11], tops[(Math.floor(i * 1.1) + 1) % 11]);
+      stone(a, 0.69, 0.16 + Math.random() * 0.04, 0.115 + Math.random() * 0.025, 0.14 + Math.random() * 0.03, below - 0.06);
+    }
+    // ash bed filling the pit, with a few lumps of charcoal on it
+    const ashMat = matStandard(0x1c1815, 1.0), charMat = matStandard(0x0e0c0b, 0.95);
+    fire.add(new THREE.Mesh(lathe([[0.64, -0.34], [0.6, -0.05], [0.48, 0.07], [0.3, 0.11], [0, 0.12]], 18), ashMat));
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2, r = 0.24 + Math.random() * 0.2;
+      const c = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), charMat);
+      c.scale.set(1.3, 0.7, 1);
+      c.position.set(Math.cos(a) * r, 0.1, Math.sin(a) * r);
+      fire.add(c);
+    }
   }
-  // crossed logs
-  const logMat = matStandard(0x3d2615, 0.9);
-  const log1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.1, 8), logMat);
-  log1.rotation.z = Math.PI / 2;
-  log1.rotation.y = 0.3;
-  log1.position.y = 0.18;
-  log1.castShadow = true;
-  fire.add(log1);
-  const log2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.1, 8), logMat);
-  log2.rotation.z = Math.PI / 2;
-  log2.rotation.y = -0.9;
-  log2.position.y = 0.22;
-  log2.castShadow = true;
-  fire.add(log2);
+  // stacked logs: bark-round with lighter cut ends
+  {
+    const logMat = matStandard(0x3d2615, 0.9), cutMat = matStandard(0xa27a50, 0.85);
+    const logGeo = rcyl(0.08, 1.04, 0.035, 10, 2), endGeo = rcyl(0.058, 0.016, 0.006, 10, 1);
+    for (const [ry, y] of [[0.3, 0.18], [-0.9, 0.22], [1.75, 0.15]]) {
+      const log = new THREE.Group();
+      log.add(new THREE.Mesh(logGeo, logMat));
+      for (const e of [-1, 1]) {
+        const cut = new THREE.Mesh(endGeo, cutMat);
+        cut.position.y = e * 0.517;
+        log.add(cut);
+      }
+      log.rotation.set(0, ry, Math.PI / 2);
+      log.position.y = y;
+      fire.add(log);
+    }
+  }
   // glowing ember bed under the flames
   const emberMat = new THREE.MeshBasicMaterial({
     color: 0xff5a20, transparent: true, opacity: 0.7, depthWrite: false
@@ -4485,7 +4666,7 @@ let campfireWetness = 0;
 
   // SNOW MELT PATCH — when snow accumulates, a soft circle of bare grass
   // is exposed around the fire (the heat melted the snow). The patch is
-  // a flat plane with a radial-gradient grass texture, parented to the
+  // a plane with a radial-gradient grass texture, draped over the
   // ground; its opacity tracks snowAccum so it only appears under snow.
   {
     const mc = document.createElement('canvas');
@@ -4518,123 +4699,222 @@ let campfireWetness = 0;
       map: meltTex, transparent: true, opacity: 0,
       depthWrite: false
     });
-    const melt = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 5.5), meltMat);
-    melt.rotation.x = -Math.PI / 2;
-    melt.position.set(-1.2, 0.18, -16);    // sit clearly above the snow
+    // it follows the meadow (which dips here) a few cm above the snow
+    // blanket, so the fire ring's stones stand up out of it
+    const meltGeo = new THREE.PlaneGeometry(5.5, 5.5, 12, 12);
+    meltGeo.rotateX(-Math.PI / 2);
+    const MP = meltGeo.attributes.position;
+    for (let i = 0; i < MP.count; i++) MP.setY(i, terrainHeight(-1.2 + MP.getX(i), -16 + MP.getZ(i)) + 0.07);
+    const melt = new THREE.Mesh(meltGeo, meltMat);
+    melt.position.set(-1.2, 0, -16);
     melt.renderOrder = 5;                   // paint after the snow blanket
     root.add(melt);
     snowCaps.push(melt);
   }
 
-  // ----- TENT — triangular prism canvas on a wooden footprint -----
+  // ----- TENT — a ridge tent: canvas sagging softly between the end poles,
+  // door flaps tied back, guy lines out to pegs. The walls run down to the
+  // real ground (it dips under the tent) so nothing floats.
   const tent = new THREE.Group();
   const canvasMat = matStandard(0x4a5b3a, 0.95);
   const canvasInnerMat = matStandard(0x2a321f, 0.95);
+  const flapMat = matStandard(0x66754d, 0.95);    // the flaps' lighter underside
+  const ridgeMat = matStandard(0x6a4a30, 0.85);
   const tentLen = 2.4;
   const tentW = 1.8;
   const tentH = 1.5;
-  // build the tent body from an extruded triangle (canvas walls + ridge)
-  const triShape = new THREE.Shape();
-  triShape.moveTo(-tentW / 2, 0);
-  triShape.lineTo(tentW / 2, 0);
-  triShape.lineTo(0, tentH);
-  triShape.closePath();
-  const tentGeo = new THREE.ExtrudeGeometry(triShape, { depth: tentLen, bevelEnabled: false });
-  // center the extrusion along Z
-  tentGeo.translate(0, 0, -tentLen / 2);
-  const tentBody = new THREE.Mesh(tentGeo, canvasMat);
-  tentBody.castShadow = true;
-  tentBody.receiveShadow = true;
-  tent.add(tentBody);
-  // SNOW on the tent — same triangular extrusion, slightly enlarged so it
-  // sits visibly on top of the canvas. Material starts at opacity 0 and
-  // fades up via snowAccum.
+  const TENT_X = -5.3, TENT_Z = -17, TENT_RY = -0.45;
+  const tentGround = (lx, lz) => terrainHeight(TENT_X + lx * Math.cos(TENT_RY) + lz * Math.sin(TENT_RY),
+                                               TENT_Z - lx * Math.sin(TENT_RY) + lz * Math.cos(TENT_RY));
+  const slopeX = y => (tentW / 2) * (tentH - y) / tentH;      // the walls' straight line, ridge → base
+  const ridgeY = u => tentH - 0.05 * Math.sin(Math.PI * u);    // the ridge dips a little mid-span
+  // a point on one wall: u along the tent (back → front), v base → ridge;
+  // the canvas bellies inward between the taut ends, `out` lifts it off
+  const wallPoint = (side, u, v, out = 0) => {
+    const z = -tentLen / 2 + u * tentLen;
+    const yb = Math.min(-0.02, tentGround(side * tentW / 2, z) - 0.05), xb = slopeX(yb), yr = ridgeY(u);
+    const L = Math.hypot(xb, yr - yb), nx = side * (yr - yb) / L, ny = xb / L;   // outward normal
+    const sag = 0.07 * Math.sin(Math.PI * u) * Math.sin(Math.PI * v) - out;
+    return new THREE.Vector3(side * xb * (1 - v) - nx * sag, yb + (yr - yb) * v - ny * sag, z);
+  };
+  // one wall as a grid; `out` pushes it outward (the snow layer) and `v0`
+  // starts it partway up
+  const wall = (side, out = 0, v0 = 0) => {
+    const NU = 14, NV = 6, pos = [], idx = [];
+    for (let i = 0; i <= NU; i++) {
+      for (let j = 0; j <= NV; j++) {
+        const p = wallPoint(side, i / NU, v0 + (1 - v0) * j / NV, out);
+        pos.push(p.x, p.y, p.z);
+      }
+    }
+    for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+      const a = i * (NV + 1) + j, b = a + 1, c = a + NV + 1, d = c + 1;
+      if (side > 0) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  };
+  for (const side of [-1, 1]) tent.add(new THREE.Mesh(wall(side), canvasMat));
+  // end walls: closed at the back; the front has a door with its flaps
+  // rolled back to either side and the dim inside showing through
+  const endWall = (z, door) => {
+    // both bottom corners at the lower of the two ground heights (they're
+    // buried; the walls' straight edges carry on down to them)
+    const y0 = Math.min(-0.02, tentGround(-tentW / 2, z) - 0.05, tentGround(tentW / 2, z) - 0.05);
+    const s = new THREE.Shape();
+    s.moveTo(-slopeX(y0), y0); s.lineTo(slopeX(y0), y0); s.lineTo(0, tentH); s.closePath();
+    if (door) {
+      const h = new THREE.Path();
+      h.moveTo(-0.4, y0 + 0.02); h.lineTo(0.4, y0 + 0.02);
+      h.quadraticCurveTo(0.22, 0.85, 0, 1.24); h.quadraticCurveTo(-0.22, 0.85, -0.4, y0 + 0.02);
+      s.holes.push(h);
+    }
+    const geo = new THREE.ShapeGeometry(s, 8);
+    if (z < 0) geo.rotateY(Math.PI);    // the back wall faces backward
+    const m = new THREE.Mesh(geo, canvasMat);
+    m.position.z = z;
+    tent.add(m);
+    return y0;
+  };
+  endWall(-tentLen / 2, false);
+  const doorBase = endWall(tentLen / 2, true);
+  {
+    // the dim inside, a little behind the doorway
+    const inner = new THREE.Shape();
+    inner.moveTo(-0.62, doorBase); inner.lineTo(0.62, doorBase); inner.lineTo(0, tentH * 0.97); inner.closePath();
+    const back = new THREE.Mesh(new THREE.ShapeGeometry(inner), canvasInnerMat);
+    back.position.z = tentLen / 2 - 0.3;
+    tent.add(back);
+    // rolled-back flaps: a soft fold of lighter canvas each side of the door,
+    // cinched with a tie
+    for (const sx of [-1, 1]) {
+      const f = new THREE.Shape();
+      f.moveTo(sx * 0.4, doorBase + 0.02);
+      f.quadraticCurveTo(sx * 0.22, 0.85, 0, 1.24);
+      f.quadraticCurveTo(sx * 0.42, 0.9, sx * 0.64, doorBase + 0.02);
+      f.closePath();
+      const flap = new THREE.Mesh(new THREE.ShapeGeometry(f, 8), flapMat);
+      flap.position.z = tentLen / 2 + 0.012;
+      tent.add(flap);
+      const roll = new THREE.Mesh(capsule(0.035, 0.5, 3, 8), flapMat);
+      roll.position.set(sx * 0.47, 0.45, tentLen / 2 + 0.035);
+      roll.rotation.z = sx * 0.36;
+      tent.add(roll);
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.009, 4, 10), ridgeMat);
+      tie.position.set(sx * 0.46, 0.48, tentLen / 2 + 0.035);
+      tie.rotation.set(0, Math.PI / 2, sx * 0.36);
+      tent.add(tie);
+    }
+  }
+  // SNOW on the tent — a thin layer over the upper walls that fades in via
+  // snowAccum (both walls in one mesh)
   {
     const tentSnowMat = new THREE.MeshLambertMaterial({
       color: 0xfdfdff, transparent: true, opacity: 0,
       depthWrite: false, polygonOffset: true,
       polygonOffsetFactor: -1, polygonOffsetUnits: -1
     });
-    const snowGeo = tentGeo.clone();
+    const a = wall(-1, 0.025, 0.2), b = wall(1, 0.025, 0.2), n = a.attributes.position.count;
+    const snowGeo = new THREE.BufferGeometry();
+    snowGeo.setAttribute('position', new THREE.Float32BufferAttribute([...a.attributes.position.array, ...b.attributes.position.array], 3));
+    snowGeo.setAttribute('normal', new THREE.Float32BufferAttribute([...a.attributes.normal.array, ...b.attributes.normal.array], 3));
+    snowGeo.setIndex([...a.index.array, ...Array.from(b.index.array, i => i + n)]);
     const tentSnow = new THREE.Mesh(snowGeo, tentSnowMat);
-    tentSnow.scale.set(1.02, 1.02, 1.0);
     tent.add(tentSnow);
     snowCaps.push(tentSnow);
   }
-  // dark triangle on the front face suggesting an open flap
-  const flap = new THREE.Mesh(
-    new THREE.ShapeGeometry(triShape.clone()),
-    canvasInnerMat
-  );
-  flap.position.set(0, 0, tentLen / 2 + 0.005);
-  flap.scale.set(0.55, 0.78, 1);
-  flap.position.y = 0;
-  tent.add(flap);
-  // ridge pole — a slim horizontal pole running along the very top of the tent
-  const ridgeMat = matStandard(0x6a4a30, 0.85);
-  const ridge = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.04, tentLen + 0.1, 8), ridgeMat);
-  ridge.rotation.x = Math.PI / 2;
-  ridge.position.set(0, tentH, 0);
-  tent.add(ridge);
-  // guy lines — each runs from a ridge end DOWN to a stake in the ground
-  const lineMat = matStandard(0xcccccc, 0.6);
+  // poles: an upright at each end, the ridge seam between them
+  for (const ez of [-1, 1]) {
+    const z = ez * (tentLen / 2 + 0.03), g = tentGround(0, z), h = tentH + 0.12 - g;
+    const pole = new THREE.Mesh(rcyl(0.026, h, 0.012, 8, 1), ridgeMat);
+    pole.position.set(0, g + h / 2, z);
+    tent.add(pole);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), ridgeMat);
+    knob.position.set(0, tentH + 0.12, z);
+    tent.add(knob);
+  }
+  {
+    const pts = [];
+    for (let i = 0; i <= 8; i++) pts.push(new THREE.Vector3(0, ridgeY(i / 8) + 0.012, -tentLen / 2 + i / 8 * tentLen));
+    tent.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.022, 6), matStandard(0x3d4a30, 0.95)));
+  }
+  // guy lines — from each pole top and from the middle of each wall down
+  // to a peg in the ground
+  const lineMat = matStandard(0xd9d2bf, 0.8);
   const _gUp = new THREE.Vector3(0, 1, 0);
-  for (const sz of [-1, 1]) {
-    const top  = new THREE.Vector3(0, tentH * 0.92, sz * (tentLen / 2));
-    const foot = new THREE.Vector3(0, 0,            sz * (tentLen / 2 + 0.7));
+  const guy = (top, fx, fz) => {
+    const foot = new THREE.Vector3(fx, tentGround(fx, fz), fz);
     const dir = foot.clone().sub(top);
-    const len = dir.length();
-    const line = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.012, len, 5), lineMat);
+    const line = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, dir.length(), 4, 1, true), lineMat);
     line.position.copy(top).add(foot).multiplyScalar(0.5);
     line.quaternion.setFromUnitVectors(_gUp, dir.clone().normalize());
     tent.add(line);
-    // little stake where the guy line meets the ground
-    const stake = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.022, 0.022, 0.16, 5), ridgeMat);
-    stake.position.set(0, 0.08, sz * (tentLen / 2 + 0.7));
-    tent.add(stake);
-  }
-  tent.position.set(-5.3, 0, -17);
-  tent.rotation.y = -0.45;             // door faces toward the campfire
+    const peg = new THREE.Mesh(taper(0.012, 0.022, 0.16, 2, 6), ridgeMat);
+    peg.position.set(fx, foot.y + 0.05, fz);
+    const away = new THREE.Vector3(fx, 0, fz).normalize();   // driven in leaning away from the tent
+    peg.quaternion.setFromUnitVectors(_gUp, new THREE.Vector3(away.x * 0.34, 0.94, away.z * 0.34));
+    tent.add(peg);
+  };
+  for (const ez of [-1, 1]) guy(new THREE.Vector3(0, tentH + 0.06, ez * (tentLen / 2 + 0.03)), 0, ez * (tentLen / 2 + 0.75));
+  for (const side of [-1, 1]) guy(wallPoint(side, 0.5, 0.68, 0.01), side * (tentW / 2 + 0.75), 0);
+  tent.position.set(TENT_X, 0, TENT_Z);
+  tent.rotation.y = TENT_RY;           // door opens toward the cabin side of the fire
   root.add(tent);
 
-  // ----- CAMP CHAIRS — folding canvas chairs around the fire -----
+  // ----- CAMP CHAIRS — folding chairs: fabric slung between rounded frames -----
   function makeCampChair(color) {
     const ch = new THREE.Group();
     const fabricMat = matStandard(color, 0.85);
     const frameMat = matStandard(0x222226, 0.5, 0.6);
-    // seat panel
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.04, 0.5), fabricMat);
-    seat.position.y = 0.42;
-    seat.castShadow = true;
-    ch.add(seat);
-    // back panel
-    const back = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.6, 0.04), fabricMat);
-    back.position.set(0, 0.7, -0.23);
-    back.rotation.x = -0.12;
-    back.castShadow = true;
-    ch.add(back);
-    // armrests
+    const V = (x, y, z) => new THREE.Vector3(x, y, z), up = V(0, 1, 0);
+    // a frame tube from a to b
+    const tube = (a, b, r = 0.017, mat = frameMat) => {
+      const d = b.clone().sub(a), m = new THREE.Mesh(capsule(r, d.length(), 2, 8), mat);
+      m.position.copy(a).add(b).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(up, d.normalize());
+      ch.add(m);
+      return m;
+    };
+    const SEAT_Y = 0.42, HW = 0.27, footY = 0.012;
     for (const sx of [-1, 1]) {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), frameMat);
-      arm.position.set(sx * 0.27, 0.55, 0);
-      ch.add(arm);
+      const x = sx * HW;
+      tube(V(x, footY, 0.24), V(x, SEAT_Y, -0.21));                  // X legs
+      tube(V(x, footY, -0.24), V(x, SEAT_Y, 0.21));
+      tube(V(x, SEAT_Y, -0.22), V(x, SEAT_Y, 0.22), 0.018);           // seat rail
+      tube(V(x, SEAT_Y - 0.03, -0.21), V(x * 1.02, 0.97, -0.31), 0.018);   // back upright, reclined
+      tube(V(x * 1.06, 0.62, -0.25), V(x * 1.06, 0.6, 0.22), 0.026, fabricMat);   // padded armrest
+      tube(V(x, SEAT_Y, 0.21), V(x * 1.06, 0.6, 0.22), 0.016);        // armrest post
+      for (const z of [-0.24, 0.24]) {                                 // rubber feet
+        const foot = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 5), frameMat);
+        foot.scale.set(1, 0.6, 1.3); foot.position.set(x, footY, z);
+        ch.add(foot);
+      }
     }
-    // X-shaped legs each side (folding chair style)
-    for (const sx of [-0.24, 0.24]) {
-      const lg1 = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.62, 6), frameMat);
-      lg1.position.set(sx, 0.21, 0);
-      lg1.rotation.x = 0.32;
-      lg1.castShadow = true;
-      ch.add(lg1);
-      const lg2 = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.62, 6), frameMat);
-      lg2.position.set(sx, 0.21, 0);
-      lg2.rotation.x = -0.32;
-      lg2.castShadow = true;
-      ch.add(lg2);
-    }
+    tube(V(-HW, SEAT_Y - 0.02, -0.2), V(HW, SEAT_Y - 0.02, -0.2), 0.014);   // cross brace
+    // fabric seat and back, each slung so it sags between the side rails
+    // (a gentle bend, so rbox's own normals still hold)
+    const sling = (w, h, d, sag, axis) => {
+      const g = rbox(w, h, d, 0.012, 2), P = g.attributes.position;
+      for (let i = 0; i < P.count; i++) {
+        const k = 1 - Math.pow(2 * P.getX(i) / w, 2);
+        if (axis === 'y') P.setY(i, P.getY(i) - sag * k); else P.setZ(i, P.getZ(i) - sag * k);
+      }
+      return g;
+    };
+    const seat = new THREE.Mesh(sling(0.53, 0.03, 0.45, 0.035, 'y'), fabricMat);
+    seat.position.y = SEAT_Y + 0.008;
+    ch.add(seat);
+    const back = new THREE.Mesh(sling(0.53, 0.42, 0.025, 0.045, 'z'), fabricMat);
+    back.position.set(0, 0.72, -0.265);
+    back.rotation.x = -0.18;
+    ch.add(back);
+    // a little mesh cup holder hanging off the right armrest
+    const cup = new THREE.Mesh(lathe([[0, 0], [0.04, 0], [0.047, 0.03], [0.05, 0.075], [0.044, 0.075], [0.04, 0.035], [0, 0.03]], 10), fabricMat);
+    cup.position.set(HW * 1.06 + 0.05, 0.54, 0.12);
+    ch.add(cup);
     return ch;
   }
   // three chairs facing the fire. rotation.y = atan2(fireX - chairX, fireZ - chairZ)
@@ -4645,9 +4925,12 @@ let campfireWetness = 0;
     { x:  0.6, z: -15.2, ry: -1.99,  color: 0x2a5b6a },   // teal, near-right
     { x: -2.7, z: -14.9, ry:  2.20,  color: 0x6e5b2a },   // mustard, near-left
   ];
+  // each stands on the meadow, which dips 0.1–0.4 m below y = 0 around the
+  // fire — so the seat sits at the same 0.42 m above the ground everywhere,
+  // matching the sit logic's eye height (CAMP_SEAT_EYE above terrainHeight)
   for (const c of chairConfigs) {
     const chair = makeCampChair(c.color);
-    chair.position.set(c.x, 0, c.z);
+    chair.position.set(c.x, terrainHeight(c.x, c.z), c.z);
     chair.rotation.y = c.ry;
     campChairObjs.push(chair);
     root.add(chair);
@@ -4659,123 +4942,296 @@ let campfireWetness = 0;
 // ==========================================================
 {
   const truck = new THREE.Group();
-  const blackPaint = matStandard(0x111114, 0.4, 0.55);
-  const matteBlack = matStandard(0x080808, 0.85);
-  const windowMat = matStandard(0x1a2230, 0.25, 0.7);
-  const wheelMat = matStandard(0x111114, 0.95);
-  const hubMat = matStandard(0x6a6a6e, 0.4, 0.5);
-  const grilleMat = matStandard(0x222226, 0.5, 0.5);
-  const headlightMat = matStandard(0xfff0c0, 0.4);
-  const tailMat = matStandard(0xc02828, 0.5);
-  const trimMat = matStandard(0x080808, 0.6);
+  // one material per look: black paint with a soft sheen, matte black trim,
+  // bright chrome-ish trim (reads against the black), smoky glass
+  const paint = matStandard(0x111114, 0.4, 0.5);
+  const trim = matStandard(0x0c0c0e, 0.78);
+  const chrome = matStandard(0xd2d5d9, 0.3, 0.55);
+  const glass = matStandard(0x1a2230, 0.2, 0.6);
+  const tireMat = matStandard(0x161618, 0.92);
+  const rimMat = matStandard(0x55595e, 0.4, 0.55);
+  const headMat = matStandard(0xfff3d2, 0.25);
+  const tailMat = matStandard(0xc42a2a, 0.35);
+  const amberMat = matStandard(0xf0a334, 0.4);
 
-  // chassis floor (full length so the truck has a continuous underside)
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.18, 4.4), matteBlack);
-  chassis.position.y = 0.4;
-  chassis.castShadow = true; chassis.receiveShadow = true;
-  truck.add(chassis);
+  // polygon [[x, y, cornerRadius], …] → Shape with rounded corners
+  const roundedOutline = (pts) => {
+    const s = new THREE.Shape(), n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[(i + n - 1) % n], [x1, y1, r = 0] = pts[i], [x2, y2] = pts[(i + 1) % n];
+      const l0 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1);
+      const rr = Math.min(r, l0 / 2, l2 / 2);
+      const ax = x1 + (x0 - x1) / l0 * rr, ay = y1 + (y0 - y1) / l0 * rr;
+      if (i === 0) s.moveTo(ax, ay); else s.lineTo(ax, ay);
+      if (rr > 0) s.quadraticCurveTo(x1, y1, x1 + (x2 - x1) / l2 * rr, y1 + (y2 - y1) / l2 * rr);
+    }
+    s.closePath();
+    return s;
+  };
+  // ExtrudeGeometry comes out faceted (each triangle keeps its own normal):
+  // average the normals of faces meeting at a point unless they're more than
+  // `crease` degrees apart, so curves and bevels shade smoothly while real
+  // corners stay crisp. Returns an indexed copy (positions + normals only).
+  const smoothShade = (geo, crease = 40) => {
+    const P = geo.attributes.position, n = P.count, cosC = Math.cos(crease * Math.PI / 180);
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), s = new THREE.Vector3();
+    const fn = [];
+    for (let i = 0; i < n; i += 3) {
+      a.fromBufferAttribute(P, i); b.fromBufferAttribute(P, i + 1); c.fromBufferAttribute(P, i + 2);
+      fn.push(b.sub(a).cross(c.sub(a)).clone());   // area-weighted face normal
+    }
+    const key = i => Math.round(P.getX(i) * 1e4) + '|' + Math.round(P.getY(i) * 1e4) + '|' + Math.round(P.getZ(i) * 1e4);
+    const at = new Map();
+    for (let i = 0; i < n; i++) { const k = key(i); if (!at.has(k)) at.set(k, []); at.get(k).push(i); }
+    const pos = [], nor = [], idx = [], seen = new Map();
+    for (let i = 0; i < n; i++) {
+      const f = fn[i / 3 | 0], fl = f.length(), k = key(i);
+      s.set(0, 0, 0);
+      for (const j of at.get(k)) {
+        const g = fn[j / 3 | 0];
+        if (f.dot(g) >= cosC * fl * g.length()) s.add(g);
+      }
+      if (s.lengthSq() === 0) s.copy(f);
+      s.normalize();
+      const vk = k + '|' + Math.round(s.x * 500) + '|' + Math.round(s.y * 500) + '|' + Math.round(s.z * 500);
+      let v = seen.get(vk);
+      if (v === undefined) {
+        v = pos.length / 3; seen.set(vk, v);
+        pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(s.x, s.y, s.z);
+      }
+      idx.push(v);
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    out.setIndex(idx);
+    return out;
+  };
+  // a side profile [[z, y, r], …] extruded across the truck (centred on x = 0,
+  // `width` wide) with rounded edges (`bevel` across, `bevelIn` within the
+  // profile); `warp` can reshape the vertices first
+  const sideExtrude = (pts, width, bevel, warp = null, bevelIn = bevel) => {
+    const depth = Math.max(0.001, width - bevel * 2);
+    const g = new THREE.ExtrudeGeometry(roundedOutline(pts), {
+      depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevelIn,
+      bevelOffset: -bevelIn, bevelSegments: 3, curveSegments: 6 });
+    g.translate(0, 0, -depth / 2);
+    g.rotateY(-Math.PI / 2);           // profile x → truck z, extrusion → truck x
+    if (warp) warp(g.attributes.position);
+    return smoothShade(g);
+  };
+  // the cab narrows toward the roof (tumblehome) — applied to the greenhouse
+  // and everything that sits on it, so the glass follows the body exactly
+  const tumble = (P) => {
+    for (let i = 0; i < P.count; i++) {
+      const f = Math.max(0, Math.min(1, (P.getY(i) - 1.04) / 0.45));
+      P.setX(i, P.getX(i) * (1 - 0.075 * f));
+    }
+  };
+  const add = (geo, mat, x = 0, y = 0, z = 0, shadow = false) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = shadow;
+    truck.add(m);
+    return m;
+  };
 
-  // CAB (seating area)
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.95, 1.6), blackPaint);
-  cab.position.set(0, 1.0, 0.3);
-  cab.castShadow = true;
-  truck.add(cab);
+  // wheel layout: chunky tyres under round arches
+  const WHEEL_Y = 0.38, WHEEL_R = 0.41, WHEEL_X = 0.86, FRONT_Z = 1.45, REAR_Z = -1.4, ARCH_R = 0.5;
+  const ROCKER_Y = 0.5;
+  // one wheel arch as outline points, front end → over the top → back end
+  const arch = (zc) => {
+    const a0 = Math.asin((ROCKER_Y - WHEEL_Y) / ARCH_R), pts = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = a0 + (Math.PI - 2 * a0) * i / 12;
+      pts.push([zc + ARCH_R * Math.cos(t), WHEEL_Y + ARCH_R * Math.sin(t), i === 0 || i === 12 ? 0.05 : 0]);
+    }
+    return pts;
+  };
 
-  // HOOD (front of cab, lower than cab)
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.5, 1.4), blackPaint);
-  hood.position.set(0, 0.78, 1.7);
-  hood.castShadow = true;
-  truck.add(hood);
+  // BODY SIDES — fenders, doors and bed walls as one rounded slab per side,
+  // with the wheel arches cut into the silhouette
+  const sideGeo = sideExtrude([
+    [-2.12, ROCKER_Y, 0.06], [-2.12, 1.08, 0.05],   // tail
+    [-0.46, 1.06, 0], [1.0, 1.045, 0],              // bed rail → beltline → hood line
+    [2.33, 0.97, 0.11], [2.33, ROCKER_Y, 0.05],      // nose
+    ...arch(FRONT_Z), ...arch(REAR_Z),
+  ], 0.16, 0.05);
+  for (const sx of [-1, 1]) add(sideGeo, paint, sx * 0.9, 0, 0, true);
 
-  // FRONT GRILLE
-  const grille = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.34, 0.04), grilleMat);
-  grille.position.set(0, 0.62, 2.42);
-  truck.add(grille);
-  // grille slats
-  for (let i = 0; i < 4; i++) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.03, 0.02), trimMat);
-    slat.position.set(0, 0.55 + i * 0.075, 2.44);
-    truck.add(slat);
+  // HOOD + nose between the fenders (the gap reads as the hood's shut line)
+  add(sideExtrude([[0.95, 0.46, 0], [0.95, 1.05, 0], [2.33, 0.97, 0.11], [2.33, 0.46, 0.03]], 1.68, 0.05),
+    paint, 0, 0, 0, true);
+  // a low power bulge down the middle of the hood
+  {
+    const bulge = add(rbox(0.66, 0.06, 1.12, 0.03), paint, 0, 1.005, 1.66, true);
+    bulge.rotation.x = 0.054;
+  }
+  // cab floor + the bed's front wall
+  add(rbox(1.66, 0.6, 1.5, 0.04, 1), paint, 0, 0.76, 0.24, true);
+
+  // CAB — rounded greenhouse with a raked windshield, narrowing to the roof
+  const cabPts = [[-0.47, 1.0, 0], [-0.44, 1.49, 0.13], [0.66, 1.49, 0.2], [1.08, 1.03, 0.05], [1.08, 1.0, 0]];
+  add(sideExtrude(cabPts, 1.86, 0.08, tumble), paint, 0, 0, 0, true);
+  // glass: thin panels laid on the cab faces, inset so the paint frames them
+  {
+    // a slab along one straight face of the cab profile (s0..s1 metres along
+    // the edge from p to q, standing 3 mm proud of it)
+    const pane = (p, q, s0, s1, width) => {
+      const dz = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dz, dy);
+      const uz = dz / L, uy = dy / L, nz = -uy, ny = uz;     // outward normal (profile runs clockwise)
+      const at = (s, o) => [p[0] + uz * s + nz * o, p[1] + uy * s + ny * o, 0.004];
+      return sideExtrude([at(s0, 0.003), at(s1, 0.003), at(s1, 0.016), at(s0, 0.016)], width, 0.012, tumble, 0.004);
+    };
+    add(pane(cabPts[2], cabPts[3], 0.17, 0.565, 1.62), glass);       // windshield
+    add(pane(cabPts[0], cabPts[1], 0.13, 0.4, 1.24), glass);         // rear window
+    const sideGlass = sideExtrude([[-0.33, 1.12, 0.03], [-0.32, 1.395, 0.05], [0.61, 1.395, 0.06], [0.86, 1.12, 0.03]],
+      0.014, 0.006);
+    for (const sx of [-1, 1]) {
+      const g = sideGlass.clone();
+      g.translate(sx * 0.932, 0, 0);
+      tumble(g.attributes.position);
+      add(g, glass);
+    }
   }
 
-  // HEADLIGHTS
-  for (const sx of [-0.72, 0.72]) {
-    const h = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.04), headlightMat);
-    h.position.set(sx, 0.85, 2.42);
-    truck.add(h);
+  // FENDER FLARES — a rounded lip around each wheel arch
+  {
+    const flare = new THREE.TorusGeometry(ARCH_R + 0.015, 0.05, 8, 20, Math.PI - 0.42);
+    flare.rotateZ(0.21);
+    flare.rotateY(-Math.PI / 2);
+    flare.scale(1.5, 1, 1);
+    for (const zc of [FRONT_Z, REAR_Z]) {
+      for (const sx of [-1, 1]) add(flare, paint, sx * 0.965, WHEEL_Y, zc, true);
+    }
   }
 
-  // TRUCK BED (back) — tall side walls forming a box
-  const bedSide = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.7, 1.7), blackPaint);
-  bedSide.position.set(0, 0.86, -1.2);
-  bedSide.castShadow = true;
-  truck.add(bedSide);
-  // recessed bed floor (darker, inset)
-  const bedFloor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.05, 1.45), matteBlack);
-  bedFloor.position.set(0, 1.13, -1.2);
-  truck.add(bedFloor);
-
-  // WINDSHIELD (slightly tilted)
-  const wsh = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.7, 0.05), windowMat);
-  wsh.position.set(0, 1.28, 1.05);
-  wsh.rotation.x = -0.32;
-  truck.add(wsh);
-  // SIDE WINDOWS
-  for (const sx of [-0.99, 0.99]) {
-    const sw = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 1.4), windowMat);
-    sw.position.set(sx, 1.22, 0.3);
-    truck.add(sw);
+  // BED — liner floor, wheel-well humps, tailgate and top rail caps
+  add(rbox(1.66, 0.06, 1.6, 0.03, 1), trim, 0, 0.68, -1.29);
+  for (const sx of [-1, 1]) {
+    add(rbox(0.18, 0.2, 0.92, 0.07, 1), trim, sx * 0.73, 0.74, REAR_Z);
+    add(rbox(0.19, 0.03, 1.62, 0.014, 1), trim, sx * 0.9, 1.075, -1.29);
   }
-  // REAR WINDOW
-  const rear = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.5, 0.05), windowMat);
-  rear.position.set(0, 1.27, -0.50);
-  truck.add(rear);
+  add(rbox(1.64, 0.56, 0.07, 0.03), paint, 0, 0.79, -2.075, true);
+  add(rbox(0.24, 0.045, 0.03, 0.015, 1), chrome, 0, 0.99, -2.115);   // tailgate handle
 
-  // TAILLIGHTS
-  for (const sx of [-0.85, 0.85]) {
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.04), tailMat);
-    tl.position.set(sx, 1.0, -2.07);
-    truck.add(tl);
-  }
-
-  // WHEELS — 4 corners with hubcaps
-  const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 18);
-  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.30, 8);
-  for (const [wx, wz] of [[0.92, 1.5], [-0.92, 1.5], [0.92, -1.5], [-0.92, -1.5]]) {
-    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, 0.38, wz);
-    wheel.castShadow = true;
-    truck.add(wheel);
-    const hub = new THREE.Mesh(hubGeo, hubMat);
-    hub.rotation.z = Math.PI / 2;
-    hub.position.set(wx, 0.38, wz);
-    truck.add(hub);
+  // FRONT — chrome grille surround with round headlamps, three-bar grille
+  {
+    const ring = new THREE.Shape();
+    const rr = (s, x0, y0, x1, y1, r) => {
+      s.moveTo(x0 + r, y0); s.lineTo(x1 - r, y0); s.quadraticCurveTo(x1, y0, x1, y0 + r);
+      s.lineTo(x1, y1 - r); s.quadraticCurveTo(x1, y1, x1 - r, y1); s.lineTo(x0 + r, y1);
+      s.quadraticCurveTo(x0, y1, x0, y1 - r); s.lineTo(x0, y0 + r); s.quadraticCurveTo(x0, y0, x0 + r, y0);
+      return s;
+    };
+    rr(ring, -0.76, 0.56, 0.76, 0.86, 0.11);
+    ring.holes.push(rr(new THREE.Path(), -0.72, 0.6, 0.72, 0.82, 0.08));
+    const surround = new THREE.ExtrudeGeometry(ring, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.012,
+      bevelSize: 0.012, bevelOffset: -0.012, bevelSegments: 2, curveSegments: 5 });
+    add(smoothShade(surround), chrome, 0, 0, 2.335);
+    add(rbox(1.46, 0.24, 0.03, 0.012, 1), trim, 0, 0.71, 2.335);      // dark grille insert
+    for (const gy of [0.65, 0.71, 0.77]) add(rbox(0.82, 0.024, 0.03, 0.012, 1), chrome, 0, gy, 2.36);
+    // round headlamps: chrome bezel + slightly domed lens
+    const bezel = new THREE.TorusGeometry(0.098, 0.016, 6, 20);
+    const lens = lathe([[0, 0], [0.09, 0], [0.088, 0.012], [0.07, 0.024], [0, 0.03]], 18);
+    lens.rotateX(Math.PI / 2);
+    for (const sx of [-1, 1]) {
+      add(bezel, chrome, sx * 0.58, 0.71, 2.36);
+      add(lens, headMat, sx * 0.58, 0.71, 2.35);
+      add(rbox(0.13, 0.05, 0.03, 0.02, 1), amberMat, sx * 0.62, 0.47, 2.465);   // turn signals in the bumper
+    }
   }
 
-  // SNOW on horizontal surfaces of the truck — cab roof, hood, bed walls,
-  // and bed floor. Thin white slabs that fade in via snowAccum.
+  // BUMPERS — a gently curved chrome bar up front, a step bumper behind
+  {
+    const front = new THREE.ExtrudeGeometry(roundedOutline([[-0.99, 2.3, 0], [-0.97, 2.41, 0.08], [0, 2.47, 0.9],
+      [0.97, 2.41, 0.08], [0.99, 2.3, 0]]), { depth: 0.1, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04,
+      bevelOffset: -0.04, bevelSegments: 3, curveSegments: 6 });
+    front.rotateX(Math.PI / 2);          // outline is the top view; extrude down
+    add(smoothShade(front), chrome, 0, 0.52, 0);
+    add(rbox(1.96, 0.14, 0.17, 0.05), chrome, 0, 0.45, -2.2);
+    add(rbox(0.6, 0.02, 0.1, 0.008, 1), trim, 0, 0.525, -2.21);      // step pad
+    add(rbox(0.16, 0.09, 0.03, 0.02, 1), trim, 0, 0.36, 2.36);        // tow hook mount
+  }
+
+  // LIGHTS (bright materials only — no light sources) on the tail
+  for (const sx of [-1, 1]) {
+    add(rbox(0.12, 0.25, 0.04, 0.025, 1), tailMat, sx * 0.9, 0.88, -2.118);
+    add(rbox(0.12, 0.06, 0.04, 0.02, 1), headMat, sx * 0.9, 0.705, -2.118);   // reversing light
+  }
+
+  // DOORS — fine seams, chrome handles; MIRRORS on short arms
+  {
+    const seamV = rbox(0.008, 0.46, 0.012, 0.004, 1), seamH = rbox(0.008, 0.012, 1.36, 0.004, 1);
+    for (const sx of [-1, 1]) {
+      const x = sx * 0.981;
+      add(seamV, trim, x, 0.8, -0.43);
+      add(seamV, trim, x, 0.8, 0.93);
+      add(seamH, trim, x, 0.56, 0.25);
+      add(rbox(0.028, 0.034, 0.15, 0.012, 1), chrome, sx * 0.988, 0.97, -0.24);
+      add(rbox(0.12, 0.03, 0.05, 0.012, 1), trim, sx * 0.99, 1.12, 0.9);         // arm
+      const housing = add(rbox(0.08, 0.13, 0.18, 0.035), paint, sx * 1.055, 1.17, 0.88, true);
+      housing.rotation.y = sx * 0.12;
+      const mirror = add(rbox(0.06, 0.1, 0.012, 0.005, 1), glass, sx * 1.058, 1.17, 0.785);
+      mirror.rotation.y = sx * 0.12;
+    }
+  }
+
+  // RUNNING BOARDS + undercarriage (fills the gap you'd otherwise see under the body)
+  for (const sx of [-1, 1]) add(rbox(0.16, 0.045, 1.66, 0.02, 1), trim, sx * 1.0, 0.44, 0.02);
+  add(rbox(1.3, 0.16, 3.9, 0.05, 1), trim, 0, 0.42, 0.05);
+  {
+    const axle = rcyl(0.055, 1.62, 0.02, 8, 1);
+    axle.rotateZ(Math.PI / 2);
+    for (const z of [FRONT_Z, REAR_Z]) add(axle, trim, 0, WHEEL_Y, z);
+    const pipe = rcyl(0.035, 0.22, 0.012, 10, 1);
+    pipe.rotateX(Math.PI / 2);
+    add(pipe, chrome, 0.55, 0.33, -2.17);    // exhaust tip
+  }
+
+  // WHEELS — tyres with a rounded sidewall, dished rims, chrome hubcaps
+  {
+    const R = WHEEL_R, H = 0.15;   // tread radius, half width
+    const tyre = lathe([[0.25, -H + 0.02], [0.31, -H], [0.36, -H + 0.004], [0.395, -H + 0.03], [R, -H + 0.07],
+      [R, H - 0.07], [0.395, H - 0.03], [0.36, H - 0.004], [0.31, H], [0.25, H - 0.02]], 26);
+    const rim = lathe([[0.255, -H + 0.03], [0.26, H - 0.035], [0.235, H - 0.02], [0.19, H - 0.045],
+      [0.11, H - 0.04], [0.09, H - 0.03], [0, H - 0.03]], 22);
+    const cap = lathe([[0.1, 0], [0.098, 0.018], [0.08, 0.035], [0.045, 0.045], [0, 0.048]], 18);
+    cap.translate(0, H - 0.04, 0);
+    for (const [sx, z] of [[1, FRONT_Z], [-1, FRONT_Z], [1, REAR_Z], [-1, REAR_Z]]) {
+      for (const [g, m, sh] of [[tyre, tireMat, true], [rim, rimMat, false], [cap, chrome, false]]) {
+        const w = add(g, m, sx * WHEEL_X, WHEEL_Y, z, sh);
+        w.rotation.z = -sx * Math.PI / 2;    // lathe +Y (outer face) → outward
+      }
+    }
+  }
+
+  // SNOW on the horizontal surfaces — cab roof, hood, bed rails and bed
+  // floor — merged into one thin white layer that fades in via snowAccum
   {
     const truckSnowMat = new THREE.MeshLambertMaterial({
       color: 0xfdfdff, transparent: true, opacity: 0,
       depthWrite: false, polygonOffset: true,
       polygonOffsetFactor: -1, polygonOffsetUnits: -1
     });
-    // cab roof
-    const cabSnow = new THREE.Mesh(
-      new THREE.BoxGeometry(1.96, 0.06, 1.61), truckSnowMat);
-    cabSnow.position.set(0, 1.0 + 0.95 / 2 + 0.03, 0.3);
-    truck.add(cabSnow); snowCaps.push(cabSnow);
-    // hood
-    const hoodSnow = new THREE.Mesh(
-      new THREE.BoxGeometry(1.96, 0.05, 1.41), truckSnowMat);
-    hoodSnow.position.set(0, 0.78 + 0.5 / 2 + 0.025, 1.7);
-    truck.add(hoodSnow); snowCaps.push(hoodSnow);
-    // bed-side rails (top of the bed walls)
-    const bedSnow = new THREE.Mesh(
-      new THREE.BoxGeometry(1.96, 0.06, 1.71), truckSnowMat);
-    bedSnow.position.set(0, 0.86 + 0.7 / 2 + 0.03, -1.2);
-    truck.add(bedSnow); snowCaps.push(bedSnow);
+    const parts = [];
+    const piece = (g, x, y, z, rx = 0) => { g.rotateX(rx); g.translate(x, y, z); parts.push(g); };
+    piece(rbox(1.6, 0.05, 0.86, 0.025, 1), 0, 1.505, 0.06);           // cab roof
+    piece(rbox(1.84, 0.045, 1.26, 0.022, 1), 0, 1.03, 1.66, 0.054);    // hood
+    for (const sx of [-1, 1]) piece(rbox(0.18, 0.035, 1.62, 0.017, 1), sx * 0.9, 1.1, -1.29);   // bed rails
+    piece(rbox(1.24, 0.05, 1.5, 0.025, 1), 0, 0.72, -1.29);            // bed floor
+    const pos = [], nor = [], idx = [];
+    for (const g of parts) {
+      const P = g.attributes.position, N = g.attributes.normal, base = pos.length / 3;
+      for (let i = 0; i < P.count; i++) { pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(N.getX(i), N.getY(i), N.getZ(i)); }
+      for (let i = 0; i < g.index.count; i++) idx.push(base + g.index.getX(i));
+    }
+    const snowGeo = new THREE.BufferGeometry();
+    snowGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    snowGeo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    snowGeo.setIndex(idx);
+    const truckSnow = new THREE.Mesh(snowGeo, truckSnowMat);
+    truck.add(truckSnow); snowCaps.push(truckSnow);
   }
 
   // park alongside the cabin's right side, oriented along Z so it looks
