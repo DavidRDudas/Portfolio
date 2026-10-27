@@ -2137,6 +2137,37 @@ function trackWall(m) {
   m.receiveShadow = true;
   root.add(m);
 }
+// ---- kitchen tiles: terracotta squares in front of the counters ----
+{
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#3a2a22'; g.fillRect(0, 0, 256, 256);      // grout
+  for (let ty = 0; ty < 4; ty++) {
+    for (let tx = 0; tx < 4; tx++) {
+      const v = Math.random() * 18 - 9;
+      g.fillStyle = `rgb(${(132 + v) | 0}, ${(70 + v * 0.6) | 0}, ${(48 + v * 0.4) | 0})`;
+      g.fillRect(tx * 64 + 2, ty * 64 + 2, 60, 60);
+      // a little wear: lighter centre, darker edges
+      const grad = g.createRadialGradient(tx * 64 + 32, ty * 64 + 32, 6, tx * 64 + 32, ty * 64 + 32, 44);
+      grad.addColorStop(0, 'rgba(255,220,190,0.08)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.16)');
+      g.fillStyle = grad; g.fillRect(tx * 64 + 2, ty * 64 + 2, 60, 60);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = MAX_ANISO;
+  const x0 = ROOMS.kitchen.x0 + 0.1, x1 = ROOMS.kitchen.x1, z0 = 4.6, z1 = ROOM.d / 2;   // from the bedroom wall's face
+  tex.repeat.set((x1 - x0) / 1.6, (z1 - z0) / 1.6);    // 0.4 m tiles
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({
+    map: tex, roughness: 0.62, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+  }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set((x0 + x1) / 2, 0.003, (z0 + z1) / 2);
+  m.receiveShadow = true;
+  root.add(m);
+}
 // ---- ceiling ----
 {
   // pale wood planks; double-sided so it doubles as a roof when viewed from
@@ -9695,6 +9726,21 @@ let porchPointLight = null;
 }
 
 // ==========================================================
+// STEPPING STONES — a short path out from the front door into the yard
+// ==========================================================
+const STEP_STONES = [[0, 1.05], [0.15, 1.7], [0.48, 2.32], [0.92, 2.88], [1.48, 3.38], [2.12, 3.8]]
+  .map(([dx, dz]) => [CABIN_DOOR.at + dx, ROOM.d / 2 + dz]);   // (x, z), grass keeps off them
+{
+  const kit = cabinKit();
+  for (const [x, z] of STEP_STONES) {
+    const r = 0.27 + Math.random() * 0.07;
+    kit.add(rcyl(r, 0.07, 0.03, 12, 2), pickTone(STONE_TONES.slice(2)), x, terrainHeight(x, z) + 0.035, z,
+      0, Math.random() * Math.PI, 0, 1, 1, 0.78 + Math.random() * 0.2);
+  }
+  root.add(kit.build(cabinStoneMat, { cast: false }));
+}
+
+// ==========================================================
 // SEE-THROUGH WALLS — toggle between exterior cabin and X-ray interior
 // ==========================================================
 // X-ray ON → only the walls *between* the camera and the room are hidden,
@@ -11722,6 +11768,7 @@ const fxCount = (desktop, phone) => (QUALITY.mobile ? phone : desktop);
 // shader.
 function grassBlocked(x, z) {
   if (inCabin(x, z, -0.25)) return true;                              // cabin
+  if (STEP_STONES.some(([sx, sz]) => (x - sx) ** 2 + (z - sz) ** 2 < 0.36 ** 2)) return true;   // stepping stones
   if (Math.abs(x) < ROOM.w / 2 + 0.8 && z > -ROOM.d / 2 - 3.5 && z <= -ROOM.d / 2) return true;   // back porch + steps
   if ((x + 1.2) ** 2 + (z + 16) ** 2 < 1.4 ** 2) return true;         // fire ring
   if ((x + 5.3) ** 2 + (z + 17) ** 2 < 1.9 ** 2) return true;         // tent
