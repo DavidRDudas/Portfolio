@@ -1224,10 +1224,14 @@ const HOME_TARGET = new THREE.Vector3(0, 0.8, -0.5);
 // every "fly home" / first-person exit lands on the fitted view.
 const HOME_OFFSET = HOME_CAM.clone().sub(HOME_TARGET);
 let ORBIT_FOV = 46;   // the orbit view's field of view, restored on first-person exit
+const _homeDir = new THREE.Vector3();
 function fitHomeView(aspect) {
   const narrow = Math.max(0, Math.min(1, (1.25 - aspect) / (1.25 - 0.46)));  // 0 landscape → 1 tall phone
   ORBIT_FOV = 46 + narrow * 12;
-  HOME_CAM.copy(HOME_TARGET).addScaledVector(HOME_OFFSET, 1 + narrow * 0.85);
+  // a tall screen also looks down more steeply, so the cabin's floor plan
+  // fills the height instead of sky and sea
+  _homeDir.copy(HOME_OFFSET).setY(HOME_OFFSET.y + narrow * 9).setLength(HOME_OFFSET.length() * (1 + narrow * 0.95));
+  HOME_CAM.copy(HOME_TARGET).add(_homeDir);
 }
 fitHomeView(camera.aspect);
 camera.fov = ORBIT_FOV;
@@ -7980,9 +7984,9 @@ const dogs = [];
     inner: 0xd88a6c,
   });
   ellie.userData.behavior = 'play';
-  // in the living room, on the front of the rug, clear of the coffee table
-  // and of Nova by the fireplace
-  ellie.userData.pathCenter = new THREE.Vector3(4.4, 0, 5.0);
+  // in the living room, on the back of the rug: clear of the coffee table,
+  // of Nova, and of the front door (where E has to mean the door)
+  ellie.userData.pathCenter = new THREE.Vector3(4.2, 0, 1.45);
   ellie.position.copy(ellie.userData.pathCenter);
   root.add(ellie);
   dogs.push(ellie);
@@ -8056,9 +8060,9 @@ const dogs = [];
     tan: 0xa8622c,    // tan points
     inner: 0x4a3a38,  // inside of the ears
   });
-  nova.position.set(5.2, 0, 0.9);   // living room, by the fireplace
+  nova.position.set(5.5, 0, 4.6);   // living room, beside the hearth
   nova.userData.basePos = nova.position.clone();
-  nova.rotation.y = -1.1;
+  nova.rotation.y = -2.3;   // facing into the room
   nova.userData.baseRotY = nova.rotation.y;
   nova.userData.behavior = 'bark';
   root.add(nova);
@@ -12783,7 +12787,7 @@ const guide = (() => {
                 line: 'The bedroom. Luna is usually asleep on the futon.' },
     kitchen:  { pos: () => new THREE.Vector3(3.2, 4.4, 5.6), target: () => new THREE.Vector3(-0.6, 0.9, 3.4), xray: true,
                 line: 'The kitchen and the dining table.' },
-    living:   { pos: () => new THREE.Vector3(1.0, 4.0, 6.0), target: () => new THREE.Vector3(5.2, 1.0, 2.6), xray: true,
+    living:   { pos: () => new THREE.Vector3(1.0, 4.0, 6.0), target: () => new THREE.Vector3(5.0, 0.8, 2.6), xray: true,
                 line: 'The living room, by the fire. Ellie is usually chasing her ball here. 🔥' },
   };
   const ROOM_PLACES = [['office', 'Office'], ['game', 'Game room'], ['living', 'Living room'], ['kitchen', 'Kitchen'], ['bedroom', 'Bedroom']];
@@ -13474,7 +13478,7 @@ function animate() {
       // a step behind, and she always faces toward where the ball is.
       const a = t * 0.0006;                    // slow walk
       const cx = ud.pathCenter.x, cz = ud.pathCenter.z;
-      // smaller loop so she stays on the rug between the bed and Nova
+      // a small loop so she stays on the living-room rug, clear of Nova
       const Rx = 0.7, Rz = 0.55;
       const lead = 0.55;                       // ball is "lead" radians ahead
       const ball = ud.ball, br = ball.userData.radius;
