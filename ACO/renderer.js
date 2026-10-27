@@ -29,8 +29,8 @@ class SceneRenderer {
         container.appendChild(this.renderer.domElement);
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x030712);
-        this.scene.fog = new THREE.Fog(0x030712, 260, 720);
+        this.scene.background = new THREE.Color(0x08090d);
+        this.scene.fog = new THREE.Fog(0x08090d, 260, 720);
 
         this.camera = new THREE.PerspectiveCamera(
             48, window.innerWidth / window.innerHeight, 0.5, 1200);
@@ -82,7 +82,7 @@ class SceneRenderer {
             new THREE.PlaneGeometry(560, 460),
             new THREE.MeshStandardMaterial({
                 map: makeGroundTexture(),
-                color: 0x8a90a5, // darken the map so trails and ants pop
+                color: 0x8a8d96, // darken the map so trails and ants pop
                 roughness: 1,
                 metalness: 0,
             }));
@@ -110,7 +110,7 @@ class SceneRenderer {
         this.scene.add(frame);
 
         // Scattered rocks outside the field for depth.
-        const rockMat = new THREE.MeshStandardMaterial({ color: 0x1a2130, roughness: 1 });
+        const rockMat = new THREE.MeshStandardMaterial({ color: 0x1c1d22, roughness: 1 });
         const rockGeo = new THREE.IcosahedronGeometry(1, 0);
         const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 40);
         const dummy = new THREE.Object3D();
@@ -709,13 +709,13 @@ function makeGroundTexture() {
     canvas.height = h;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = '#0a0f1a';
+    ctx.fillStyle = '#0b0c10';
     ctx.fillRect(0, 0, w, h);
 
     // Soft light pool in the centre where the field sits.
     const glow = ctx.createRadialGradient(w / 2, h / 2, 60, w / 2, h / 2, w * 0.55);
-    glow.addColorStop(0, 'rgba(38,48,72,0.55)');
-    glow.addColorStop(1, 'rgba(10,15,26,0)');
+    glow.addColorStop(0, 'rgba(44,46,56,0.55)');
+    glow.addColorStop(1, 'rgba(11,12,16,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
 
@@ -733,7 +733,7 @@ function makeGroundTexture() {
     const fy = (1 - FIELD_H / 460) / 2 * h;
     const fw = (FIELD_W / 560) * w;
     const fh = (FIELD_H / 460) * h;
-    ctx.strokeStyle = 'rgba(150,180,255,0.045)';
+    ctx.strokeStyle = 'rgba(210,214,235,0.045)';
     ctx.lineWidth = 1;
     const step = fw / 24;
     for (let x = fx; x <= fx + fw + 1; x += step) {

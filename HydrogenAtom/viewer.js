@@ -595,7 +595,9 @@
         }
         if (state.autoRotate && !pointer.down) camera.theta += dt * 0.12;
 
-        const bg = state.style === 0 ? [0.937, 0.933, 0.925] : [0.016, 0.020, 0.043];
+        // One night ground for every style, as on the rest of the site (the
+        // granular grains used to sit on paper, [0.937, 0.933, 0.925]).
+        const bg = [0.016, 0.020, 0.043];
         gl.clearColor(bg[0], bg[1], bg[2], 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 

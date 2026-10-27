@@ -574,7 +574,7 @@
 
             if (camera.zoom > 1.15) {
                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
-                ctx.font = '9px ui-monospace, monospace';
+                ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
                 ctx.textAlign = 'center';
                 ctx.fillText(pl.name, px, py - 6);
             }
@@ -589,7 +589,7 @@
         ctx.shadowColor = 'rgba(0,0,0,0.9)';
         ctx.shadowBlur = 6;
         ctx.font = (star === state.selected ? 'bold ' : '') +
-            Math.max(10, Math.min(15, 11 * camera.zoom)) + 'px ui-monospace, monospace';
+            Math.max(10, Math.min(15, 11 * camera.zoom)) + 'px "JetBrains Mono", ui-monospace, monospace';
         ctx.textAlign = 'center';
         ctx.fillText(star.label, p.x, p.y + r + 15);
         if (star.fn.isAsync || star.recursive || star.isDeadCode || star.isEntry) {
@@ -599,7 +599,7 @@
             if (star.isEntry) tags.push('entry point');
             if (star.isDeadCode) tags.push('dead code');
             ctx.fillStyle = 'rgba(255,255,255,0.45)';
-            ctx.font = '9px ui-monospace, monospace';
+            ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
             ctx.fillText(tags.join(' · '), p.x, p.y + r + 27);
         }
         ctx.restore();
@@ -614,7 +614,7 @@
         if (!state.paused) simulate();
         easeCamera();
 
-        ctx.fillStyle = '#04050a';
+        ctx.fillStyle = '#08090d';
         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
         drawLayers();

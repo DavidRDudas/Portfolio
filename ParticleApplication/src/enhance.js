@@ -134,7 +134,9 @@
         function fit() {
             const rect = canvas.getBoundingClientRect();
             const w = Math.floor(rect.width);
-            const h = Math.floor(Math.max(200, document.documentElement.clientHeight - rect.top - 2));
+            // keep the canvas's bottom margin (the stylesheet's gap under it) on screen
+            const gap = parseFloat(getComputedStyle(canvas).marginBottom) || 0;
+            const h = Math.floor(Math.max(200, document.documentElement.clientHeight - rect.top - 2 - gap));
             canvas.style.height = h + 'px';
             if (system.resizeTo(w, h) && hooks.onResize) hooks.onResize();
         }

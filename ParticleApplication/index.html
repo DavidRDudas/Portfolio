@@ -1,122 +1,404 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Physics Particle Simulator</title>
     <link rel="stylesheet" href="../shared.css?v=1b232de9">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../project.css?v=2754c467">
     <style>
+        /* The site's night palette (tokens from ../project.css): a glass
+           control panel on the left, the simulation stage beside it. */
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html {
+            min-height: 100%;
+            color-scheme: dark;
+            background:
+                radial-gradient(900px 600px at 100% 0%, rgba(157, 143, 255, .08), transparent 62%),
+                radial-gradient(800px 560px at 0% 100%, rgba(255, 150, 70, .06), transparent 60%),
+                var(--dd-bg);
+        }
+
         body {
             display: flex;
+            align-items: flex-start;
+            gap: 16px;
             margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
+            padding: 16px 16px 0;
+            color: var(--dd-ink);
+            font-family: var(--dd-sans);
+            font-size: 14px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
-        
-        #controls {
-            width: 300px;
-            padding: 20px;
-            background: #f5f5f5;
+
+        /* header.js adds the fixed site header (and .dd-has-header) only after
+           the simulator has measured its canvas, so the room for the header is
+           reserved up front: the same offset before and after the class lands. */
+        body,
+        body.dd-has-header {
+            padding-top: calc(var(--dd-header-h) + 16px);
         }
-        
-        .control-group {
-            margin-bottom: 20px;
-        }
-        
-        .control-group h3 {
-            margin: 0 0 10px 0;
-        }
-        
-        .slider-container {
-            margin: 10px 0;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-        
-        select, button {
-            width: 100%;
-            padding: 5px;
-            margin: 5px 0;
-        }
-        
+
         /* body is display:flex. Without these the canvas's intrinsic width
            (its width attribute) fought the flex algorithm: the panel was
            squeezed below its own basis and the canvas still overflowed the
            viewport. Pin the panel, let the canvas take exactly what is left. */
         #controls {
             flex: 0 0 auto;
+            width: 320px;
+            height: calc(100vh - var(--dd-header-h) - 32px); /* as tall as the stage */
             overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: 18px 20px 20px;
+            border: 1px solid var(--dd-line);
+            border-radius: var(--dd-radius);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .015)),
+                var(--dd-glass);
+            box-shadow: 0 24px 60px -30px rgba(0, 0, 0, .85);
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, .18) transparent;
+        }
+
+        #controls::-webkit-scrollbar { width: 8px; }
+        #controls::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .16); border-radius: 8px; }
+
+        .control-group {
+            margin-bottom: 16px;
+        }
+
+        .control-group h3 {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 0 0 10px;
+            font-family: var(--dd-mono);
+            font-size: 11.5px;
+            font-weight: 500;
+            line-height: 1.4;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: var(--dd-ink-2);
+        }
+
+        .control-group h3::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--dd-line-2), transparent);
+        }
+
+        .slider-container {
+            margin: 0;
+        }
+
+        .slider-container + .slider-container,
+        select + .slider-container {
+            margin-top: 11px;
+        }
+
+        label {
+            display: flow-root;
+            margin-bottom: 3px;
+            font-size: 13.5px;
+            font-weight: 500;
+            line-height: 1.35;
+            color: var(--dd-ink-2);
+        }
+
+        /* the live value sits at the end of its label's row */
+        label span {
+            float: right;
+            margin-left: 12px;
+            font-family: var(--dd-mono);
+            font-size: 12.5px;
+            font-weight: 500;
+            color: var(--dd-amber);
+            font-variant-numeric: tabular-nums;
+        }
+
+        select {
+            -webkit-appearance: none;
+            appearance: none;
+            display: block;
+            width: 100%;
+            min-height: 38px;
+            margin: 0;
+            padding: 0 36px 0 14px;
+            border: 1px solid var(--dd-line-2);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, .04) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c4c2d0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 13px center;
+            color: var(--dd-ink);
+            font: 500 14px/1.2 var(--dd-sans);
+            cursor: pointer;
+            transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+        }
+
+        select:hover {
+            border-color: var(--dd-line-3);
+            background-color: rgba(255, 255, 255, .065);
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--dd-amber-line);
+            box-shadow: 0 0 0 4px rgba(255, 180, 106, .14);
+        }
+
+        select option {
+            background: #12141c;
+            color: var(--dd-ink);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            display: block;
+            width: 100%;
+            height: 18px;
+            margin: 0;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]:focus { outline: none; }
+
+        input[type="range"]:focus-visible {
+            outline: 2px solid var(--dd-amber-line);
+            outline-offset: 3px;
+            border-radius: 999px;
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .14);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            margin-top: -6px;
+            border: 0;
+            border-radius: 50%;
+            background: var(--dd-amber);
+            box-shadow: 0 0 0 4px rgba(255, 180, 106, .18), 0 0 12px rgba(255, 170, 90, .6);
+            transition: box-shadow .2s ease;
+        }
+
+        input[type="range"]:hover::-webkit-slider-thumb,
+        input[type="range"]:focus-visible::-webkit-slider-thumb {
+            box-shadow: 0 0 0 6px rgba(255, 180, 106, .24), 0 0 16px rgba(255, 170, 90, .75);
+        }
+
+        input[type="range"]::-moz-range-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .14);
+        }
+
+        input[type="range"]::-moz-range-progress {
+            height: 4px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255, 180, 106, .3), var(--dd-amber));
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border: 0;
+            border-radius: 50%;
+            background: var(--dd-amber);
+            box-shadow: 0 0 0 4px rgba(255, 180, 106, .18), 0 0 12px rgba(255, 170, 90, .6);
+        }
+
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 38px;
+            margin: 0;
+            padding: 0 18px;
+            border: 1px solid var(--dd-line-2);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .045);
+            color: var(--dd-ink);
+            font: 600 14px/1 var(--dd-sans);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform .2s var(--dd-ease), background-color .2s ease, border-color .2s ease, box-shadow .2s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, .09);
+            border-color: var(--dd-line-3);
+        }
+
+        button:active { transform: scale(.97); }
+
+        button:focus-visible {
+            outline: 2px solid var(--dd-amber);
+            outline-offset: 3px;
         }
 
         canvas {
-            border: 1px solid #ccc;
-            margin-left: 20px;
             flex: 1 1 0;
             min-width: 0;
             display: block;
+            box-sizing: content-box;
+            margin: 0 0 16px; /* the driver in enhance.js leaves this gap below the canvas */
+            border: 1px solid var(--dd-line);
+            border-radius: var(--dd-radius);
+            background-color: #0a0b10;
+            background-image:
+                radial-gradient(circle, rgba(255, 255, 255, .06) 1px, transparent 1.6px),
+                radial-gradient(1100px 640px at 50% 0%, rgba(157, 143, 255, .07), transparent 70%);
+            background-size: 32px 32px, 100% 100%;
+            box-shadow: 0 30px 80px -40px rgba(0, 0, 0, .9);
+            cursor: crosshair;
         }
-        
+
         label[title] {
             cursor: help;
-            border-bottom: 1px dotted #666;
+            text-decoration: underline dotted rgba(255, 255, 255, .3);
+            text-underline-offset: 4px;
         }
 
         .performance-stats {
-            background: #e0e0e0;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+            margin-top: 14px;
         }
 
-        .sim-buttons { display: flex; gap: 8px; margin-bottom: 10px; }
+        .sim-buttons { display: flex; gap: 8px; margin-bottom: 8px; }
         .sim-buttons button { flex: 1; }
+
+        /* Pause / Resume is the main control */
+        #pauseToggle {
+            border-color: transparent;
+            color: var(--dd-amber-ink);
+            background: linear-gradient(180deg, #ffcc96 0%, var(--dd-amber) 48%, #ff9a52 100%);
+            box-shadow: 0 10px 26px -12px rgba(255, 150, 70, .65), inset 0 1px 0 rgba(255, 255, 255, .5);
+        }
+
+        #pauseToggle:hover {
+            background: linear-gradient(180deg, #ffd4a6 0%, #ffbd7c 48%, #ffa463 100%);
+        }
+
         .performance-stats div {
-            margin: 5px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            margin: 0;
+            padding: 7px 11px 8px;
+            border: 1px solid var(--dd-line);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, .03);
+            font-family: var(--dd-mono);
+            font-size: 10.5px;
+            line-height: 1.3;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--dd-muted);
+            white-space: nowrap;
+        }
+
+        .performance-stats span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: -.01em;
+            text-transform: none;
+            color: var(--dd-ink);
+            font-variant-numeric: tabular-nums;
         }
 
         /* Tooltip styling */
         [title] {
             position: relative;
-            display: inline-block;
         }
 
         [title]:hover::after {
             content: attr(title);
             position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 5px 10px;
-            background: #333;
-            color: white;
-            border-radius: 4px;
-            font-size: 12px;
+            bottom: calc(100% + 6px);
+            left: 0;
+            padding: 6px 10px;
+            border: 1px solid var(--dd-line-2);
+            border-radius: 8px;
+            background: var(--dd-panel-2);
+            box-shadow: 0 12px 30px -12px rgba(0, 0, 0, .8);
+            color: var(--dd-ink);
+            font: 500 12px/1.3 var(--dd-sans);
             white-space: nowrap;
             z-index: 1000;
+            pointer-events: none;
         }
 
         .speed-presets {
-            margin-top: 10px;
             display: flex;
-            gap: 5px;
+            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .speed-presets button {
-            padding: 5px 10px;
-            background: #444;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-
-        .speed-presets button:hover {
-            background: #666;
+            width: auto;
+            min-height: 32px;
+            margin-top: 12px;
+            padding: 0 14px;
+            font-size: 12.5px;
         }
 
         .wide-slider {
             width: 200px;
+        }
+
+        /* Phones: the panel on top (it scrolls inside itself), the stage
+           below it filling the rest of the screen. */
+        @media (max-width: 720px) {
+            body {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            body,
+            body.dd-has-header {
+                padding-top: calc(var(--dd-header-h) + 12px);
+            }
+
+            #controls {
+                width: auto;
+                height: 42vh;
+                height: 42svh;
+                padding: 16px 16px 18px;
+                border-radius: 16px;
+            }
+
+            canvas {
+                flex: none;
+                margin-bottom: 12px;
+                border-radius: 16px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #controls *, #controls *::before, #controls *::after { transition: none !important; }
+            button:active { transform: none; }
         }
     </style>
 </head>
@@ -256,10 +538,10 @@
     <canvas id="simulationCanvas"></canvas>
     <script src="src/Particle.js?v=d059f0ee"></script>
     <script src="src/SpatialGrid.js?v=01d9fab7"></script>
-    <script src="src/ParticleSystem.js?v=55341aa1"></script>
+    <script src="src/ParticleSystem.js?v=c40f02a3"></script>
     <script src="src/main.js?v=6f8f8451"></script>
-    <script src="src/enhance.js?v=c912555d"></script>
-    <script src="../header.js?v=5cac42e6"></script>
+    <script src="src/enhance.js?v=a2d24fa9"></script>
+    <script src="../header.js?v=95664804"></script>
     <script>
         const canvas = document.getElementById('simulationCanvas');
 

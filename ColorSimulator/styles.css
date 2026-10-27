@@ -1,261 +1,364 @@
-.container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
+/* Color Wave Patterns: the particle field fills the screen behind the translucent
+   site header, and the control panel is dark glass in the main site's style
+   (tokens from ../project.css). The particles keep the engine's own colours. */
+:root { color-scheme: dark; }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--dd-bg);
+    color: var(--dd-ink);
+    font-family: var(--dd-sans);
+    -webkit-font-smoothing: antialiased;
 }
 
-.controls {
-    margin-bottom: 20px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
+/* app.js sizes it to the window */
+#canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    display: block;
 }
 
-#gridCanvas {
-    border: 1px solid #ccc;
-    background: #fff;
-}
-
-button {
-    padding: 8px 16px;
-    cursor: pointer;
-    background: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-}
-
-button:hover {
-    background: #45a049;
-}
-
-select {
-    padding: 8px;
-    border-radius: 4px;
-}
-
-@media (max-width: 768px) {
-    #controlPanel {
-        top: auto;
-        bottom: 20px;
-        right: 50%;
-        transform: translateX(50%);
-        max-width: 90%;
-    }
-
-    .control-group label {
-        width: 100px;
-    }
-
-    input[type="range"] {
-        width: 120px;
-    }
-}
-
-/* Add smooth transitions */
-input[type="range"] {
-    transition: all 0.3s ease;
-}
+/* --- control panel ------------------------------------------------------ */
 
 #controlPanel {
+    position: fixed;
+    top: calc(var(--dd-header-h) + 16px);
+    right: 16px;
+    z-index: 10;
+    width: 340px;
+    max-height: calc(100vh - var(--dd-header-h) - 32px);
+    max-height: calc(100dvh - var(--dd-header-h) - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 18px 16px;
+    background: var(--dd-glass);
+    background-clip: padding-box;
+    border: 1px solid var(--dd-line);
+    border-radius: 18px;
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    backdrop-filter: blur(16px) saturate(130%);
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.9);
+    color: var(--dd-ink);
+    font-size: 13px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
     transition: opacity 0.3s ease;
 }
 
-/* Add hover effect to show/hide controls */
-#controlPanel {
-    opacity: 0.3;
+#controlPanel::-webkit-scrollbar { width: 6px; }
+#controlPanel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 6px; }
+#controlPanel::-webkit-scrollbar-track { background: transparent; }
+
+/* the panel fades back so the field shows through, until the pointer or focus is on it */
+@media (hover: hover) {
+    #controlPanel { opacity: 0.3; }
+    #controlPanel:hover,
+    #controlPanel:focus-within { opacity: 1; }
 }
 
-#controlPanel:hover {
-    opacity: 1;
-}
-
-/* Add to existing styles */
-#emergencyButton {
-    background: #ff4444;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: bold;
-    text-transform: uppercase;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-#emergencyButton:hover {
-    background: #ff6666;
-    transform: scale(1.05);
-}
-
-#emergencyButton:active {
-    transform: scale(0.95);
-}
-
-input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    vertical-align: middle;
-}
-
-#clearCanvas {
-    background: #666;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: bold;
-    margin-top: 10px;
-}
-
-#clearCanvas:hover {
-    background: #888;
-    transform: scale(1.05);
-}
-
-#clearCanvas:active {
-    transform: scale(0.95);
-}
-
-#pauseButton {
-    background: #2196F3;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: bold;
-    margin-right: 10px;
-}
-
-#pauseButton:hover {
-    background: #1976D2;
-    transform: scale(1.05);
-}
-
-#pauseButton:active {
-    transform: scale(0.95);
-}
-
-/* Add to existing styles */
 .control-section {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 10px 0;
-    margin-bottom: 10px;
-}
-
-.control-section h3 {
-    color: #4CAF50;
-    margin: 0 0 10px 0;
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    padding: 14px 0 12px;
+    border-bottom: 1px solid var(--dd-line);
 }
 
 .control-section:last-child {
     border-bottom: none;
+    padding-bottom: 2px;
 }
 
-.button-group {
-    /* display: flex; */
-    gap: 10px;
-    align-items: center;
-    justify-content: flex-start;
-    margin-top: 10px;
-}
-
-button {
-    min-width: 80px;
-    padding: 8px 16px;
-    height: 32px;
-    line-height: 1;
+.control-section h3 {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 10px;
+    margin: 0 0 8px;
+    font-family: var(--dd-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dd-muted);
 }
 
-/* Improve tooltip appearance */
-[title] {
-    position: relative;
-    cursor: help;
-}
-
-[title]:hover::after {
-    content: attr(title);
-    position: absolute;
-    left: 100%;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 5px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    white-space: nowrap;
-    z-index: 1000;
-    margin-left: 10px;
-}
-
-/* Make controls more compact */
-.control-group {
-    margin: 5px 0;
-}
-
-/* Improve select boxes */
-select {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 4px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-select:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-/* Improve range inputs */
-input[type="range"] {
-    height: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-    background: #4CAF50;
-    cursor: pointer;
-    border-radius: 50%;
-    border: none;
-}
-
-/* Improve checkbox appearance */
-input[type="checkbox"] {
-    accent-color: #4CAF50;
-}
-
-/* Make control panel scrollable if needed */
-#controlPanel {
-    max-height: 90vh;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-#controlPanel::-webkit-scrollbar {
+.control-section h3::before {
+    content: "";
+    flex: none;
     width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dd-amber);
+    box-shadow: 0 0 10px 1px rgba(255, 170, 90, 0.8);
 }
 
-#controlPanel::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
+/* one row per control: label | control | value */
+.control-group {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr) 44px;
+    align-items: center;
+    column-gap: 10px;
+    min-height: 32px;
 }
 
-#controlPanel::-webkit-scrollbar-track {
+.control-group label {
+    color: var(--dd-ink-2);
+    font-size: 13px;
+    line-height: 1.25;
+}
+
+.control-group > select { grid-column: 2 / -1; }
+.control-group > input[type="checkbox"] { grid-column: 3; justify-self: end; }
+.control-group > :only-child { grid-column: 1 / -1; }
+
+.value-display {
+    font-family: var(--dd-mono);
+    font-size: 11.5px;
+    color: var(--dd-ink-2);
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* sliders */
+#controlPanel input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 20px;
+    margin: 0;
     background: transparent;
+    cursor: pointer;
+}
+
+#controlPanel input[type="range"]:focus { outline: none; }
+
+#controlPanel input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+#controlPanel input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+#controlPanel input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--dd-amber);
+    box-shadow: 0 0 0 4px rgba(255, 180, 106, 0.18), 0 0 12px rgba(255, 170, 90, 0.6);
+}
+
+#controlPanel input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--dd-amber);
+    box-shadow: 0 0 0 4px rgba(255, 180, 106, 0.18), 0 0 12px rgba(255, 170, 90, 0.6);
+}
+
+#controlPanel input[type="range"]:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 6px rgba(255, 180, 106, 0.35), 0 0 14px rgba(255, 170, 90, 0.7);
+}
+
+#controlPanel input[type="range"]:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 6px rgba(255, 180, 106, 0.35), 0 0 14px rgba(255, 170, 90, 0.7);
+}
+
+/* checkboxes as switches */
+#controlPanel input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    border-radius: 999px;
+    border: 1px solid var(--dd-line-2);
+    background-color: rgba(255, 255, 255, 0.08);
+    background-image: radial-gradient(circle, var(--dd-ink-2) 0 5.5px, transparent 6.5px);
+    background-repeat: no-repeat;
+    background-size: 18px 18px;
+    background-position: 0 50%;
+    cursor: pointer;
+    transition: background-color 0.2s ease, background-position 0.2s var(--dd-ease), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#controlPanel input[type="checkbox"]:hover { border-color: var(--dd-line-3); }
+
+#controlPanel input[type="checkbox"]:checked {
+    border-color: transparent;
+    background-color: var(--dd-amber);
+    background-image: radial-gradient(circle, var(--dd-amber-ink) 0 5.5px, transparent 6.5px);
+    background-position: 100% 50%;
+    box-shadow: 0 0 14px -2px rgba(255, 170, 90, 0.55);
+}
+
+#controlPanel input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--dd-amber);
+    outline-offset: 3px;
+}
+
+/* selects */
+#controlPanel select {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    min-height: 32px;
+    margin: 0;
+    padding: 0 30px 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--dd-line-2);
+    background: rgba(255, 255, 255, 0.04) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c4c2d0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--dd-ink);
+    font-family: var(--dd-sans);
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+#controlPanel select:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+    border-color: var(--dd-line-3);
+}
+
+#controlPanel select:focus-visible {
+    border-color: var(--dd-amber-line);
+    box-shadow: 0 0 0 4px rgba(255, 180, 106, 0.12);
+}
+
+#controlPanel select option {
+    background: #12141c;
+    color: var(--dd-ink);
+}
+
+#stats {
+    padding-top: 6px;
+    font-family: var(--dd-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    color: var(--dd-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* buttons */
+.button-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.button-group .control-group { flex: 1 0 100%; }
+
+#controlPanel button {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: 1px solid var(--dd-line-2);
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--dd-ink);
+    font-family: var(--dd-sans);
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.2s var(--dd-ease), background-color 0.2s ease, border-color 0.2s ease;
+}
+
+#controlPanel button:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: var(--dd-line-3);
+}
+
+#controlPanel button:active { transform: scale(0.97); }
+
+#controlPanel button:focus-visible {
+    outline: 2px solid var(--dd-amber);
+    outline-offset: 3px;
+}
+
+#controlPanel #pauseButton {
+    color: var(--dd-amber-ink);
+    border-color: transparent;
+    background: linear-gradient(180deg, #ffcc96 0%, var(--dd-amber) 48%, #ff9a52 100%);
+    box-shadow: 0 10px 26px -12px rgba(255, 150, 70, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+#controlPanel #pauseButton:hover {
+    background: linear-gradient(180deg, #ffd4a6 0%, #ffbd7c 48%, #ffa463 100%);
+}
+
+/* each control's title, shown as a small label above it */
+@media (hover: hover) {
+    #controlPanel [title] {
+        position: relative;
+        cursor: help;
+    }
+
+    #controlPanel [title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 2px);
+        z-index: 20;
+        width: max-content;
+        max-width: 100%;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--dd-line-2);
+        background: var(--dd-glass-strong);
+        box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.9);
+        font-family: var(--dd-mono);
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 1.45;
+        letter-spacing: 0.02em;
+        color: var(--dd-ink-2);
+        white-space: normal;
+        pointer-events: none;
+    }
+}
+
+/* --- phones: a sheet along the bottom, scrolled inside ------------------- */
+
+@media (max-width: 640px) {
+    #controlPanel {
+        top: auto;
+        left: 12px;
+        right: 12px;
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        width: auto;
+        max-height: 46vh;
+        max-height: 46dvh;
+        padding: 2px 16px 14px;
+    }
+}
+
+@media (pointer: coarse) {
+    .control-group { min-height: 40px; }
+    #controlPanel input[type="range"] { height: 28px; }
+    /* 16px keeps iOS from zooming in when a select opens */
+    #controlPanel select { min-height: 36px; font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #controlPanel,
+    #controlPanel input[type="checkbox"],
+    #controlPanel button { transition: none; }
 }

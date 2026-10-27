@@ -1,0 +1,72 @@
+/* Shared look for the project pages that live on this site (ACO, Code
+   Constellation, Color Simulator, Dream Weaver, Hydrogen, Naive Cryptography,
+   Particle Physics): the same night palette, type and controls as the
+   homepage and portfolio (portfolio-site.css), plus the site header that
+   header.js injects. Pages opt in to the components below with dd- classes
+   or build on the tokens directly. */
+:root{
+  --dd-bg:#08090d; --dd-bg-2:#0c0e14; --dd-panel:#10131a; --dd-panel-2:#151923;
+  --dd-glass:rgba(10,11,16,.74); --dd-glass-strong:rgba(12,13,19,.92);
+  --dd-line:rgba(255,255,255,.08); --dd-line-2:rgba(255,255,255,.14); --dd-line-3:rgba(255,255,255,.24);
+  --dd-ink:#efedf5; --dd-ink-2:#c4c2d0; --dd-muted:#8e8c9d; --dd-faint:#62606f;
+  --dd-amber:#ffb46a; --dd-amber-2:#ff8f45; --dd-amber-ink:#1c1208;
+  --dd-amber-soft:rgba(255,180,106,.12); --dd-amber-line:rgba(255,180,106,.55);
+  --dd-violet:#9d8fff; --dd-violet-soft:rgba(157,143,255,.14); --dd-cyan:#86dcff;
+  --dd-danger:#ff7a6b;
+  --dd-display:"Bricolage Grotesque","Inter",system-ui,sans-serif;
+  --dd-sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --dd-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --dd-radius:18px; --dd-radius-sm:12px; --dd-ease:cubic-bezier(.2,.7,.2,1);
+  --dd-header-h:64px;
+  /* the names the older pages and shared.css use, pointed at the palette */
+  --primary-color:var(--dd-amber); --secondary-color:#ffd9b0; --text-color:var(--dd-ink);
+  color-scheme:dark;
+}
+::selection{background:rgba(255,180,106,.32);color:#fff}
+
+/* ---------- site header (markup from header.js) ---------- */
+body.dd-has-header{padding-top:var(--dd-header-h)}
+.dd-header,.dd-header *,.dd-header *::before,.dd-header *::after{box-sizing:border-box}
+/* display/margin/padding/colour are pinned so a page's own bare `header{…}`
+   rules can't reshape or tint the site header */
+.dd-header{display:block;margin:0;padding:0;color:var(--dd-ink);position:fixed;top:0;left:0;right:0;z-index:9999;height:var(--dd-header-h);background:rgba(8,9,13,.78);-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--dd-line);font-family:var(--dd-sans);-webkit-font-smoothing:antialiased}
+.dd-header-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;height:100%;padding:0 clamp(16px,3vw,32px)}
+.dd-header a{color:inherit;text-decoration:none}
+.dd-wordmark{display:inline-flex;align-items:center;gap:12px;font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--dd-ink);white-space:nowrap}
+.dd-monogram{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;font-family:var(--dd-display);font-size:14px;font-weight:800;letter-spacing:-.04em;line-height:1;color:var(--dd-amber-ink);background:radial-gradient(circle at 32% 28%,#ffe0bd,var(--dd-amber) 52%,var(--dd-amber-2));box-shadow:0 0 20px rgba(255,160,80,.36),inset 0 -2px 4px rgba(120,50,0,.25);transition:transform .4s var(--dd-ease)}
+.dd-wordmark:hover .dd-monogram{transform:rotate(-12deg) scale(1.06)}
+.dd-nav{display:flex;align-items:center;gap:4px}
+.dd-nav a{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:14px;font-weight:500;color:var(--dd-ink-2);transition:color .2s ease,background-color .2s ease,border-color .2s ease}
+.dd-nav a:hover{color:var(--dd-ink);background:rgba(255,255,255,.06)}
+.dd-nav .dd-nav-contact{margin-left:6px;border:1px solid var(--dd-line-2);color:var(--dd-ink)}
+.dd-nav .dd-nav-contact:hover{border-color:var(--dd-amber);color:var(--dd-amber);background:var(--dd-amber-soft)}
+.dd-header :focus-visible{outline:2px solid var(--dd-amber);outline-offset:3px;border-radius:999px}
+@media(max-width:640px){
+  :root{--dd-header-h:56px}
+  .dd-wordmark-name{display:none}
+  .dd-nav a{padding:7px 10px;font-size:13.5px}
+}
+
+/* ---------- components (opt-in) ---------- */
+.dd-eyebrow{display:inline-flex;align-items:center;gap:10px;font-family:var(--dd-mono);font-size:11.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--dd-muted)}
+.dd-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--dd-amber);box-shadow:0 0 10px 1px rgba(255,170,90,.8)}
+.dd-panel{background:var(--dd-glass);border:1px solid var(--dd-line);border-radius:var(--dd-radius);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 24px 60px -30px rgba(0,0,0,.85);color:var(--dd-ink)}
+.dd-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 18px;border-radius:999px;border:1px solid var(--dd-line-2);background:rgba(255,255,255,.045);color:var(--dd-ink);font-family:var(--dd-sans);font-size:14px;font-weight:600;line-height:1;cursor:pointer;transition:transform .2s var(--dd-ease),background-color .2s ease,border-color .2s ease,box-shadow .2s ease,color .2s ease}
+.dd-btn:hover{background:rgba(255,255,255,.09);border-color:var(--dd-line-3)}
+.dd-btn:active{transform:scale(.97)}
+.dd-btn-primary,.dd-btn.is-active{color:var(--dd-amber-ink);border-color:transparent;background:linear-gradient(180deg,#ffcc96 0%,var(--dd-amber) 48%,#ff9a52 100%);box-shadow:0 10px 26px -12px rgba(255,150,70,.65),inset 0 1px 0 rgba(255,255,255,.5)}
+.dd-btn-primary:hover,.dd-btn.is-active:hover{background:linear-gradient(180deg,#ffd4a6 0%,#ffbd7c 48%,#ffa463 100%);border-color:transparent}
+.dd-btn[disabled],.dd-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.dd-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--dd-line);background:rgba(255,255,255,.04);font-family:var(--dd-mono);font-size:11.5px;color:var(--dd-ink-2)}
+.dd-input,.dd-select{min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--dd-line-2);background:rgba(255,255,255,.04);color:var(--dd-ink);font-family:var(--dd-sans);font-size:14px;outline:none;transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease}
+.dd-input:focus,.dd-select:focus{border-color:var(--dd-amber-line);box-shadow:0 0 0 4px rgba(255,180,106,.12)}
+.dd-select{-webkit-appearance:none;appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c4c2d0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.dd-select option{background:#12141c;color:var(--dd-ink)}
+.dd-range{-webkit-appearance:none;appearance:none;height:4px;border-radius:999px;background:rgba(255,255,255,.14);outline:none;cursor:pointer}
+.dd-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--dd-amber);border:0;box-shadow:0 0 0 4px rgba(255,180,106,.18),0 0 12px rgba(255,170,90,.6)}
+.dd-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--dd-amber);border:0;box-shadow:0 0 0 4px rgba(255,180,106,.18),0 0 12px rgba(255,170,90,.6)}
+.dd-range::-moz-range-track{height:4px;border-radius:999px;background:rgba(255,255,255,.14)}
+.dd-check{accent-color:var(--dd-amber)}
+.dd-scroll{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.dd-scroll::-webkit-scrollbar{width:8px;height:8px}
+.dd-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:8px}
