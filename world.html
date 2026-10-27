@@ -1282,6 +1282,92 @@ const matStandard = (color, roughness = 0.85, metalness = 0.0) =>
 const matEmissive = (color, emissive, intensity = 1.0) =>
   new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: intensity, roughness: 0.5, metalness: 0.0 });
 
+// -------- SMOOTH SHAPES --------
+// Rounded and organic primitives for the models (the world used to be built
+// almost entirely from sharp boxes). Each returns an indexed BufferGeometry
+// with normals and UVs, centred on the origin like its THREE counterpart.
+
+// Box with rounded edges and corners: w×h×d overall, corner radius r,
+// `seg` segments around each rounded edge. Material groups match
+// BoxGeometry's six faces, and UVs are re-projected from the final shape so
+// textured faces (posters, screens, spines) keep their artwork undistorted.
+const _RBOX_FACES = [  // BoxGeometry's per-face UV axes: [u, v, udir, vdir]
+  ['z', 'y', -1, -1], ['z', 'y', 1, -1], ['x', 'z', 1, 1],
+  ['x', 'z', 1, -1], ['x', 'y', 1, -1], ['x', 'y', -1, -1],
+];
+function rbox(w, h, d, r = Math.min(w, h, d) * 0.15, seg = 2) {
+  r = Math.min(r, w / 2, h / 2, d / 2);
+  if (!(r > 1e-5)) return new THREE.BoxGeometry(w, h, d);
+  const n = seg * 2 + 1;                       // odd, so each face keeps a flat centre
+  const g = new THREE.BoxGeometry(1, 1, 1, n, n, n);
+  const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
+  const half = 0.5 / n, size = { x: w, y: h, z: d };
+  const inner = { x: w / 2 - r, y: h / 2 - r, z: d / 2 - r };
+  const perFace = (n + 1) * (n + 1);
+  const p = new THREE.Vector3(), nv = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) {
+    p.fromBufferAttribute(P, i);
+    nv.set(p.x - Math.sign(p.x) * half, p.y - Math.sign(p.y) * half, p.z - Math.sign(p.z) * half).normalize();
+    const x = inner.x * Math.sign(p.x) + nv.x * r;
+    const y = inner.y * Math.sign(p.y) + nv.y * r;
+    const z = inner.z * Math.sign(p.z) + nv.z * r;
+    P.setXYZ(i, x, y, z);
+    N.setXYZ(i, nv.x, nv.y, nv.z);
+    const [ua, va, ud, vd] = _RBOX_FACES[Math.floor(i / perFace)];
+    const fp = { x, y, z };
+    U.setXY(i, (fp[ua] * ud + size[ua] / 2) / size[ua], 1 - (fp[va] * vd + size[va] / 2) / size[va]);
+  }
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
+
+// Solid of revolution around Y from a profile of [radius, y] pairs (bottom
+// to top). The basis of most of the round shapes below.
+function lathe(profile, radial = 14) {
+  return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 0), y)), radial);
+}
+
+// Capsule along Y: radius r, straight section `len` (total height len + 2r).
+function capsule(r, len, capSeg = 4, radial = 12) {
+  return taper(r, r, len, capSeg, radial);
+}
+
+// Tapered capsule along Y: a sphere of radius r0 at y = -len/2 joined to one
+// of radius r1 at y = +len/2 by their common tangent cone — limbs, necks,
+// tails, bottles. Total height len + r0 + r1.
+function taper(r0, r1, len, capSeg = 4, radial = 12) {
+  const y0 = -len / 2, y1 = len / 2;
+  const a = Math.asin(Math.max(-1, Math.min(1, (r0 - r1) / Math.max(len, 1e-6))));
+  const pts = [];
+  for (let i = 0; i <= capSeg; i++) {
+    const t = -Math.PI / 2 + (i / capSeg) * (a + Math.PI / 2);
+    pts.push([Math.cos(t) * r0, y0 + Math.sin(t) * r0]);
+  }
+  for (let i = 0; i <= capSeg; i++) {
+    const t = a + (i / capSeg) * (Math.PI / 2 - a);
+    pts.push([Math.cos(t) * r1, y1 + Math.sin(t) * r1]);
+  }
+  return lathe(pts, radial);
+}
+
+// Cylinder with rounded rims (wheels, logs, posts, knobs): radius r, height
+// h along Y, rim radius `bevel`.
+function rcyl(r, h, bevel = Math.min(r, h) * 0.2, radial = 16, bevelSeg = 3) {
+  bevel = Math.min(bevel, r, h / 2);
+  const pts = [[0, -h / 2]];
+  for (let i = 0; i <= bevelSeg; i++) {
+    const t = -Math.PI / 2 + (i / bevelSeg) * (Math.PI / 2);
+    pts.push([r - bevel + Math.cos(t) * bevel, -h / 2 + bevel + Math.sin(t) * bevel]);
+  }
+  for (let i = 0; i <= bevelSeg; i++) {
+    const t = (i / bevelSeg) * (Math.PI / 2);
+    pts.push([r - bevel + Math.cos(t) * bevel, h / 2 - bevel + Math.sin(t) * bevel]);
+  }
+  pts.push([0, h / 2]);
+  return lathe(pts, radial);
+}
+
 // -------- PROCEDURAL TEXTURES --------
 function woodTexture(baseColor, plankColor, plankCount = 8) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 512;
@@ -10523,8 +10609,14 @@ function replaceSnowCaps(replaced) {
   }
   // objects that move, hide or get outlined as a whole keep their group,
   // but the parts inside each one can still be merged together
+  // (any of them, and the animated models below, can list parts that move on
+  // their own — tail, legs, head, wings, hands — in userData.animParts; those
+  // stay separate and everything else is merged)
   for (const g of [programmer, deskChairObj, sideChairObj, tvObject, boatObj, ...campChairObjs]) {
-    if (g) bakeStaticMeshes(g);
+    if (g) bakeStaticMeshes(g, { skip: new Set(g.userData.animParts || []) });
+  }
+  for (const g of [...dogs, ...yardAnimals, ...birds, porchOwl]) {
+    if (g && g.userData.animParts) bakeStaticMeshes(g, { skip: new Set(g.userData.animParts) });
   }
   bakeStaticMeshes(contactShadows, { allowTransparent: true });
 }
