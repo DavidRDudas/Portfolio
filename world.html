@@ -7542,6 +7542,1167 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
 }
 
 // ==========================================================
+// ROOM DRESSING KIT — shared helpers for the bedroom, game room and office
+// furnishings in the next three sections
+// ==========================================================
+// Wood is built like the cabin's timber (grain UVs + vertex colours on the
+// log atlas), so it merges into the timber batch; fabric, ceramic and metal
+// parts use looks the older furniture already has, so STATIC BATCHING folds
+// them into existing draw calls. Printed surfaces (rugs, posters, game
+// spines, a photo) share one canvas atlas, and everything that glows (lamp
+// shades, bulbs, neon, LEDs) shares one emissive material that takes its
+// colour from swatches in the same atlas. Pieces hung on an outer wall are
+// merged per wall and hide with it in X-ray view.
+const furnishKit = (() => {
+  const S = 1024;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, S, S);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = MAX_ANISO;   // rugs are mostly seen at a slant
+  // paint a region of the atlas with draw(ctx, w, h) in its own pixel frame;
+  // returns its UV rect [u0, v0, u1, v1], inset half a texel
+  const region = (x, y, w, h, draw) => {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.translate(x, y);
+    draw(ctx, w, h);
+    ctx.restore();
+    tex.needsUpdate = true;
+    return [(x + 0.5) / S, 1 - (y + h - 0.5) / S, (x + w - 0.5) / S, 1 - (y + 0.5) / S];
+  };
+  // Layout: rugs and posters fill the top 776 px (see each room); the strip
+  // at y 784 holds game spines; the bottom row holds the glow swatches and a
+  // plain white block that untextured printed parts sample.
+  const WHITE = region(896, 896, 128, 128, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); });
+  const SW = {};
+  [['lamp', '#e2bf86'], ['bulb', '#fff3d6'], ['pink', '#ff4fae'], ['cyan', '#3fe6ff'], ['yellow', '#ffd23f'],
+   ['board', '#120d22'], ['red', '#ff3226'], ['flame', '#ffb24a']]
+    .forEach(([name, col], i) => {
+      SW[name] = region(8 + i * 48, 968, 40, 40, (g, w, h) => { g.fillStyle = col; g.fillRect(0, 0, w, h); });
+    });
+
+  // printed parts: matte, colour = atlas × vertex colour
+  const atlasMat = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.9 });
+  // glowing parts: the swatch is both the surface and the emitted colour;
+  // double-sided so you can look into a lamp shade from above
+  const glowMat = new THREE.MeshStandardMaterial({
+    map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 1.0,
+    vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
+
+  // ---- UVs ----
+  // a geometry's own 0..1 UVs squeezed into rect r
+  const fit = (geo, r) => {
+    const U = geo.attributes.uv;
+    for (let i = 0; i < U.count; i++) U.setXY(i, r[0] + U.getX(i) * (r[2] - r[0]), r[1] + U.getY(i) * (r[3] - r[1]));
+    return geo;
+  };
+  // every UV on the centre of rect r: a flat colour
+  const dot = (geo, r) => {
+    const U = geo.attributes.uv, u = (r[0] + r[2]) / 2, v = (r[1] + r[3]) / 2;
+    for (let i = 0; i < U.count; i++) U.setXY(i, u, v);
+    return geo;
+  };
+  // UVs projected along two position axes into rect r (v runs up `b`, or
+  // down it when flip is set)
+  const planar = (geo, r, a, b, flip = false) => {
+    geo.computeBoundingBox();
+    const P = geo.attributes.position, U = geo.attributes.uv, lo = geo.boundingBox.min, hi = geo.boundingBox.max;
+    for (let i = 0; i < P.count; i++) {
+      const p = { x: P.getX(i), y: P.getY(i), z: P.getZ(i) };
+      const u = (p[a] - lo[a]) / (hi[a] - lo[a] || 1);
+      let v = (p[b] - lo[b]) / (hi[b] - lo[b] || 1);
+      if (flip) v = 1 - v;
+      U.setXY(i, r[0] + u * (r[2] - r[0]), r[1] + v * (r[3] - r[1]));
+    }
+    return geo;
+  };
+
+  // ---- materials ----
+  // plain parts: one shared material per colour and look; the looks match
+  // ones the older static furniture uses, so the batching merges them for
+  // free (fabric shares the plants' roughness: no root-level batch has 0.9
+  // with shadows)
+  const LOOK = {
+    fabric: [0.85, 0], matte: [0.95, 0], leaf: [0.85, 0], paper: [0.7, 0], satin: [0.6, 0],
+    plastic: [0.5, 0], ceramic: [0.4, 0], brass: [0.4, 0.7], chrome: [0.3, 0.8],
+  };
+  const mats = new Map();
+  const mat = (color, look) => {
+    const key = color + '|' + look;
+    let m = mats.get(key);
+    if (!m) mats.set(key, m = matStandard(color, LOOK[look][0], LOOK[look][1]));
+    return m;
+  };
+  // throwaway single-colour materials for parts that get merged (their
+  // colour becomes vertex colour)
+  const tones = new Map();
+  const tone = c => tones.get(c) || tones.set(c, new THREE.MeshBasicMaterial({ color: c })).get(c);
+
+  // ---- builders ----
+  // Parts are added in a frame (x right, y up, front toward +z) with an
+  // optional Euler rotation and scale (a number or [x, y, z]). wood() parts
+  // carry grain along `axis`; print() parts show atlas rect r (a flat colour
+  // when r is null; r === true keeps UVs the geometry already maps into the
+  // atlas); glow() parts show a swatch; mesh() adds a plain part with a
+  // shared look. at() opens a sub-frame for a prop sitting on the piece.
+  const placeMesh = (parent, m, x, y, z, rx = 0, ry = 0, rz = 0, s = 1) => {
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, rz);
+    if (Array.isArray(s)) m.scale.set(s[0], s[1], s[2]); else m.scale.setScalar(s);
+    parent.add(m);
+    return m;
+  };
+  const builder = (grp, lists) => {
+    const b = {
+      grp,
+      wood: (geo, color, axis, ...t) => {
+        const m = placeMesh(grp, new THREE.Mesh(grainUV(geo, axis), tone(color)), ...t);
+        lists.wood.push(m);
+        return m;
+      },
+      print: (geo, color, r, ...t) => {
+        const g = geo.clone();
+        const m = placeMesh(grp, new THREE.Mesh(r === true ? g : r ? fit(g, r) : dot(g, WHITE), tone(color)), ...t);
+        lists.print.push(m);
+        return m;
+      },
+      glow: (geo, swatch, ...t) => {
+        const m = placeMesh(grp, new THREE.Mesh(dot(geo.clone(), SW[swatch]), tone(0xffffff)), ...t);
+        lists.glow.push(m);
+        return m;
+      },
+      mesh: (geo, color, look, ...t) => placeMesh(grp, new THREE.Mesh(geo, mat(color, look)), ...t),
+      at: (x, y, z, ry = 0) => {
+        const g = new THREE.Group();
+        g.position.set(x, y, z);
+        g.rotation.y = ry;
+        grp.add(g);
+        return builder(g, lists);
+      },
+    };
+    return b;
+  };
+  // merge each list into one mesh in `space`'s frame
+  const fuse = (space, lists, flags) => {
+    space.updateMatrixWorld(true);
+    const inv = space.matrixWorld.clone().invert(), out = [];
+    for (const [key, material] of [['wood', cabinTimberMat], ['print', atlasMat], ['glow', glowMat]]) {
+      const list = lists[key];
+      if (!list.length) continue;
+      const mesh = new THREE.Mesh(mergeMeshGeometry(list, inv, true, 'material'), material);
+      for (const m of list) m.parent.remove(m);
+      [mesh.castShadow, mesh.receiveShadow] = flags[key];
+      out.push(mesh);
+    }
+    return out;
+  };
+  // a free-standing piece at (x, z) on the floor, turned by ry
+  const piece = (x, z, ry = 0, y = 0) => {
+    const grp = new THREE.Group();
+    grp.position.set(x, y, z);
+    grp.rotation.y = ry;
+    const lists = { wood: [], print: [], glow: [] };
+    const b = builder(grp, lists);
+    b.done = () => {
+      // wood joins the timber batch (cast + receive); prints sit low and
+      // only receive; glows neither
+      for (const m of fuse(grp, lists, { wood: [true, true], print: [false, true], glow: [false, false] })) grp.add(m);
+      root.add(grp);
+      return grp;
+    };
+    return b;
+  };
+  // a piece hung on an outer wall, laid out in the wall's frame: x along the
+  // wall (to your right as you face it), y up from the floor, z out into the
+  // room from the wall plane. Merged into one mesh per material that hides
+  // with the wall in X-ray view.
+  const WALL_RY = { back: 0, front: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 };
+  const onWall = (side, along) => {
+    const frame = new THREE.Group();
+    const [x, , z] = wallPoint(side, along, 0, 0);
+    frame.position.set(x, 0, z);
+    frame.rotation.y = WALL_RY[side];
+    const lists = { wood: [], print: [], glow: [] };
+    const b = builder(frame, lists);
+    b.done = () => {
+      // fused straight into world space (the frame itself is never added)
+      const world = new THREE.Group();
+      world.add(frame);
+      for (const m of fuse(world, lists, { wood: [false, false], print: [false, false], glow: [false, false] })) {
+        m.userData.noBake = true;   // toggled with the wall, never merged with static meshes
+        root.add(m);
+        trackLike(m, wallRef(side));
+      }
+    };
+    return b;
+  };
+
+  // ---- shared shapes ----
+  // a rounded-rectangle outline w × h (corner radius r), centred
+  const roundRect = (w, h, r) => {
+    const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+    s.moveTo(x + r, y);
+    s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+    s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+    s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+    return s;
+  };
+  // a flat rug w (x) × d (z), `h` thick on the floor, with rounded corners;
+  // atlas rect r covers its top with the canvas's top edge toward -z
+  const rugGeo = (w, d, rad, h, r) => {
+    const geo = new THREE.ExtrudeGeometry(roundRect(w, d, rad), { depth: h, bevelEnabled: false, curveSegments: 5 });
+    geo.rotateX(-Math.PI / 2);
+    return planar(geo, r, 'x', 'z', true);
+  };
+  // turned mushroom knob, pointing along +z
+  const knobGeo = lathe([[0, 0], [0.012, 0], [0.008, 0.012], [0.02, 0.024], [0.022, 0.032], [0.013, 0.04], [0, 0.042]], 8)
+    .rotateX(Math.PI / 2);
+  // tapered turned leg (foot at y = 0)
+  const legGeo = (h, r0, r1) => lathe([[0, 0], [r0, 0], [r0 * 1.12, h * 0.06], [r1, h * 0.9], [r1 * 1.08, h], [0, h]], 10);
+  // a closed book lying flat: coloured cover, cream page block showing on
+  // the fore-edge (+x)
+  const book = (b, w, t, d, color, x, y, z, ry = 0) => {
+    const f = b.at(x, y, z, ry);
+    f.mesh(rbox(w, t, d, Math.min(0.008, t * 0.3), 1), color, 'paper', 0, t / 2, 0);
+    f.mesh(rbox(0.012, t * 0.72, d * 0.94, 0.003, 1), 0xd9cdb2, 'paper', w / 2 - 0.004, t / 2, 0);
+  };
+  // table lamp: a turned ceramic gourd, brass stem, glowing drum shade
+  const tableLamp = (b, baseCol) => {
+    b.mesh(lathe([[0, 0], [0.065, 0], [0.07, 0.012], [0.055, 0.026], [0.08, 0.075], [0.088, 0.125], [0.072, 0.18],
+      [0.036, 0.215], [0.025, 0.235], [0, 0.236]], 14), baseCol, 'ceramic', 0, 0, 0);
+    b.mesh(capsule(0.009, 0.1, 2, 8), 0xc8a45e, 'brass', 0, 0.285, 0);
+    b.glow(lathe([[0.152, 0.25], [0.15, 0.262], [0.114, 0.44], [0.11, 0.45]], 16), 'lamp', 0, 0, 0);
+    b.glow(new THREE.SphereGeometry(0.03, 10, 8), 'bulb', 0, 0.33, 0);
+  };
+  // floor lamp: weighted base, slim pole, big glowing drum shade
+  const floorLamp = (b, poleCol, look) => {
+    b.mesh(rcyl(0.16, 0.035, 0.014, 18, 2), poleCol, look, 0, 0.0175, 0);
+    b.mesh(capsule(0.014, 1.36, 2, 8), poleCol, look, 0, 0.72, 0);
+    b.mesh(rcyl(0.03, 0.05, 0.01, 10, 1), poleCol, look, 0, 1.4, 0);
+    b.glow(lathe([[0.215, 1.36], [0.21, 1.375], [0.168, 1.62], [0.162, 1.63]], 18), 'lamp', 0, 0, 0);
+    b.glow(new THREE.SphereGeometry(0.042, 10, 8), 'bulb', 0, 1.47, 0);
+  };
+  // first-person colliders and contact shadows
+  const block = (x0, z0, x1, z1, h) =>
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, h, z1)));
+  const shade = (x, z, w, d, rot = 0) => furnitureShadows.push([x, z, w, d, rot]);
+
+  return { region, planar, piece, onWall, rugGeo, knobGeo, legGeo, book, tableLamp, floorLamp, block, shade };
+})();
+
+// ==========================================================
+// BEDROOM — nightstands and lamps either side of the futon, a blanket chest
+// at its foot on a cream rug, a painted wardrobe and a reading nook along
+// the back wall, a dresser by the door, plants, a blanket basket, and a
+// mirror, a book shelf and a fern print hung on the outer walls
+// ==========================================================
+{
+  const K = furnishKit;
+  const cast = m => { m.castShadow = true; return m; };
+  // the painted bedroom set: flat sage paint, walnut feet, brass
+  const SAGE = 0x2c4320, SAGE_LT = 0x35502a, SAGE_DK = 0x23361a, WALNUT = 0x4a2e1a, BRASS = 0xc8a45e;
+  // fabric and paint (these hex values render a lot lighter than they read)
+  const CREAM = 0xa69473, DEEP_RED = 0x380504, MUSTARD = 0x6e3a06, FOREST = 0x0b1a0f, NAVY = 0x050811;
+  const HONEY = 0x48220b, IRON = 0x1e1712;
+
+  // ---- atlas: the rug, a photo of the dogs, mirror glass, a clock face
+  // and a little print ----
+  const RUG = K.region(520, 0, 440, 404, (g, w, h) => {
+    // cream wool, a deep red border and a hand-drawn brown diamond lattice
+    g.fillStyle = '#efe5cf'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 2600; i++) {
+      g.fillStyle = `rgba(110, 80, 50, ${Math.random() * 0.09})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+    g.strokeStyle = '#8c3326'; g.lineWidth = 11; g.strokeRect(16, 16, w - 32, h - 32);
+    g.strokeStyle = '#4e3324'; g.lineWidth = 3; g.strokeRect(31, 31, w - 62, h - 62);
+    g.save();
+    g.beginPath(); g.rect(36, 36, w - 72, h - 72); g.clip();
+    g.strokeStyle = '#4e3324'; g.lineWidth = 3.5; g.lineCap = 'round';
+    const step = 62;
+    for (let k = -h; k < w + h; k += step) {
+      for (const dir of [1, -1]) {
+        g.beginPath();
+        for (let t = 0; t <= 1.001; t += 0.04) g.lineTo(k + dir * t * h + Math.sin(t * 23 + k) * 1.8, t * h);
+        g.stroke();
+      }
+    }
+    // a red dot in every other diamond
+    g.fillStyle = '#8c3326';
+    for (let a = -h; a < w + h; a += step * 2) {
+      for (let b = -h; b < w + 2 * h; b += step) {
+        g.beginPath(); g.arc((a + b) / 2 + step / 2, (b - a) / 2, 5, 0, Math.PI * 2); g.fill();
+      }
+    }
+    g.restore();
+  });
+  const PHOTO = K.region(784, 416, 128, 96, (g, w, h) => {
+    // the three dogs in a meadow, with a white border
+    const sky = g.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, '#7fb8e0'); sky.addColorStop(1, '#d6ecf5');
+    g.fillStyle = sky; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff6d8'; g.beginPath(); g.arc(102, 22, 9, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#5c9447'; g.beginPath(); g.ellipse(w / 2, h + 26, w * 0.85, 58, 0, 0, Math.PI * 2); g.fill();
+    const dog = (x, y, s, fur, ear) => {
+      g.fillStyle = fur;
+      g.beginPath(); g.ellipse(x, y, 12 * s, 8 * s, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(x + 7 * s, y - 11 * s, 7.5 * s, 0, Math.PI * 2); g.fill();
+      g.fillStyle = ear;
+      for (const e of [-1, 1]) {
+        g.beginPath(); g.moveTo(x + (7 + e * 3) * s, y - 16 * s);
+        g.lineTo(x + (7 + e * 8) * s, y - 25 * s); g.lineTo(x + (7 + e * 7) * s, y - 13 * s); g.fill();
+      }
+      g.fillStyle = '#16100c';
+      for (const e of [-1, 1]) { g.beginPath(); g.arc(x + (7 + e * 3) * s, y - 12 * s, 1.2 * s, 0, Math.PI * 2); g.fill(); }
+    };
+    dog(38, 70, 1.25, '#f2ede4', '#1c1a18');   // Nova
+    dog(72, 76, 0.85, '#c9853a', '#b06c2a');   // Ellie
+    dog(98, 78, 0.8, '#2a231d', '#2a231d');    // Luna
+    g.strokeStyle = '#fbf7ee'; g.lineWidth = 8; g.strokeRect(0, 0, w, h);
+  });
+  const MIRROR = K.region(920, 416, 96, 256, (g, w, h) => {
+    const grd = g.createLinearGradient(0, 0, w * 0.6, h);
+    grd.addColorStop(0, '#e3edf1'); grd.addColorStop(0.55, '#a7bcc7'); grd.addColorStop(1, '#7f97a5');
+    g.fillStyle = grd; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255, 255, 255, 0.32)';
+    g.beginPath(); g.moveTo(8, 132); g.lineTo(62, 44); g.lineTo(80, 44); g.lineTo(26, 132); g.fill();
+    g.beginPath(); g.moveTo(30, 160); g.lineTo(76, 86); g.lineTo(83, 86); g.lineTo(37, 160); g.fill();
+  });
+  const CLOCK = K.region(784, 520, 56, 56, (g, w) => {
+    const c = w / 2;
+    g.fillStyle = '#f4ecd8'; g.fillRect(0, 0, w, w);
+    g.strokeStyle = '#2a211a'; g.lineWidth = 2;
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2, r0 = i % 3 ? 21 : 18;
+      g.beginPath(); g.moveTo(c + Math.sin(a) * r0, c - Math.cos(a) * r0);
+      g.lineTo(c + Math.sin(a) * 24, c - Math.cos(a) * 24); g.stroke();
+    }
+    g.lineCap = 'round';
+    g.lineWidth = 3; g.beginPath(); g.moveTo(c, c); g.lineTo(c + 10, c - 7); g.stroke();
+    g.lineWidth = 2; g.beginPath(); g.moveTo(c, c); g.lineTo(c - 3, c - 19); g.stroke();
+    g.fillStyle = '#b3261e'; g.beginPath(); g.arc(c, c, 2.5, 0, Math.PI * 2); g.fill();
+  });
+  const ART = K.region(848, 520, 64, 80, (g, w, h) => {
+    // a tiny mountain-lake print at sunset
+    const sky = g.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, '#f2c58a'); sky.addColorStop(1, '#e98a5c');
+    g.fillStyle = sky; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fbe3b0'; g.beginPath(); g.arc(44, 22, 7, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#7a4a63';
+    g.beginPath(); g.moveTo(0, 56); g.lineTo(20, 26); g.lineTo(34, 44); g.lineTo(46, 30); g.lineTo(64, 54);
+    g.lineTo(64, 80); g.lineTo(0, 80); g.fill();
+    g.fillStyle = '#3d5e6e'; g.fillRect(0, 58, w, 22);
+    g.strokeStyle = '#fbf3e2'; g.lineWidth = 6; g.strokeRect(0, 0, w, h);
+  });
+  const FERN = K.region(784, 608, 96, 128, (g, w, h) => {
+    // a pressed fern on cream paper
+    g.fillStyle = '#efe6d0'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#3c5a32'; g.lineWidth = 2; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(48, 114); g.quadraticCurveTo(44, 64, 52, 14); g.stroke();
+    for (let i = 0; i < 9; i++) {
+      const t = i / 9, y = 106 - t * 86, x = 47 + Math.sin(t * 2) * 3, len = 26 * (1 - t * 0.7);
+      g.fillStyle = i % 2 ? '#4f7a40' : '#5d8a4a';
+      for (const s of [-1, 1]) {
+        g.beginPath(); g.ellipse(x + s * len * 0.5, y - 3, len * 0.5, 4.5, -s * 0.35, 0, Math.PI * 2); g.fill();
+      }
+    }
+    g.fillStyle = '#6b4a2e'; g.font = 'italic 8px Georgia, serif'; g.textAlign = 'center';
+    g.fillText('Polypodium', w / 2, 124);
+  });
+
+  // ---- nightstands with lamps, either side of the futon's head ----
+  const standLeg = K.legGeo(0.13, 0.022, 0.016);
+  const nightstand = z => {
+    const p = K.piece(-6.69, z, Math.PI / 2);   // against the left wall, drawers to the room
+    cast(p.mesh(rbox(0.46, 0.4, 0.38, 0.035, 1), SAGE, 'satin', 0, 0.33, 0));
+    p.mesh(rbox(0.5, 0.045, 0.42, 0.02, 1), SAGE_DK, 'satin', 0, 0.5525, 0.01);
+    for (const [lx, lz] of [[-0.19, -0.15], [0.19, -0.15], [-0.19, 0.15], [0.19, 0.15]]) p.wood(standLeg, WALNUT, 'y', lx, 0, lz);
+    for (const y of [0.43, 0.235]) {
+      p.mesh(rbox(0.4, 0.16, 0.025, 0.012, 1), SAGE_LT, 'satin', 0, y, 0.2);
+      p.mesh(K.knobGeo, BRASS, 'brass', 0, y, 0.212);
+    }
+    K.block(-6.92, z - 0.26, -6.46, z + 0.26, 0.58);
+    K.shade(-6.69, z, 0.62, 0.55, Math.PI / 2);
+    return p;
+  };
+  {
+    // left of the bed: the lamp toward the corner, a couple of books
+    const p = nightstand(3.45);
+    K.tableLamp(p.at(0.09, 0.575, -0.05), CREAM);
+    K.book(p, 0.17, 0.032, 0.125, DEEP_RED, -0.1, 0.575, 0.07, 0.2);
+    K.book(p, 0.15, 0.028, 0.115, NAVY, -0.1, 0.607, 0.07, -0.1);
+    p.done();
+  }
+  {
+    // right of the bed: a lamp and a twin-bell alarm clock
+    const p = nightstand(5.35);
+    K.tableLamp(p.at(-0.09, 0.575, -0.05), CREAM);
+    const c = p.at(0.11, 0.575, 0.08, -0.35);
+    c.mesh(rcyl(0.055, 0.04, 0.014, 16, 2), 0x6e0c08, 'plastic', 0, 0.072, 0, Math.PI / 2);
+    c.print(new THREE.CircleGeometry(0.044, 16), 0xffffff, CLOCK, 0, 0.072, 0.0205);
+    for (const s of [-1, 1]) {
+      c.mesh(new THREE.SphereGeometry(0.026, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), BRASS, 'brass', s * 0.034, 0.124, 0, 0, 0, -s * 0.5);
+      c.mesh(new THREE.SphereGeometry(0.009, 6, 4), BRASS, 'brass', s * 0.032, 0.012, 0.012);
+    }
+    c.mesh(new THREE.TorusGeometry(0.02, 0.004, 4, 10, Math.PI), BRASS, 'brass', 0, 0.13, 0);
+    p.done();
+  }
+
+  // ---- a rug by the bed (with slippers on it) and a blanket chest at its foot ----
+  {
+    const p = K.piece(-5.0, 4.4);
+    p.print(K.rugGeo(2.5, 2.3, 0.08, 0.01, RUG), 0xffffff, true, 0, 0, 0);
+    const strand = capsule(0.006, 0.07, 1, 4);
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 22; i++) p.mesh(strand, 0xb5a27c, 'matte', sx * 1.283, 0.006, -1.0 + i * (2.0 / 21), 0, (Math.random() - 0.5) * 0.3, Math.PI / 2);
+    }
+    for (const [sx, a] of [[-0.09, 0.18], [0.09, -0.06]]) {
+      const s = p.at(-0.42 + sx, 0, 0.93, a);
+      s.mesh(rbox(0.1, 0.024, 0.25, 0.011, 1), CREAM, 'fabric', 0, 0.012, 0);
+      s.mesh(new THREE.SphereGeometry(0.062, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), 0x4a1410, 'fabric', 0, 0.022, 0.035, 0, 0, 0, [0.82, 0.78, 1.45]);
+    }
+    p.done();
+  }
+  {
+    const p = K.piece(-4.66, 4.4, Math.PI / 2);   // front to the room
+    const CHERRY = 0x8a4a2a, CHERRY_DK = 0x6a3420;
+    p.wood(rbox(1.04, 0.06, 0.45, 0.02, 1), CHERRY_DK, 'x', 0, 0.03, 0);
+    p.wood(rbox(1.0, 0.34, 0.43, 0.03, 1), CHERRY, 'x', 0, 0.23, 0);
+    p.wood(rbox(1.06, 0.07, 0.47, 0.03, 2), CHERRY_DK, 'x', 0, 0.435, 0);
+    for (const y of [0.17, 0.29]) p.wood(rbox(0.96, 0.012, 0.012, 0.005, 1), 0x4a2416, 'x', 0, y, 0.216);
+    // brass corner caps, a lock plate and a drop handle at each end
+    for (const sx of [-1, 1]) for (const y of [0.1, 0.36]) p.mesh(rbox(0.07, 0.07, 0.012, 0.01, 1), BRASS, 'brass', sx * 0.47, y, 0.218);
+    p.mesh(rbox(0.08, 0.1, 0.012, 0.012, 1), BRASS, 'brass', 0, 0.355, 0.221);
+    p.mesh(new THREE.SphereGeometry(0.009, 6, 4), 0x16100a, 'plastic', 0, 0.345, 0.228);
+    for (const sx of [-1, 1]) p.mesh(new THREE.TorusGeometry(0.04, 0.009, 4, 10, Math.PI), BRASS, 'brass', sx * 0.507, 0.27, 0, 0, Math.PI / 2, Math.PI);
+    // a folded throw over the lid, hanging down the front
+    p.mesh(rbox(0.44, 0.04, 0.5, 0.018, 1), FOREST, 'fabric', -0.24, 0.49, 0.01);
+    p.mesh(rbox(0.44, 0.2, 0.04, 0.018, 1), FOREST, 'fabric', -0.24, 0.39, 0.25);
+    for (const x of [-0.4, -0.08]) p.mesh(rbox(0.025, 0.044, 0.505, 0.008, 1), CREAM, 'fabric', x, 0.49, 0.01);
+    p.done();
+    K.block(-4.9, 3.85, -4.42, 4.95, 0.5);
+    K.shade(-4.66, 4.4, 1.2, 0.6, Math.PI / 2);
+  }
+
+  // ---- painted wardrobe against the back wall, a suitcase and hat box on top ----
+  {
+    const p = K.piece(-4.9, -0.53);
+    cast(p.mesh(rbox(1.36, 1.9, 0.58, 0.04, 1), SAGE, 'satin', 0, 1.05, 0));
+    const bun = lathe([[0, 0], [0.035, 0], [0.05, 0.035], [0.046, 0.075], [0.036, 0.1], [0, 0.1]], 10);
+    for (const [fx, fz] of [[-0.6, -0.22], [0.6, -0.22], [-0.6, 0.22], [0.6, 0.22]]) p.wood(bun, WALNUT, 'y', fx, 0, fz);
+    p.mesh(rbox(1.46, 0.08, 0.63, 0.03, 1), SAGE_DK, 'satin', 0, 2.04, 0.015);
+    p.mesh(rbox(1.4, 0.05, 0.6, 0.02, 1), SAGE, 'satin', 0, 2.105, 0.005);
+    p.mesh(rbox(1.28, 0.3, 0.03, 0.015, 1), SAGE_LT, 'satin', 0, 0.3, 0.3);
+    for (const s of [-1, 1]) {
+      p.mesh(rbox(0.625, 1.44, 0.03, 0.015, 1), SAGE_LT, 'satin', s * 0.322, 1.25, 0.3);
+      p.mesh(rbox(0.46, 0.7, 0.02, 0.012, 1), SAGE, 'satin', s * 0.322, 1.56, 0.322);
+      p.mesh(rbox(0.46, 0.5, 0.02, 0.012, 1), SAGE, 'satin', s * 0.322, 0.88, 0.322);
+      p.mesh(capsule(0.011, 0.16, 2, 8), BRASS, 'brass', s * 0.055, 1.22, 0.33);
+      p.mesh(K.knobGeo, BRASS, 'brass', s * 0.36, 0.3, 0.315);
+    }
+    const top = p.at(-0.25, 2.13, 0.0, 0.06);
+    top.mesh(rbox(0.56, 0.17, 0.38, 0.045, 2), 0x2a0f05, 'satin', 0, 0.085, 0);
+    for (const sx of [-0.15, 0.15]) top.mesh(rbox(0.045, 0.176, 0.386, 0.012, 1), 0x150803, 'satin', sx, 0.085, 0);
+    top.mesh(new THREE.TorusGeometry(0.05, 0.011, 6, 12, Math.PI), 0x150803, 'satin', 0, 0.085, 0.19, Math.PI / 2);
+    const box = p.at(0.36, 2.13, 0.02);
+    box.mesh(rcyl(0.17, 0.2, 0.02, 18, 2), CREAM, 'fabric', 0, 0.1, 0);
+    box.mesh(rcyl(0.178, 0.05, 0.015, 18, 2), CREAM, 'fabric', 0, 0.185, 0);
+    box.mesh(rcyl(0.179, 0.035, 0.01, 18, 1), DEEP_RED, 'fabric', 0, 0.095, 0);
+    p.done();
+    K.block(-5.62, -0.86, -4.18, -0.2, 2.15);
+    K.shade(-4.9, -0.5, 1.65, 0.85);
+  }
+
+  // ---- reading nook in the back-left corner: armchair and floor lamp ----
+  {
+    const p = K.piece(-6.2, 0.62, 0.66);
+    cast(p.mesh(rbox(0.84, 0.24, 0.78, 0.07, 2), MUSTARD, 'fabric', 0, 0.29, 0));
+    cast(p.mesh(rbox(0.6, 0.13, 0.6, 0.055, 2), MUSTARD, 'fabric', 0, 0.465, 0.07));
+    cast(p.mesh(rbox(0.84, 0.66, 0.2, 0.08, 2), MUSTARD, 'fabric', 0, 0.66, -0.29, -0.1));
+    p.mesh(rbox(0.58, 0.44, 0.13, 0.06, 2), MUSTARD, 'fabric', 0, 0.7, -0.16, -0.16);
+    for (const s of [-1, 1]) cast(p.mesh(rbox(0.14, 0.3, 0.76, 0.065, 2), MUSTARD, 'fabric', s * 0.36, 0.5, 0.01));
+    const leg = K.legGeo(0.17, 0.024, 0.017);
+    for (const [lx, lz] of [[-0.34, -0.3], [0.34, -0.3], [-0.34, 0.3], [0.34, 0.3]]) p.wood(leg, WALNUT, 'y', lx, 0, lz);
+    p.mesh(rbox(0.34, 0.3, 0.11, 0.06, 2), FOREST, 'fabric', 0.1, 0.67, -0.05, -0.25, 0, 0.18);
+    p.done();
+    K.shade(-6.2, 0.62, 1.0, 0.95, 0.66);
+  }
+  {
+    const p = K.piece(-6.62, -0.42);
+    K.floorLamp(p, BRASS, 'brass');
+    p.done();
+    K.shade(-6.62, -0.42, 0.45, 0.45);
+  }
+  {
+    // a turned side table at the chair's elbow: a mug and the book in progress
+    const p = K.piece(-6.6, 1.45, 0.3);
+    p.wood(lathe([[0, 0], [0.15, 0], [0.152, 0.018], [0.07, 0.045], [0.034, 0.1], [0.026, 0.3], [0.03, 0.44],
+      [0.05, 0.5], [0, 0.5]], 14), 0x8a5230, 'y', 0, 0, 0);
+    p.wood(rcyl(0.21, 0.035, 0.012, 18, 2), 0x8a5230, 'x', 0, 0.5175, 0);
+    p.mesh(lathe([[0, 0], [0.04, 0], [0.044, 0.005], [0.05, 0.09], [0.05, 0.095], [0.046, 0.097], [0.044, 0.08], [0, 0.08]], 14),
+      CREAM, 'ceramic', 0.08, 0.535, -0.04);
+    p.mesh(new THREE.TorusGeometry(0.026, 0.008, 6, 10, Math.PI), CREAM, 'ceramic', 0.135, 0.585, -0.04, 0, 0, -Math.PI / 2);
+    K.book(p, 0.16, 0.03, 0.12, 0x0a2a30, -0.06, 0.535, 0.05, 0.5);
+    p.done();
+    K.block(-6.81, 1.24, -6.39, 1.66, 0.55);
+    K.shade(-6.6, 1.45, 0.42, 0.42);
+  }
+
+  // ---- a blanket basket in the front corner, a pancake plant under the window ----
+  {
+    const p = K.piece(-6.45, 6.42, 0.4);
+    p.mesh(lathe([[0, 0], [0.17, 0], [0.19, 0.03], [0.22, 0.4], [0.226, 0.43], [0, 0.43]], 16), 0x593513, 'matte', 0, 0, 0);
+    for (const y of [0.13, 0.27, 0.425]) p.mesh(new THREE.TorusGeometry(0.2 + y * 0.06, 0.014, 6, 20), 0x3e230b, 'matte', 0, y, 0, Math.PI / 2);
+    // two rolled blankets standing in it
+    p.mesh(capsule(0.085, 0.42, 3, 12), DEEP_RED, 'fabric', -0.07, 0.42, 0.02, 0.12, 0, 0.18);
+    p.mesh(capsule(0.08, 0.36, 3, 12), CREAM, 'fabric', 0.08, 0.4, -0.04, -0.1, 0, -0.2);
+    p.done();
+    K.shade(-6.45, 6.42, 0.6, 0.6);
+  }
+  {
+    const p = K.piece(-4.75, 6.6);
+    // a little wooden stool as a plant stand
+    p.wood(rcyl(0.17, 0.035, 0.012, 16, 2), 0x8a5230, 'x', 0, 0.36, 0);
+    for (let i = 0; i < 3; i++) {
+      const a = i / 3 * Math.PI * 2;
+      p.wood(capsule(0.016, 0.33, 2, 8), 0x6a3a20, 'y', Math.cos(a) * 0.11, 0.18, Math.sin(a) * 0.11, -Math.sin(a) * 0.12, 0, Math.cos(a) * 0.12);
+    }
+    // a pilea: coin leaves on thin stems, in a glazed pot
+    p.mesh(lathe([[0, 0], [0.07, 0], [0.09, 0.06], [0.1, 0.15], [0.106, 0.16], [0, 0.16]], 14), 0x0f3a3a, 'ceramic', 0, 0.38, 0);
+    for (let i = 0; i < 11; i++) {
+      const a = i * 2.4, out = 0.04 + (i % 4) * 0.035, h = 0.62 + (i % 3) * 0.06;
+      p.mesh(capsule(0.004, 0.14, 1, 4), 0x2a4a1c, 'leaf', Math.cos(a) * out * 0.6, h - 0.08, Math.sin(a) * out * 0.6, Math.sin(a) * 0.3, 0, -Math.cos(a) * 0.3);
+      const leaf = p.mesh(new THREE.SphereGeometry(1, 10, 5), i % 2 ? 0x1c4214 : 0x285a1c, 'leaf', Math.cos(a) * out, h, Math.sin(a) * out,
+        -0.35, Math.PI / 2 - a, 0, [0.055, 0.008, 0.055]);
+      leaf.rotation.order = 'YXZ';
+      leaf.castShadow = true;
+    }
+    p.done();
+    K.shade(-4.75, 6.6, 0.45, 0.45);
+  }
+
+  // ---- fiddle-leaf fig in a basket, in the corner by the door ----
+  {
+    const p = K.piece(-3.12, -0.42, 0.5);
+    p.mesh(lathe([[0, 0], [0.16, 0], [0.175, 0.02], [0.2, 0.3], [0.204, 0.33], [0, 0.33]], 16), 0x593513, 'matte', 0, 0, 0);
+    p.mesh(new THREE.TorusGeometry(0.2, 0.018, 6, 20), 0x3e230b, 'matte', 0, 0.325, 0, Math.PI / 2);
+    p.mesh(rcyl(0.19, 0.02, 0.008, 16, 1), 0x1a0f08, 'matte', 0, 0.315, 0);
+    p.mesh(taper(0.026, 0.012, 1.15, 2, 8), 0x3a2414, 'paper', 0.02, 0.9, 0, 0, 0, -0.04);
+    const greens = [0x0a1e08, 0x112b0a, 0x0e2409];
+    for (let i = 0; i < 15; i++) {
+      const y = 0.68 + i * 0.058, a = i * 2.4, out = 0.11 + Math.random() * 0.05;
+      const leaf = p.mesh(new THREE.SphereGeometry(1, 10, 6), greens[i % 3], 'leaf', 0.02 + Math.cos(a) * out, y, Math.sin(a) * out,
+        -0.5 - Math.random() * 0.35, Math.PI / 2 - a, 0, [0.115, 0.016, 0.18]);
+      leaf.rotation.order = 'YXZ';
+      leaf.castShadow = true;
+    }
+    p.done();
+    K.shade(-3.12, -0.42, 0.55, 0.55);
+  }
+
+  // ---- dresser against the wall by the door, a few things on top ----
+  {
+    const p = K.piece(-2.9, 3.8, -Math.PI / 2);   // drawers face the room (-x)
+    cast(p.mesh(rbox(1.46, 0.74, 0.46, 0.035, 1), SAGE, 'satin', 0, 0.49, 0));
+    p.mesh(rbox(1.54, 0.05, 0.52, 0.022, 1), SAGE_DK, 'satin', 0, 0.885, 0.01);
+    const leg = K.legGeo(0.12, 0.026, 0.019);
+    for (const [lx, lz] of [[-0.66, -0.17], [0.66, -0.17], [-0.66, 0.17], [0.66, 0.17]]) p.wood(leg, WALNUT, 'y', lx, 0, lz);
+    for (const s of [-1, 1]) {
+      p.mesh(rbox(0.66, 0.17, 0.025, 0.012, 1), SAGE_LT, 'satin', s * 0.35, 0.745, 0.24);
+      p.mesh(K.knobGeo, BRASS, 'brass', s * 0.35, 0.745, 0.252);
+    }
+    for (const y of [0.525, 0.285]) {
+      p.mesh(rbox(1.36, 0.21, 0.025, 0.012, 1), SAGE_LT, 'satin', 0, y, 0.24);
+      for (const s of [-1, 1]) p.mesh(K.knobGeo, BRASS, 'brass', s * 0.36, y, 0.252);
+    }
+    // a framed photo of the dogs, leaning back a little
+    const f = p.at(-0.42, 0.91, -0.06, 0.12);
+    f.wood(rbox(0.22, 0.18, 0.024, 0.012, 1), WALNUT, 'x', 0, 0.088, 0, -0.14);
+    f.print(new THREE.PlaneGeometry(0.17, 0.13), 0xffffff, PHOTO, 0, 0.09, 0.0135, -0.14);
+    // a succulent in a terracotta pot
+    const s = p.at(0.48, 0.91, -0.04);
+    s.mesh(lathe([[0, 0], [0.05, 0], [0.058, 0.07], [0.065, 0.075], [0.065, 0.088], [0, 0.088]], 12), 0x601809, 'matte', 0, 0, 0);
+    for (let i = 0; i < 7; i++) {
+      const a = i * 0.9, r = i ? 0.035 : 0;
+      const l = s.mesh(new THREE.SphereGeometry(1, 8, 6), i % 2 ? 0x1f3f1a : 0x2a5222, 'leaf', Math.cos(a) * r, 0.105, Math.sin(a) * r,
+        i ? -0.7 : -1.4, Math.PI / 2 - a, 0, [0.018, 0.012, 0.042]);
+      l.rotation.order = 'YXZ';
+    }
+    // a jar candle with a glowing flame, and a brass trinket dish
+    const c = p.at(0.18, 0.91, 0.07);
+    c.mesh(rcyl(0.035, 0.08, 0.008, 14, 2), CREAM, 'ceramic', 0, 0.04, 0);
+    c.glow(new THREE.SphereGeometry(0.011, 8, 6), 'flame', 0, 0.098, 0, 0, 0, 0, [1, 1.7, 1]);
+    p.at(-0.08, 0.91, 0.09).mesh(lathe([[0, 0], [0.04, 0], [0.065, 0.018], [0.07, 0.022], [0, 0.012]], 16), BRASS, 'brass', 0, 0, 0);
+    p.done();
+    K.block(-3.17, 3.03, -2.64, 4.57, 0.91);
+    K.shade(-2.9, 3.8, 1.7, 0.65, -Math.PI / 2);
+  }
+
+  // ---- hung on the outer walls (they hide with them in X-ray view) ----
+  {
+    // an arched full-length mirror on the front wall, beside the dresser
+    const w = K.onWall('front', -3.2);
+    const arch = (wd, y0, y1) => {
+      const s = new THREE.Shape(), x = wd / 2;
+      s.moveTo(-x, y0); s.lineTo(x, y0); s.lineTo(x, y1 - x);
+      s.absarc(0, y1 - x, x, 0, Math.PI, false);
+      s.lineTo(-x, y0);
+      return s;
+    };
+    const ring = arch(0.66, 0, 1.58);
+    ring.holes.push(new THREE.Path().setFromPoints(arch(0.52, 0.07, 1.51).getPoints(10)));
+    w.print(new THREE.ExtrudeGeometry(ring, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.014,
+      bevelSegments: 1, curveSegments: 10 }), HONEY, null, 0, 0.42, 0.02);
+    w.print(K.planar(new THREE.ShapeGeometry(arch(0.53, 0.065, 1.515), 10), MIRROR, 'x', 'y'), 0xffffff, true, 0, 0.42, 0.035);
+    w.done();
+  }
+  {
+    // a book shelf on the left wall, above the reading chair
+    const w = K.onWall('left', 0.72);
+    const TOP = 1.7975;
+    w.print(rbox(1.0, 0.035, 0.22, 0.012, 1), HONEY, null, 0, 1.78, 0.13);
+    for (const x of [-0.36, 0.36]) w.print(rbox(0.028, 0.15, 0.16, 0.01, 1), IRON, null, x, 1.69, 0.1);
+    let x = -0.45;
+    for (const [bw, bh, col] of [[0.035, 0.22, DEEP_RED], [0.045, 0.2, NAVY], [0.03, 0.24, MUSTARD], [0.04, 0.21, FOREST], [0.032, 0.19, CREAM]]) {
+      w.print(rbox(bw, bh, 0.15, 0.006, 1), col, null, x + bw / 2, TOP + bh / 2, 0.12);
+      x += bw + 0.004;
+    }
+    w.print(rbox(0.035, 0.2, 0.15, 0.006, 1), 0x45230c, null, x + 0.045, TOP + 0.095, 0.12, 0, 0, 0.3);   // leaning on the row
+    // a little framed print, and a pothos trailing over the edge
+    w.print(rbox(0.16, 0.2, 0.02, 0.01, 1), IRON, null, 0.08, TOP + 0.1, 0.07, -0.08);
+    w.print(new THREE.PlaneGeometry(0.124, 0.16), 0xffffff, ART, 0.08, TOP + 0.1, 0.081, -0.08);
+    w.print(lathe([[0, 0], [0.045, 0], [0.055, 0.085], [0.06, 0.09], [0, 0.09]], 12), 0x601809, null, 0.33, TOP, 0.12);
+    const vine = [[0.31, 0.11, 0.1], [0.36, 0.1, 0.15], [0.3, 0.09, 0.19], [0.37, 0.05, 0.24], [0.34, -0.02, 0.26],
+      [0.38, -0.09, 0.265], [0.35, -0.16, 0.265], [0.39, -0.23, 0.26], [0.27, 0.1, 0.1], [0.4, 0.12, 0.12]];
+    vine.forEach(([vx, vy, vz], i) => {
+      const leaf = w.print(new THREE.SphereGeometry(1, 8, 5), i % 2 ? 0x1f3f1a : 0x2f5a25, null, vx, TOP + vy, vz,
+        0.5 + (i % 3) * 0.3, i * 1.3, 0, [0.03, 0.007, 0.04]);
+      leaf.rotation.order = 'YXZ';
+    });
+    // and a framed fern print further along, over the blanket basket
+    w.print(rbox(0.44, 0.58, 0.025, 0.012, 1), 0x24120a, null, -5.55, 1.95, 0.02);
+    w.print(new THREE.PlaneGeometry(0.36, 0.48), 0xffffff, FERN, -5.55, 1.95, 0.034);
+    w.done();
+  }
+}
+
+// ==========================================================
+// GAME ROOM — a teal loveseat and a beanbag facing the TV on an arcade-
+// carpet rug, a low cubby of game boxes and collectible figures, a retro
+// mini fridge and a snack table, a neon PLAY sign and a synthwave poster
+// ==========================================================
+{
+  const K = furnishKit;
+  const cast = m => { m.castShadow = true; return m; };
+  const WALNUT = 0x4a2e1a, BRASS = 0xc8a45e, CHROME = 0xd2d6da, PAD = 0xb8b0a4;
+  const TEAL = 0x0a2e28, TEAL_LT = 0x0d3a33, MUSTARD = 0x6e3a06, PINK = 0x8a1640, ORANGE = 0x7a2e06;
+  const CUBBY = 0xa07952;   // the TV stand's cream paint, so the cubby matches it
+  // a rounded-rectangle path on a canvas
+  const rr = (g, x, y, w, h, r) => {
+    g.beginPath(); g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  };
+
+  // ---- atlas: arcade-carpet rug, synthwave poster, 16 game spines ----
+  const RUG = K.region(0, 0, 512, 404, (g, w, h) => {
+    // the confetti carpet of every 90s arcade: neon shapes on deep indigo
+    g.fillStyle = '#1d1640'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1800; i++) {
+      g.fillStyle = `rgba(0, 0, 0, ${Math.random() * 0.22})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+    const cols = ['#ff4fae', '#3fe6ff', '#ffd23f', '#7cff6b', '#b36bff', '#ff8a3d'];
+    g.lineWidth = 3.5; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (let i = 0; i < 96; i++) {
+      const s = 7 + Math.random() * 8;
+      g.save();
+      g.translate(Math.random() * w, Math.random() * h); g.rotate(Math.random() * Math.PI * 2);
+      g.strokeStyle = g.fillStyle = cols[i % cols.length];
+      g.beginPath();
+      switch (i % 5) {
+        case 0: g.moveTo(-s, 0); for (let k = 1; k <= 4; k++) g.lineTo(-s + k * s / 2, k % 2 ? -s / 2 : 0); g.stroke(); break;
+        case 1: g.arc(0, 0, s * 0.55, 0, Math.PI * 2); g.stroke(); break;
+        case 2: g.moveTo(0, -s * 0.7); g.lineTo(s * 0.6, s * 0.45); g.lineTo(-s * 0.6, s * 0.45); g.closePath(); g.fill(); break;
+        case 3: g.moveTo(-s, 0); g.bezierCurveTo(-s / 2, -s, s / 2, s, s, 0); g.stroke(); break;
+        default: g.rect(-s * 0.3, -s * 0.3, s * 0.6, s * 0.6); g.fill();
+      }
+      g.restore();
+    }
+    g.lineWidth = 7; g.strokeStyle = '#3fe6ff'; rr(g, 12, 12, w - 24, h - 24, 30); g.stroke();
+    g.lineWidth = 3; g.strokeStyle = '#ff4fae'; rr(g, 25, 25, w - 50, h - 50, 20); g.stroke();
+  });
+  const POSTER = K.region(520, 416, 256, 358, (g, w, h) => {
+    const cx = w / 2, hz = h * 0.62;
+    const sky = g.createLinearGradient(0, 0, 0, hz);
+    sky.addColorStop(0, '#1a0b3a'); sky.addColorStop(0.6, '#6a1f6e'); sky.addColorStop(1, '#ff7a59');
+    g.fillStyle = sky; g.fillRect(0, 0, w, hz);
+    g.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    for (let i = 0; i < 40; i++) g.fillRect((i * 97) % w, (i * 53) % (hz * 0.5), 1.5, 1.5);
+    // striped sun sinking behind the hills
+    const R = 62, sunY = hz - 26;
+    const sun = g.createLinearGradient(0, sunY - R, 0, sunY + R);
+    sun.addColorStop(0, '#ffe066'); sun.addColorStop(1, '#ff3f8e');
+    g.fillStyle = sun; g.beginPath(); g.arc(cx, sunY, R, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#5a1b66';
+    for (let k = 0; k < 5; k++) g.fillRect(cx - R, sunY + 6 + k * 11, 2 * R, 2 + k);
+    g.fillStyle = '#2a0f4a';
+    g.beginPath(); g.moveTo(0, hz); g.lineTo(40, hz - 34); g.lineTo(84, hz - 8); g.lineTo(140, hz - 46);
+    g.lineTo(198, hz - 12); g.lineTo(w, hz - 38); g.lineTo(w, hz); g.fill();
+    // neon grid floor
+    g.fillStyle = '#12052a'; g.fillRect(0, hz, w, h - hz);
+    g.strokeStyle = '#3fe6ff'; g.lineWidth = 1.5;
+    for (let k = 0; k < 9; k++) { const y = hz + Math.pow(k / 8, 2) * (h - hz); g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    for (let k = -8; k <= 8; k++) { g.beginPath(); g.moveTo(cx + k * 6, hz); g.lineTo(cx + k * 60, h); g.stroke(); }
+    g.textAlign = 'center'; g.font = "900 36px Inter, 'Arial Black', sans-serif";
+    g.fillStyle = '#ff3f8e'; g.fillText('INSERT', cx + 2, 56); g.fillText('COIN', cx + 2, 96);
+    g.fillStyle = '#ffe066'; g.fillText('INSERT', cx, 54); g.fillText('COIN', cx, 94);
+    g.font = "bold 11px 'JetBrains Mono', monospace"; g.fillStyle = '#3fe6ff';
+    g.fillText('PLAYER 1  ·  READY', cx, h - 14);
+  });
+  const SPINES = ['#c0392b', '#2471a3', '#1e8449', '#f1c40f', '#8e44ad', '#17202a', '#ecf0f1', '#e67e22',
+    '#16a085', '#d35400', '#2c3e50', '#e84393', '#0984e3', '#6c5ce7', '#00b894', '#fdcb6e'].map((c, i) =>
+    K.region(i * 32, 784, 32, 128, (g, w, h) => {
+      g.fillStyle = c; g.fillRect(0, 0, w, h);
+      g.fillStyle = i % 3 ? '#111216' : '#f4f4f4'; g.fillRect(0, 0, w, 18);          // platform band
+      g.fillStyle = i % 3 ? '#e8463a' : '#3a6fd8'; g.fillRect(6, 5, w - 12, 8);
+      g.fillStyle = [3, 6, 15].includes(i) ? 'rgba(20, 20, 30, 0.85)' : 'rgba(255, 255, 255, 0.9)';
+      g.fillRect(12, 28, 8, 54 + (i * 7) % 26);                                        // the title
+      g.beginPath(); g.arc(16, 112, 6, 0, Math.PI * 2); g.fill();                     // publisher logo
+    }));
+  let spine = 0;
+  // a game case standing spine-out (front toward +z) on a shelf at height y
+  const game = (b, x, y, h = 0.19, rz = 0) =>
+    b.print(new THREE.BoxGeometry(0.028, h, 0.135), 0xffffff, SPINES[spine++ % 16], x, y + h / 2, 0.1025, 0, 0, rz);
+  const games = (b, x0, y, n) => { for (let i = 0; i < n; i++) game(b, x0 + 0.016 + i * 0.031, y, 0.172 + ((i * 7) % 4) * 0.006); };
+  // a case lying flat, k-th in a stack
+  const flat = (b, x, y, k) =>
+    b.print(new THREE.BoxGeometry(0.028, 0.19, 0.135), 0xffffff, SPINES[spine++ % 16], x + (k % 2) * 0.008, y + 0.014 + k * 0.0285, 0.1025,
+      0, (k - 1.5) * 0.05, Math.PI / 2);
+  // per-vertex normals averaged across UV seams (smooth deformed spheres)
+  const smoothSeams = geo => {
+    geo.computeVertexNormals();
+    const P = geo.attributes.position, N = geo.attributes.normal, acc = new Map();
+    const key = i => P.getX(i).toFixed(4) + ',' + P.getY(i).toFixed(4) + ',' + P.getZ(i).toFixed(4);
+    for (let i = 0; i < P.count; i++) {
+      const k = key(i), a = acc.get(k) || acc.set(k, [0, 0, 0]).get(k);
+      a[0] += N.getX(i); a[1] += N.getY(i); a[2] += N.getZ(i);
+    }
+    for (let i = 0; i < P.count; i++) {
+      const a = acc.get(key(i)), l = Math.hypot(a[0], a[1], a[2]) || 1;
+      N.setXYZ(i, a[0] / l, a[1] / l, a[2] / l);
+    }
+    return geo;
+  };
+  // the console's grey "dog bone" pad (a second player's)
+  const pad = b => {
+    b.mesh(rbox(0.25, 0.045, 0.13, 0.02, 1), PAD, 'plastic', 0, 0.026, 0);
+    for (const s of [-1, 1]) b.mesh(new THREE.SphereGeometry(0.066, 12, 6), PAD, 'plastic', s * 0.115, 0.026, 0.026, 0, 0, 0, [1, 0.36, 1.05]);
+    b.mesh(rbox(0.07, 0.012, 0.022, 0.005, 1), 0x202020, 'plastic', -0.09, 0.052, 0);
+    b.mesh(rbox(0.022, 0.012, 0.07, 0.005, 1), 0x202020, 'plastic', -0.09, 0.052, 0);
+    [0x8e1c12, 0x16467a, 0x1a6a32, 0x9a6006].forEach((c, i) =>
+      b.mesh(rcyl(0.013, 0.012, 0.004, 10, 1), c, 'plastic', 0.07 + (i >> 1) * 0.038, 0.052, -0.022 + (i & 1) * 0.038));
+  };
+
+  // ---- the rug, under the console and the couch's front feet ----
+  {
+    const p = K.piece(3.5, -4.275);
+    p.print(K.rugGeo(3.2, 2.55, 0.25, 0.01, RUG), 0xffffff, true, 0, 0, 0);
+    p.done();
+  }
+
+  // ---- teal loveseat facing the TV, with throw pillows and player 2's pad ----
+  {
+    const p = K.piece(3.5, -3.36, Math.PI);
+    cast(p.mesh(rbox(1.9, 0.26, 0.84, 0.08, 2), TEAL, 'fabric', 0, 0.25, 0));
+    cast(p.mesh(rbox(1.9, 0.52, 0.2, 0.09, 2), TEAL, 'fabric', 0, 0.6, -0.32, -0.08));
+    for (const s of [-1, 1]) {
+      cast(p.mesh(rbox(0.76, 0.15, 0.66, 0.065, 2), TEAL_LT, 'fabric', s * 0.39, 0.45, 0.07));
+      cast(p.mesh(rbox(0.76, 0.42, 0.17, 0.075, 2), TEAL_LT, 'fabric', s * 0.39, 0.68, -0.19, -0.14));
+      cast(p.mesh(rbox(0.19, 0.38, 0.84, 0.09, 2), TEAL, 'fabric', s * 0.855, 0.5, 0));
+    }
+    const leg = K.legGeo(0.12, 0.024, 0.018);
+    for (const [lx, lz] of [[-0.82, -0.33], [0.82, -0.33], [-0.82, 0.33], [0.82, 0.33]]) p.wood(leg, WALNUT, 'y', lx, 0, lz);
+    p.mesh(rbox(0.36, 0.34, 0.12, 0.08, 2), MUSTARD, 'fabric', -0.6, 0.67, -0.07, -0.25, 0.25, 0.1);
+    p.mesh(rbox(0.34, 0.32, 0.12, 0.08, 2), PINK, 'fabric', 0.62, 0.67, -0.07, -0.25, -0.3, -0.12);
+    pad(p.at(0.3, 0.525, 0.12, 0.5));
+    p.done();
+    K.block(2.55, -3.8, 4.45, -2.92, 0.86);
+    K.shade(3.5, -3.36, 2.15, 1.05, Math.PI);
+  }
+
+  // ---- a squashy beanbag, angled at the TV ----
+  {
+    const geo = new THREE.SphereGeometry(1, 22, 14), P = geo.attributes.position;
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), z = P.getZ(i);
+      let y = P.getY(i);
+      if (y < -0.4) y = -0.4 + (y + 0.4) * 0.2;                      // settles flat on the floor
+      let h = (y + 0.52) * 0.42;
+      h += Math.max(0, -z) * Math.max(0, y) * 0.17;                    // the back rises into a rest
+      h -= Math.exp(-(x * x + (z - 0.25) * (z - 0.25)) / 0.22) * Math.max(0, y) * 0.26;   // the seat dip
+      const s = 0.5 * (1 + 0.16 * Math.max(0, -y)) * (1 + 0.06 * Math.max(0, z));         // slumped out in front
+      P.setXYZ(i, x * s, h, z * s);
+    }
+    const p = K.piece(5.45, -3.45, Math.atan2(3.5 - 5.45, -6.45 + 3.45));
+    cast(p.mesh(smoothSeams(geo), ORANGE, 'fabric', 0, 0, 0));
+    p.done();
+    K.shade(5.45, -3.45, 1.1, 1.1);
+  }
+
+  // ---- low cubby of game boxes and figures against the office wall ----
+  {
+    const p = K.piece(0.345, -4.5, Math.PI / 2);   // shelves open to the room (+x)
+    cast(p.mesh(rbox(1.8, 0.04, 0.38, 0.015, 1), CUBBY, 'paper', 0, 0.78, 0));
+    p.mesh(rbox(1.8, 0.04, 0.38, 0.015, 1), CUBBY, 'paper', 0, 0.07, 0);
+    p.mesh(rbox(1.74, 0.03, 0.36, 0.01, 1), CUBBY, 'paper', 0, 0.425, 0);
+    for (const s of [-1, 1]) cast(p.mesh(rbox(0.04, 0.75, 0.38, 0.015, 1), CUBBY, 'paper', s * 0.88, 0.425, 0));
+    for (const x of [-0.44, 0, 0.44]) p.mesh(rbox(0.03, 0.68, 0.35, 0.01, 1), CUBBY, 'paper', x, 0.425, -0.005);
+    p.mesh(rbox(1.76, 0.7, 0.02, 0.008, 1), 0x7a5a3c, 'paper', 0, 0.425, -0.18);
+    p.wood(rbox(1.7, 0.05, 0.32, 0.015, 1), WALNUT, 'x', 0, 0.025, -0.01);
+    // top cubbies: games, the two figures (further down), games and a
+    // leaning pair, a flat stack
+    games(p, -0.86, 0.44, 10);
+    game(p, -0.5, 0.44, 0.19, 0.22);
+    games(p, 0.015, 0.44, 6);
+    game(p, 0.225, 0.44, 0.18, -0.2); game(p, 0.255, 0.44, 0.18, -0.2);
+    for (let k = 0; k < 4; k++) flat(p, 0.6575, 0.44, k);
+    // bottom cubbies: a storage bin, games, games, a flat stack
+    const bin = p.at(-0.6575, 0.09, 0);
+    bin.mesh(rbox(0.37, 0.27, 0.32, 0.04, 2), 0x4a0808, 'fabric', 0, 0.135, 0);
+    bin.mesh(rbox(0.12, 0.035, 0.01, 0.015, 1), 0x140404, 'fabric', 0, 0.2, 0.161);
+    bin.mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 16), 0x111111, 'plastic', 0.04, 0.275, -0.02, Math.PI / 2);
+    games(p, -0.425, 0.09, 12);
+    games(p, 0.015, 0.09, 9);
+    for (let k = 0; k < 3; k++) flat(p, 0.6575, 0.09, k);
+    // collectible figures: a spotted mushroom and a ghost in a cubby...
+    {
+      const f = p.at(-0.31, 0.44, 0.05, 0.3);
+      f.mesh(lathe([[0, 0], [0.03, 0], [0.034, 0.02], [0.029, 0.055], [0.024, 0.07], [0, 0.07]], 12), 0xb8a888, 'plastic', 0, 0, 0);
+      f.mesh(new THREE.SphereGeometry(0.068, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), 0x7a0806, 'plastic', 0, 0.06, 0, 0, 0, 0, [1, 0.78, 1]);
+      f.mesh(new THREE.CircleGeometry(0.066, 14), 0xb8a888, 'plastic', 0, 0.06, 0, Math.PI / 2);
+      for (const [a, e] of [[0.3, 0.95], [1.9, 0.8], [3.4, 0.9], [4.8, 0.75], [0, 0.12]]) {
+        f.mesh(new THREE.SphereGeometry(0.016, 8, 5), 0xd8d0c0, 'plastic',
+          Math.cos(a) * Math.sin(e) * 0.068, 0.06 + Math.cos(e) * 0.053, Math.sin(a) * Math.sin(e) * 0.068, 0, 0, 0, [1, 0.5, 1]);
+      }
+      for (const s of [-1, 1]) f.mesh(new THREE.SphereGeometry(0.006, 6, 4), 0x0a0806, 'plastic', s * 0.012, 0.042, 0.029);
+    }
+    {
+      const f = p.at(-0.13, 0.44, 0.05, -0.3);
+      f.mesh(lathe([[0, 0.012], [0.042, 0.012], [0.048, 0.04], [0.048, 0.075], [0.042, 0.105], [0.028, 0.125], [0, 0.132]], 14),
+        0xcc2156, 'plastic', 0, 0, 0);
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        f.mesh(new THREE.SphereGeometry(0.014, 6, 4), 0xcc2156, 'plastic', Math.cos(a) * 0.036, 0.014, Math.sin(a) * 0.036);
+      }
+      for (const s of [-1, 1]) {
+        f.mesh(new THREE.SphereGeometry(0.012, 8, 6), 0xd8d8e0, 'plastic', s * 0.017, 0.085, 0.037, 0, 0, 0, [1, 1.2, 0.6]);
+        f.mesh(new THREE.SphereGeometry(0.006, 6, 4), 0x08102a, 'plastic', s * 0.017 + 0.003, 0.083, 0.044);
+      }
+    }
+    // ...and on top: a little robot, a trophy, a slime and a cactus
+    {
+      const f = p.at(-0.55, 0.8, 0.02, 0.35);
+      f.mesh(rbox(0.035, 0.03, 0.05, 0.01, 1), 0x2a3440, 'plastic', -0.025, 0.015, 0.005);
+      f.mesh(rbox(0.035, 0.03, 0.05, 0.01, 1), 0x2a3440, 'plastic', 0.025, 0.015, 0.005);
+      f.mesh(rbox(0.09, 0.09, 0.07, 0.02, 1), 0x3a4a5a, 'plastic', 0, 0.075, 0);
+      f.mesh(rbox(0.1, 0.075, 0.08, 0.022, 1), 0x55687a, 'plastic', 0, 0.16, 0);
+      f.glow(rbox(0.07, 0.022, 0.01, 0.008, 1), 'cyan', 0, 0.165, 0.04);
+      f.mesh(capsule(0.004, 0.04, 1, 4), 0x2a3440, 'plastic', 0, 0.22, 0);
+      f.glow(new THREE.SphereGeometry(0.01, 8, 6), 'red', 0, 0.247, 0);
+      for (const s of [-1, 1]) f.mesh(capsule(0.012, 0.05, 2, 6), 0x55687a, 'plastic', s * 0.058, 0.07, 0, 0, 0, s * 0.25);
+    }
+    {
+      const f = p.at(-0.1, 0.8, 0.02);
+      f.wood(rbox(0.08, 0.035, 0.08, 0.008, 1), WALNUT, 'x', 0, 0.0175, 0);
+      f.mesh(lathe([[0, 0.035], [0.026, 0.035], [0.02, 0.045], [0.008, 0.06], [0.008, 0.09], [0.02, 0.1], [0.04, 0.12],
+        [0.046, 0.17], [0.042, 0.172], [0, 0.13]], 14), BRASS, 'brass', 0, 0, 0);
+      for (const s of [-1, 1]) f.mesh(new THREE.TorusGeometry(0.02, 0.005, 4, 8, Math.PI), BRASS, 'brass', s * 0.046, 0.145, 0, 0, 0, -s * Math.PI / 2);
+    }
+    {
+      const f = p.at(0.3, 0.8, 0.04, -0.4);
+      f.mesh(new THREE.SphereGeometry(0.05, 12, 8), 0x1c6a12, 'plastic', 0, 0.035, 0, 0, 0, 0, [1.15, 0.72, 1.05]);
+      for (const s of [-1, 1]) f.mesh(new THREE.SphereGeometry(0.008, 6, 4), 0x06120a, 'plastic', s * 0.018, 0.05, 0.045);
+      f.mesh(new THREE.SphereGeometry(0.01, 6, 4), 0xc8e8c0, 'plastic', -0.022, 0.058, 0.03);
+    }
+    {
+      const f = p.at(0.66, 0.8, 0.02);
+      f.mesh(lathe([[0, 0], [0.04, 0], [0.048, 0.06], [0.052, 0.065], [0, 0.065]], 12), 0x601809, 'matte', 0, 0, 0);
+      f.mesh(capsule(0.026, 0.09, 3, 10), 0x1f4a1a, 'leaf', 0, 0.13, 0);
+      f.mesh(capsule(0.014, 0.035, 2, 8), 0x1f4a1a, 'leaf', 0.032, 0.14, 0, 0, 0, -0.9);
+    }
+    p.done();
+    K.block(0.14, -5.42, 0.56, -3.58, 0.8);
+    K.shade(0.345, -4.5, 2.0, 0.55, Math.PI / 2);
+  }
+
+  // ---- retro mini fridge in the back corner, sodas on top ----
+  {
+    const p = K.piece(0.44, -6.63, Math.PI / 2);
+    p.mesh(rbox(0.44, 0.07, 0.44, 0.02, 1), 0x141414, 'plastic', 0, 0.035, 0);
+    cast(p.mesh(rbox(0.5, 0.74, 0.52, 0.09, 2), 0x630705, 'plastic', 0, 0.44, 0));
+    p.mesh(rbox(0.44, 0.012, 0.01, 0.005, 1), 0x2a0402, 'plastic', 0, 0.66, 0.26);
+    p.mesh(rbox(0.11, 0.028, 0.01, 0.008, 1), CHROME, 'chrome', 0, 0.735, 0.261);
+    p.mesh(capsule(0.012, 0.2, 2, 8), CHROME, 'chrome', 0.18, 0.47, 0.3);
+    for (const y of [0.37, 0.57]) p.mesh(rcyl(0.01, 0.04, 0.003, 8, 1), CHROME, 'chrome', 0.18, y, 0.28, Math.PI / 2);
+    [[0x7a0a08, -0.1, 0.06], [0x0a2a6a, 0.05, -0.08], [0x1a5a1a, 0.12, 0.08]].forEach(([c, x, z]) => {
+      p.mesh(rcyl(0.033, 0.12, 0.01, 12, 2), c, 'plastic', x, 0.87, z);
+      p.mesh(rcyl(0.028, 0.006, 0.002, 12, 1), CHROME, 'chrome', x, 0.932, z);
+    });
+    p.done();
+    K.block(0.14, -6.9, 0.72, -6.36, 0.95);
+    K.shade(0.44, -6.63, 0.7, 0.72, Math.PI / 2);
+  }
+
+  // ---- snack table at the couch's elbow: popcorn and sodas ----
+  {
+    const p = K.piece(2.18, -3.42);
+    p.wood(lathe([[0, 0], [0.16, 0], [0.162, 0.018], [0.07, 0.045], [0.034, 0.1], [0.026, 0.3], [0.03, 0.44],
+      [0.05, 0.5], [0, 0.5]], 14), WALNUT, 'y', 0, 0, 0);
+    p.wood(rcyl(0.24, 0.035, 0.012, 18, 2), 0x8a5230, 'x', 0, 0.5175, 0);
+    p.mesh(lathe([[0, 0], [0.05, 0], [0.09, 0.035], [0.108, 0.07], [0.104, 0.074], [0.085, 0.045], [0, 0.03]], 16),
+      0x16467a, 'ceramic', -0.05, 0.535, 0.03);
+    p.mesh(new THREE.SphereGeometry(0.09, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xb89a56, 'matte', -0.05, 0.585, 0.03, 0, 0, 0, [1, 0.45, 1]);
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.4, r = 0.02 + (i % 3) * 0.025;
+      p.mesh(new THREE.SphereGeometry(0.017, 6, 4), i % 3 ? 0xd8c890 : 0xc8a050, 'matte', -0.05 + Math.cos(a) * r, 0.615 + (i % 2) * 0.008 - r * 0.25, 0.03 + Math.sin(a) * r);
+    }
+    [[0x7a0a08, 0.1, -0.08], [0x0a2a6a, 0.13, 0.06]].forEach(([c, x, z]) => {
+      p.mesh(rcyl(0.033, 0.12, 0.01, 12, 2), c, 'plastic', x, 0.595, z);
+      p.mesh(rcyl(0.028, 0.006, 0.002, 12, 1), CHROME, 'chrome', x, 0.657, z);
+    });
+    p.done();
+    K.block(1.94, -3.66, 2.42, -3.18, 0.55);
+    K.shade(2.18, -3.42, 0.62, 0.62);
+  }
+
+  // ---- neon PLAY sign on the back wall, left of the TV ----
+  {
+    const w = K.onWall('back', 1.42);
+    const Y = 2.75, Z = 0.075, R = 0.013;
+    w.glow(rbox(1.42, 1.12, 0.04, 0.07, 2), 'board', 0, Y, 0.03);
+    // a glass tube from (ax, ay) to (bx, by) in the sign's plane
+    const seg = (sw, ax, ay, bx, by) => {
+      const dx = bx - ax, dy = by - ay;
+      w.glow(capsule(R, Math.hypot(dx, dy), 2, 6), sw, (ax + bx) / 2, Y + (ay + by) / 2, Z, 0, 0, Math.atan2(-dx, dy));
+    };
+    const line = (sw, pts) => { for (let i = 1; i < pts.length; i++) seg(sw, ...pts[i - 1], ...pts[i]); };
+    // P L A Y, 0.3 tall
+    const y0 = 0.12, x0 = -0.5125, x1 = x0 + 0.275, x2 = x1 + 0.26, x3 = x2 + 0.29;
+    const bowl = [];
+    for (let i = 0; i <= 6; i++) {
+      const a = Math.PI / 2 - i * Math.PI / 6;
+      bowl.push([x0 + 0.11 + Math.cos(a) * 0.075, y0 + 0.225 + Math.sin(a) * 0.075]);
+    }
+    line('pink', [[x0, y0], [x0, y0 + 0.3], ...bowl, [x0, y0 + 0.15]]);
+    line('pink', [[x1, y0 + 0.3], [x1, y0], [x1 + 0.17, y0]]);
+    line('pink', [[x2, y0], [x2 + 0.1, y0 + 0.3], [x2 + 0.2, y0]]);
+    line('pink', [[x2 + 0.045, y0 + 0.11], [x2 + 0.155, y0 + 0.11]]);
+    line('pink', [[x3, y0 + 0.3], [x3 + 0.1, y0 + 0.15], [x3 + 0.2, y0 + 0.3]]);
+    line('pink', [[x3 + 0.1, y0 + 0.15], [x3 + 0.1, y0]]);
+    // a controller outline below, with a d-pad and two buttons
+    // (clockwise: round the right grip from the top, along the dipped
+    // bottom, round the left grip back up; the top edge closes the loop)
+    const outline = [], sweep = Math.PI * 1.11;
+    for (let i = 0; i <= 10; i++) { const a = Math.PI / 2 - i * sweep / 10; outline.push([0.25 + Math.cos(a) * 0.17, Math.sin(a) * 0.17]); }
+    outline.push([0.1, -0.12], [0, -0.105], [-0.1, -0.12]);
+    for (let i = 0; i <= 10; i++) { const a = -Math.PI * 0.39 - i * sweep / 10; outline.push([-0.25 + Math.cos(a) * 0.17, Math.sin(a) * 0.17]); }
+    const cy = -0.28;
+    const curve = new THREE.CatmullRomCurve3(outline.map(([x, y]) => new THREE.Vector3(x, y, 0)), true);
+    w.glow(new THREE.TubeGeometry(curve, 72, R, 6, true), 'cyan', 0, Y + cy, Z);
+    seg('yellow', -0.31, cy, -0.19, cy);
+    seg('yellow', -0.25, cy - 0.06, -0.25, cy + 0.06);
+    w.glow(new THREE.TorusGeometry(0.028, 0.011, 6, 16), 'pink', 0.2, Y + cy - 0.03, Z);
+    w.glow(new THREE.TorusGeometry(0.028, 0.011, 6, 16), 'yellow', 0.29, Y + cy + 0.045, Z);
+    // its power cord, down behind the fridge
+    const cord = new THREE.CatmullRomCurve3([[-0.6, Y - 0.56, 0.03], [-0.7, 1.75, 0.02], [-0.82, 1.2, 0.02], [-0.9, 0.85, 0.02]]
+      .map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+    w.glow(new THREE.TubeGeometry(cord, 12, 0.008, 5, false), 'board', 0, 0, 0);
+    w.done();
+  }
+
+  // ---- synthwave poster on the right wall, by the door ----
+  {
+    const w = K.onWall('right', -1.98);
+    w.print(rbox(0.82, 1.12, 0.03, 0.012, 1), 0x0e0e12, null, 0, 2.1, 0.02);
+    w.print(new THREE.PlaneGeometry(0.75, 1.05), 0xffffff, POSTER, 0, 2.1, 0.036);
+    w.done();
+  }
+}
+
+// ==========================================================
+// OFFICE EXTRAS — a rug under the desk chair, a floor lamp between the
+// bookshelf and the old monitor, a filing cabinet and a monstera along the
+// wall to the game room, and a coat stand by the door. Every older piece
+// here is a project, so these keep clear of them and of the way in.
+// ==========================================================
+{
+  const K = furnishKit;
+  const cast = m => { m.castShadow = true; return m; };
+  const WALNUT = 0x4a2e1a, BRASS = 0xc8a45e, CHROME = 0xd2d6da, CREAM = 0xa69473;
+  // [centre, Euler] that stands a +y geometry between points a and c
+  const Y_UP = new THREE.Vector3(0, 1, 0);
+  const orient = (a, c) => {
+    const d = new THREE.Vector3().subVectors(c, a).normalize();
+    const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_UP, d));
+    return [(a.x + c.x) / 2, (a.y + c.y) / 2, (a.z + c.z) / 2, e.x, e.y, e.z];
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+  // ---- a forest-green wool rug under the desk and chair ----
+  const RUG = K.region(0, 416, 512, 342, (g, w, h) => {
+    g.fillStyle = '#2c4636'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 2200; i++) {
+      g.fillStyle = `rgba(0, 0, 0, ${Math.random() * 0.12})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+    g.strokeStyle = '#e4d6b4'; g.lineWidth = 10; g.strokeRect(14, 14, w - 28, h - 28);
+    g.strokeStyle = '#b5603a'; g.lineWidth = 3; g.strokeRect(28, 28, w - 56, h - 56);
+    g.strokeStyle = '#e4d6b4'; g.lineWidth = 2; g.strokeRect(36, 36, w - 72, h - 72);
+    g.fillStyle = 'rgba(228, 214, 180, 0.55)';
+    for (let y = 60, r = 0; y < h - 50; y += 34, r++) {
+      for (let x = 60 + (r % 2) * 17; x < w - 50; x += 34) {
+        g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 5, y); g.lineTo(x, y + 5); g.lineTo(x - 5, y); g.fill();
+      }
+    }
+    g.fillStyle = '#3c6049'; g.beginPath(); g.ellipse(w / 2, h / 2, 92, 64, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#e4d6b4'; g.lineWidth = 3; g.stroke();
+    g.fillStyle = '#b5603a';
+    g.beginPath(); g.moveTo(w / 2, h / 2 - 34); g.lineTo(w / 2 + 50, h / 2); g.lineTo(w / 2, h / 2 + 34); g.lineTo(w / 2 - 50, h / 2); g.fill();
+  });
+  {
+    const p = K.piece(-3.5, -5.2);
+    p.print(K.rugGeo(3.6, 2.4, 0.06, 0.01, RUG), 0xffffff, true, 0, 0, 0);
+    p.done();
+  }
+
+  // ---- black floor lamp in the gap between bookshelf and monitor table ----
+  {
+    const p = K.piece(-6.62, -3.28);
+    K.floorLamp(p, 0x1a1a1a, 'satin');
+    p.done();
+    K.shade(-6.62, -3.28, 0.45, 0.45);
+  }
+
+  // ---- olive filing cabinet against the game-room wall, a plant and files on top ----
+  {
+    const p = K.piece(-0.425, -5.15, -Math.PI / 2);   // drawers face the room (-x)
+    const OLIVE = 0x212918, OLIVE_LT = 0x283220;
+    p.mesh(rbox(0.42, 0.03, 0.5, 0.01, 1), 0x141414, 'plastic', 0, 0.015, 0);
+    cast(p.mesh(rbox(0.46, 1.0, 0.55, 0.03, 1), OLIVE, 'satin', 0, 0.52, 0));
+    for (const y of [0.2, 0.52, 0.84]) {
+      p.mesh(rbox(0.4, 0.29, 0.02, 0.012, 1), OLIVE_LT, 'satin', 0, y, 0.285);
+      p.mesh(rbox(0.07, 0.035, 0.006, 0.003, 1), 0xb8ad94, 'paper', 0, y + 0.08, 0.297);
+      p.mesh(capsule(0.009, 0.1, 2, 8), CHROME, 'chrome', 0, y + 0.02, 0.312, 0, 0, Math.PI / 2);
+      for (const s of [-1, 1]) p.mesh(rcyl(0.007, 0.022, 0.002, 6, 1), CHROME, 'chrome', s * 0.05, y + 0.02, 0.302, Math.PI / 2);
+    }
+    // a stack of folders and a pothos trailing over the front edge
+    p.mesh(rbox(0.24, 0.025, 0.31, 0.008, 1), 0x5a0a08, 'paper', -0.08, 1.0325, -0.06, 0, 0.08, 0);
+    p.mesh(rbox(0.23, 0.02, 0.3, 0.006, 1), CREAM, 'paper', -0.08, 1.055, -0.06, 0, -0.05, 0);
+    p.mesh(rbox(0.24, 0.025, 0.31, 0.008, 1), 0x0a2a4a, 'paper', -0.08, 1.0775, -0.06, 0, 0.12, 0);
+    const pot = p.at(0.1, 1.02, 0.1);
+    pot.mesh(lathe([[0, 0], [0.06, 0], [0.072, 0.1], [0.078, 0.105], [0, 0.105]], 12), 0x601809, 'matte', 0, 0, 0);
+    [[0.0, 0.14, 0.0], [0.05, 0.13, 0.05], [-0.04, 0.13, 0.04], [0.04, 0.1, 0.12], [-0.02, 0.06, 0.17], [0.05, -0.02, 0.19],
+     [0.0, -0.1, 0.2], [0.06, -0.18, 0.2], [-0.07, 0.12, -0.03], [0.08, 0.12, -0.04]].forEach(([x, y, z], i) => {
+      const leaf = pot.mesh(new THREE.SphereGeometry(1, 8, 5), i % 2 ? 0x1f3f1a : 0x2f5a25, 'leaf', x, y, z,
+        0.4 + (i % 3) * 0.3, i * 1.3, 0, [0.035, 0.008, 0.045]);
+      leaf.rotation.order = 'YXZ';
+    });
+    p.done();
+    K.block(-0.7, -5.38, -0.15, -4.92, 1.05);
+    K.shade(-0.425, -5.15, 0.62, 0.72, -Math.PI / 2);
+  }
+
+  // ---- a monstera in a cream pot, further along the same wall ----
+  {
+    const p = K.piece(-0.52, -3.85, 0.3);
+    p.mesh(lathe([[0, 0], [0.15, 0], [0.17, 0.03], [0.18, 0.36], [0.19, 0.38], [0, 0.38]], 16), CREAM, 'ceramic', 0, 0, 0);
+    p.mesh(rcyl(0.17, 0.02, 0.006, 16, 1), 0x1a0f08, 'matte', 0, 0.36, 0);
+    // heart-shaped leaves with two notches a side, drooping off their stems
+    // (the shape lies flat, base at the origin, tip toward +z, 1 unit long;
+    // a back face is added so the one-sided material shows both sides)
+    const leafGeo = (() => {
+      const R = [[0, 0], [0.16, -0.06], [0.38, 0.02], [0.5, 0.18], [0.36, 0.3], [0.54, 0.36], [0.56, 0.52], [0.4, 0.6],
+        [0.5, 0.7], [0.4, 0.86], [0.2, 0.97], [0, 1]];
+      const s = new THREE.Shape();
+      s.moveTo(0, 0);
+      R.slice(1).forEach(([x, y]) => s.lineTo(x, y));
+      R.slice(1, -1).reverse().forEach(([x, y]) => s.lineTo(-x, y));
+      const face = new THREE.ShapeGeometry(s), I = face.index.array, n = face.attributes.position.count;
+      const g = new THREE.BufferGeometry();
+      for (const [name, size, flip] of [['position', 3, false], ['normal', 3, true], ['uv', 2, false]]) {
+        const A = face.attributes[name].array;
+        g.setAttribute(name, new THREE.Float32BufferAttribute([...A, ...(flip ? Array.from(A, v => -v) : A)], size));
+      }
+      const idx = Array.from(I);
+      for (let k = 0; k < I.length; k += 3) idx.push(I[k] + n, I[k + 2] + n, I[k + 1] + n);
+      g.setIndex(idx);
+      return g.rotateX(Math.PI / 2);
+    })();
+    const greens = [0x0a2208, 0x0f2c0c, 0x123510];
+    for (let i = 0; i < 8; i++) {
+      const a = i * 2.4 + 0.3, lean = 0.25 + (i % 3) * 0.2, len = 0.48 + (i % 4) * 0.13;
+      const dir = V(Math.cos(a) * Math.sin(lean), Math.cos(lean), Math.sin(a) * Math.sin(lean));
+      const base = V(0, 0.36, 0), tip = base.clone().addScaledVector(dir, len);
+      p.mesh(capsule(0.008, len, 1, 5), 0x1a3a12, 'leaf', ...orient(base, tip));
+      const size = 0.34 + (i % 3) * 0.05;
+      const leaf = p.mesh(leafGeo, greens[i % 3], 'leaf', tip.x, tip.y, tip.z,
+        0.45 + lean * 0.6, Math.PI / 2 - a, (i % 2 ? 1 : -1) * 0.2, [size, size * 0.3, size]);
+      leaf.rotation.order = 'YXZ';
+      leaf.castShadow = true;
+    }
+    p.done();
+    K.shade(-0.52, -3.85, 0.6, 0.6);
+  }
+
+  // ---- coat stand just inside the door: a coat, a scarf and a hat ----
+  {
+    const p = K.piece(-0.5, -1.78, 0.4);
+    p.wood(taper(0.024, 0.016, 1.62, 2, 10), WALNUT, 'y', 0, 0.86, 0);
+    p.wood(new THREE.SphereGeometry(0.032, 10, 8), WALNUT, 'y', 0, 1.715, 0);
+    for (let i = 0; i < 3; i++) {
+      const a = i / 3 * Math.PI * 2 + 0.5;
+      p.wood(capsule(0.017, 0.3, 2, 8), WALNUT, 'y', ...orient(V(0, 0.27, 0), V(Math.cos(a) * 0.25, 0.018, Math.sin(a) * 0.25)));
+    }
+    const hooks = [];
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2 + Math.PI / 4, tip = V(Math.cos(a) * 0.12, 1.65, Math.sin(a) * 0.12);
+      p.mesh(capsule(0.008, 0.1, 2, 6), BRASS, 'brass', ...orient(V(0, 1.56, 0), tip));
+      p.mesh(new THREE.SphereGeometry(0.014, 8, 6), BRASS, 'brass', tip.x, tip.y, tip.z);
+      hooks.push(tip);
+    }
+    // a camel coat on one hook: body, collar, sleeves hanging at its sides,
+    // a belt and buttons down the front (its front faces out from the pole)
+    const coatHook = hooks[2], COAT = 0x3e1f0a;
+    const c = p.at(coatHook.x * 1.45, 0, coatHook.z * 1.45, Math.atan2(coatHook.x, coatHook.z));
+    c.mesh(lathe([[0, 1.63], [0.05, 1.62], [0.12, 1.57], [0.16, 1.5], [0.165, 1.4], [0.15, 1.2], [0.165, 1.0], [0.19, 0.84],
+      [0.18, 0.81], [0, 0.81]], 14), COAT, 'fabric', 0, 0, 0, 0, 0, 0, [1, 1, 0.5]);
+    c.mesh(new THREE.TorusGeometry(0.06, 0.022, 6, 12), COAT, 'fabric', 0, 1.6, 0, Math.PI / 2, 0, 0, [1.1, 0.55, 1]);
+    for (const s of [-1, 1]) c.mesh(capsule(0.042, 0.46, 2, 8), COAT, 'fabric', s * 0.16, 1.24, 0.02, 0, 0, s * 0.06);
+    c.mesh(rbox(0.32, 0.04, 0.17, 0.02, 1), 0x1e0e04, 'fabric', 0, 1.13, 0.0);
+    for (const y of [1.42, 1.3, 1.0]) c.mesh(new THREE.SphereGeometry(0.011, 6, 4), 0x140a04, 'satin', 0, y, 0.083);
+    // a red scarf looped over the next hook
+    const scarf = hooks[3];
+    for (const s of [-1, 1]) {
+      p.mesh(capsule(0.028, 0.42, 2, 8), 0x500808, 'fabric', scarf.x * 1.15 + s * 0.035, 1.38, scarf.z * 1.15, 0, 0, s * 0.06);
+    }
+    p.mesh(new THREE.SphereGeometry(0.04, 10, 6), 0x500808, 'fabric', scarf.x * 1.1, 1.62, scarf.z * 1.1, 0, 0, 0, [1.3, 0.8, 0.9]);
+    // a felt hat on top
+    p.mesh(rcyl(0.13, 0.014, 0.006, 18, 1), 0x1a0e06, 'fabric', 0, 1.745, 0);
+    p.mesh(lathe([[0, 0], [0.075, 0], [0.08, 0.06], [0.07, 0.1], [0.05, 0.11], [0, 0.105]], 14), 0x1a0e06, 'fabric', 0, 1.75, 0);
+    p.mesh(rcyl(0.081, 0.022, 0.004, 14, 1), 0x380504, 'fabric', 0, 1.765, 0);
+    p.done();
+    K.block(-0.72, -2.0, -0.28, -1.56, 1.8);
+    K.shade(-0.5, -1.78, 0.55, 0.55);
+  }
+}
+
+// ==========================================================
 // DOGS — Ellie (yellow chihuahua), Luna (black chihuahua), Nova (border collie/aussie mix)
 // ==========================================================
 // Soft, toy-like dogs built in "dog units" and scaled by `size`. The parts
