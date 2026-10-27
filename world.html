@@ -1140,7 +1140,19 @@ const easeK = k => 1 - Math.pow(1 - k, FRAME_SCALE);
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 600);
 camera.position.set(7.5, 4.2, 8.5);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+// Bloom and the final grade (see POST) render through an antialiased
+// offscreen buffer, which needs WebGL2. When that's available the canvas
+// itself skips MSAA: it only ever receives one full-screen pass.
+const POST_FX = (() => {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return false;
+    const lose = gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+    return true;
+  } catch (e) { return false; }
+})();
+const renderer = new THREE.WebGLRenderer({ antialias: !POST_FX, powerPreference: 'high-performance' });
 renderer.setPixelRatio(QUALITY.startPixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -2381,8 +2393,10 @@ const sideFogMats = [];
     const yt = y / 1023;
     // peak slightly below mid (~0.45) so the haze sits on the horizon
     const d = (yt - 0.45) * 2.4;
-    // smooth bell curve, max ~0.92 opacity
-    const a = Math.exp(-d * d * 1.7) * 0.92;
+    // smooth bell curve, max ~0.92 opacity, eased to exactly zero at the top
+    // edge so the panel never draws a line across the sky
+    const top = Math.min(1, Math.max(0, (1 - yt) / 0.3));
+    const a = Math.exp(-d * d * 1.7) * 0.92 * top * top * (3 - 2 * top);
     const alpha = Math.max(0, Math.min(255, Math.floor(a * 255)));
     for (let x = 0; x < 8; x++) {
       const i = (y * 8 + x) * 4;
@@ -2439,6 +2453,58 @@ const fieldMat = (() => {
   // vertex colors add broad meadow patches (lighter, darker, sun-dried)
   return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, vertexColors: true });
 })();
+// ==========================================================
+// BOULDERS — a few rock shapes shared by every stone in the world:
+// subdivided icosahedrons pushed around by noise, flat-shaded and colored
+// per face — weathered gray on the sides, darker underneath and, on the
+// mossy variants, a little green on top. All of them share one material, so
+// the static batching folds each group of rocks into a single mesh.
+// ==========================================================
+const boulderMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+const BOULDERS = (() => {
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+  const ROCK = lin(0x8d8a83), ROCK2 = lin(0x75726b), DARK = lin(0x4d4a45), MOSS = lin(0x63773d);
+  const v = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const n = new THREE.Vector3(), col = new THREE.Color();
+  const make = (k, mossy) => {
+    const noise = makeNoise2D(400 + k * 17), rnd = mulberry32(900 + k * 31 + (mossy ? 7 : 0));
+    const g = new THREE.IcosahedronGeometry(1, 1);
+    const p = g.attributes.position;
+    // the same corner appears once per face it touches, so displace by a
+    // function of position: shared corners move together and stay sealed
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      v.multiplyScalar(1 + noise(v.x * 1.3 + v.y * 0.7 + k * 3.1, v.z * 1.3 - v.y * 0.9) * 0.3);
+      if (v.y < -0.25) v.y = -0.25 + (v.y + 0.25) * 0.4;     // flatter underside
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals();          // non-indexed: one normal per face → flat shading
+    const colors = new Float32Array(p.count * 3);
+    for (let f = 0; f < p.count; f += 3) {
+      a.fromBufferAttribute(p, f); b.fromBufferAttribute(p, f + 1); c.fromBufferAttribute(p, f + 2);
+      n.subVectors(c, b).cross(v.subVectors(a, b)).normalize();
+      col.copy(ROCK).lerp(ROCK2, rnd());
+      if (n.y < -0.1) col.lerp(DARK, 0.65);
+      else if (mossy && n.y > 0.5 && rnd() < 0.85) col.lerp(MOSS, 0.3 + 0.5 * (n.y - 0.5) / 0.5);
+      col.multiplyScalar(0.88 + rnd() * 0.2);
+      for (let j = 0; j < 3; j++) colors.set([col.r, col.g, col.b], (f + j) * 3);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    return g;
+  };
+  return {
+    mossy: [0, 1, 2, 3].map(k => make(k, true)),
+    bare: [4, 5, 6, 7].map(k => make(k, false)),
+  };
+})();
+// a boulder mesh of radius ~`size` from the mossy (yard) or bare (shore) set
+function makeBoulder(size, mossy) {
+  const set = mossy ? BOULDERS.mossy : BOULDERS.bare;
+  const m = new THREE.Mesh(set[Math.floor(Math.random() * set.length)], boulderMat);
+  m.scale.setScalar(size);
+  return m;
+}
+
 // ==========================================================
 // CLIFF / SHORE LAYOUT — cabin sits on a plateau that drops to the beach
 // ==========================================================
@@ -2705,14 +2771,9 @@ const cliffMat = (() => {
     const z = CLIFF_EDGE_Z - 0.5 + 0.6 + Math.random() * 1.6;
     if (nearStairs(x, z)) continue;                 // not on the staircase
     const s = 0.5 + Math.random() * 1.4;
-    const tone = 0x68 + Math.floor(Math.random() * 0x22);
-    const mat = new THREE.MeshStandardMaterial({
-      color: (tone << 16) | (tone << 8) | (tone + 4),
-      roughness: 0.97, flatShading: true
-    });
-    const r = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), mat);
+    const r = makeBoulder(s, false);
     r.position.set(x, -CLIFF_HEIGHT + s * 0.35 + Math.random() * 0.2, z);
-    r.scale.set(1 + Math.random() * 0.5, 0.55 + Math.random() * 0.35, 1 + Math.random() * 0.5);
+    r.scale.multiply(new THREE.Vector3(1 + Math.random() * 0.5, 0.55 + Math.random() * 0.35, 1 + Math.random() * 0.5));
     r.rotation.set(Math.random() * 0.5, Math.random() * Math.PI * 2, Math.random() * 0.5);
     r.castShadow = true; r.receiveShadow = true;
     outsideGroup.add(r);
@@ -2792,48 +2853,99 @@ const beachMat = (() => {
     const z = BEACH_FAR_Z + 1 + Math.pow(Math.random(), 1.6) * (beachDepth - 4);
     if (nearStairs(x, z)) continue;                 // not on the staircase/dock
     const s = 0.28 + Math.random() * 0.5;
-    const tone = 0x70 + Math.floor(Math.random() * 0x18);
-    const mat = new THREE.MeshStandardMaterial({
-      color: (tone << 16) | (tone << 8) | tone,
-      roughness: 0.97, flatShading: true
-    });
-    const r = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), mat);
+    const r = makeBoulder(s, false);
     r.position.set(x, BEACH_Y + s * 0.25, z);
-    r.scale.set(1 + Math.random() * 0.5, 0.45 + Math.random() * 0.3, 1 + Math.random() * 0.5);
+    r.scale.multiply(new THREE.Vector3(1 + Math.random() * 0.5, 0.45 + Math.random() * 0.3, 1 + Math.random() * 0.5));
     r.rotation.set(Math.random() * 0.4, Math.random() * Math.PI * 2, Math.random() * 0.4);
     r.castShadow = true; r.receiveShadow = true;
     outsideGroup.add(r);
   }
 }
 
-// OCEAN (large water plane stretching out to the horizon)
-const oceanMat = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#2a5a8a'; ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 250; i++) {
-    ctx.strokeStyle = `rgba(255,255,255,${0.04 + Math.random() * 0.14})`;
-    ctx.lineWidth = 0.5 + Math.random();
-    ctx.beginPath();
-    const x = Math.random() * 256, y = Math.random() * 256;
-    ctx.moveTo(x, y); ctx.lineTo(x + 6 + Math.random() * 18, y);
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(24, 16);
-  tex.encoding = THREE.sRGBEncoding;
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.25, metalness: 0.4 });
-})();
+// OCEAN — stylized water: deep blue out at sea and teal over the shallows,
+// small rolling waves that break up a glittering path under the sun (and the
+// moon at night), the sky's colors reflected at grazing angles, and the
+// mountains' distance haze, so the far water melts into the horizon. Its
+// light comes from the sky colors themselves, so dusk, night and storms
+// carry over, and it writes straight to the screen like the sky dome does.
+const oceanUniforms = {
+  uTime: { value: 0 },
+  uHorizon: { value: new THREE.Color(0xff7e51) },
+  uZenith: { value: new THREE.Color(0x4b4f9e) },
+  uSunDir: { value: new THREE.Vector3(0, 0, -1) },
+  uSunColor: { value: new THREE.Color(0xffd39c) },
+  uSunStrength: { value: 0 },
+  uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
+  uMoonStrength: { value: 0 },
+};
+const oceanMat = new THREE.ShaderMaterial({
+  uniforms: oceanUniforms,
+  vertexShader: `
+    varying vec3 vWorld;
+    void main() {
+      vec4 w = modelMatrix * vec4(position, 1.0);
+      vWorld = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: `
+    uniform float uTime, uSunStrength, uMoonStrength;
+    uniform vec3 uHorizon, uZenith, uSunDir, uSunColor, uMoonDir;
+    varying vec3 vWorld;
+    // one travelling wave's slope: direction, wavenumber, speed, height
+    vec2 wave(vec2 p, vec2 d, float k, float w, float a) {
+      return d * (a * k * cos(dot(d, p) * k - uTime * w));
+    }
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      vec3 toCam = cameraPosition - vWorld;
+      float dist = length(toCam);
+      vec3 V = toCam / dist;
+      // waves roll in toward the beach; far away they calm down so the
+      // surface doesn't shimmer at a few pixels per wave
+      vec2 sl = wave(vWorld.xz, vec2(0.28, 0.96), 0.32, 0.8, 0.16)
+              + wave(vWorld.xz, vec2(-0.5, 0.87), 0.55, 1.2, 0.08)
+              + wave(vWorld.xz, vec2(0.93, 0.37), 1.1, 1.9, 0.035)
+              + wave(vWorld.xz, vec2(-0.2, 0.98), 2.3, 2.7, 0.016)
+              + wave(vWorld.xz, vec2(0.7, -0.71), 3.7, 3.6, 0.008);
+      sl *= 1.0 / (1.0 + dist * 0.01);
+      vec3 N = normalize(vec3(-sl.x, 1.0, -sl.y));
+      float ndv = max(dot(N, V), 0.0);
+      float fres = 0.03 + 0.97 * pow(1.0 - ndv, 5.0);
+      vec3 R = reflect(-V, N);
+      R.y = abs(R.y);
+      vec3 sky = mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.65, R.y), 0.8));
+      // the water's own color, lit by the sky: teal in the shallows near the
+      // beach, deep blue farther out
+      vec3 skyLight = (uHorizon + uZenith) * 0.65 + 0.015;
+      float shallow = smoothstep(${(BEACH_FAR_Z - 24).toFixed(1)}, ${(BEACH_FAR_Z - 1).toFixed(1)}, vWorld.z);
+      vec3 body = mix(vec3(0.07, 0.25, 0.42), vec3(0.16, 0.5, 0.56), shallow) * skyLight;
+      vec3 col = mix(body, sky, fres * 0.9);
+      // glitter paths: a tight core broken up by the waves, plus a soft sheen
+      float sd = max(dot(R, uSunDir), 0.0);
+      col += uSunColor * (pow(sd, 300.0) * 3.0 + pow(sd, 24.0) * 0.14) * uSunStrength;
+      float md = max(dot(R, uMoonDir), 0.0);
+      col += vec3(0.72, 0.8, 1.0) * (pow(md, 360.0) * 1.8 + pow(md, 30.0) * 0.08) * uMoonStrength;
+      // small white caps that come and go
+      vec2 g = vWorld.xz * vec2(0.16, 0.45);
+      vec2 id = floor(g), f = fract(g) - 0.5;
+      float h = hash(id);
+      float life = sin(fract(h * 7.0 + uTime * (0.06 + h * 0.05)) * 3.14159);
+      float cap = smoothstep(0.38, 0.05, abs(f.x)) * smoothstep(0.1, 0.0, abs(f.y + (h - 0.5) * 0.5))
+                * step(0.86, h) * life * (1.0 - smoothstep(25.0, 110.0, dist));
+      col += cap * 0.28 * skyLight;
+      // distance haze, matching the mountains'
+      col = mix(col, uHorizon, smoothstep(70.0, 640.0, dist) * 0.9);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
 {
-  // ocean: large water expanse beyond the beach, slightly raised so it sits
-  // over (not underneath) any of the grass — kept stored on outsideGroup
-  // userData so the animate loop can scroll the texture for waves.
-  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(700, 240), oceanMat);
+  // ocean: large water expanse beyond the beach, deep enough to run under
+  // the farthest mountain range (its waves animate in the shader)
+  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(900, 420), oceanMat);
   ocean.rotation.x = -Math.PI / 2;
   // ocean sits just below the beach plane — water meets sand at z = BEACH_FAR_Z
-  ocean.position.set(0, BEACH_Y - 0.05, BEACH_FAR_Z - 110);
+  ocean.position.set(0, BEACH_Y - 0.05, BEACH_FAR_Z - 210);
   outsideGroup.add(ocean);
-  outsideGroup.userData.oceanMat = oceanMat;
 }
 
 // ===========================================================
@@ -3026,9 +3138,6 @@ const foamRibbons = [];
 // pulsing foam ring so the waves visibly break around it.
 const seaRocks = [];
 {
-  const rockMat = new THREE.MeshStandardMaterial({
-    color: 0x6a6a70, roughness: 0.97, flatShading: true
-  });
   function addFoamRings(x, z, ringR, splashR) {
     // Ring + splash use Lambert too so they darken at night with the rest of
     // the scene. Depth test is on; renderOrder keeps them above the foam.
@@ -3062,30 +3171,30 @@ const seaRocks = [];
   // ---- BIG ROCK — tall craggy stack of icosahedrons ----
   const bigX = -22, bigZ = BEACH_FAR_Z - 16;
   // base (wide, partially submerged)
-  const bigBase = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 0), rockMat);
+  const bigBase = makeBoulder(2.4, false);
   bigBase.position.set(bigX, BEACH_Y + 0.6, bigZ);
-  bigBase.scale.set(1.4, 1.1, 1.4);
+  bigBase.scale.multiply(new THREE.Vector3(1.4, 1.1, 1.4));
   bigBase.rotation.set(0.2, 0.7, -0.1);
   bigBase.castShadow = true; bigBase.receiveShadow = true;
   outsideGroup.add(bigBase);
   // mid (offset a touch and rotated for jaggedness)
-  const bigMid = new THREE.Mesh(new THREE.IcosahedronGeometry(1.9, 0), rockMat);
+  const bigMid = makeBoulder(1.9, false);
   bigMid.position.set(bigX + 0.4, BEACH_Y + 3.0, bigZ - 0.3);
-  bigMid.scale.set(1.0, 1.4, 1.0);
+  bigMid.scale.multiply(new THREE.Vector3(1.0, 1.4, 1.0));
   bigMid.rotation.set(0.4, 1.6, 0.3);
   bigMid.castShadow = true;
   outsideGroup.add(bigMid);
   // top (smaller, leaning) — total stack reaches y ≈ BEACH_Y + 7
-  const bigTop = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3, 0), rockMat);
+  const bigTop = makeBoulder(1.3, false);
   bigTop.position.set(bigX - 0.3, BEACH_Y + 5.4, bigZ + 0.2);
-  bigTop.scale.set(0.95, 1.3, 0.95);
+  bigTop.scale.multiply(new THREE.Vector3(0.95, 1.3, 0.95));
   bigTop.rotation.set(0.6, 0.4, -0.4);
   bigTop.castShadow = true;
   outsideGroup.add(bigTop);
   // jagged crown — small spike on top so the silhouette has a peak
-  const bigCrown = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 0), rockMat);
+  const bigCrown = makeBoulder(0.7, false);
   bigCrown.position.set(bigX, BEACH_Y + 6.7, bigZ);
-  bigCrown.scale.set(0.7, 1.5, 0.7);
+  bigCrown.scale.multiply(new THREE.Vector3(0.7, 1.5, 0.7));
   bigCrown.castShadow = true;
   outsideGroup.add(bigCrown);
   const bigRings = addFoamRings(bigX, bigZ, 4.6, 3.0);
@@ -3093,9 +3202,9 @@ const seaRocks = [];
 
   // ---- SMALL ROCK — single low boulder ----
   const smX = 26, smZ = BEACH_FAR_Z - 12;
-  const small = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 0), rockMat);
+  const small = makeBoulder(1.0, false);
   small.position.set(smX, BEACH_Y + 0.45, smZ);
-  small.scale.set(1.3, 0.8, 1.3);
+  small.scale.multiply(new THREE.Vector3(1.3, 0.8, 1.3));
   small.rotation.set(0.3, 1.1, -0.2);
   small.castShadow = true; small.receiveShadow = true;
   outsideGroup.add(small);
@@ -3212,361 +3321,221 @@ const seaRocks = [];
   outsideGroup.add(boat);
 }
 
-// FAR MOUNTAINS (tall billboard plane, visible above the ocean)
-{
-  const c = document.createElement('canvas'); c.width = 2048; c.height = 512;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 2048, 512);
-  // furthest range — softer, hazier
-  ctx.fillStyle = 'rgba(80, 95, 130, 0.65)';
-  ctx.beginPath(); ctx.moveTo(0, 512);
-  for (let i = 0; i <= 28; i++) {
-    const x = (i * 2048) / 28;
-    const y = 320 - Math.sin(i * 1.3) * 70 - (i % 3) * 36 - Math.random() * 18;
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(2048, 512); ctx.closePath(); ctx.fill();
-  // mid range
-  ctx.fillStyle = 'rgba(50, 65, 100, 0.85)';
-  ctx.beginPath(); ctx.moveTo(0, 512);
-  const peaks = [];
-  for (let i = 0; i <= 22; i++) {
-    const x = (i * 2048) / 22;
-    const y = 380 - Math.sin(i * 1.0 + 1) * 50 - (i % 2) * 30 - Math.random() * 12;
-    ctx.lineTo(x, y);
-    peaks.push({ x, y });
-  }
-  ctx.lineTo(2048, 512); ctx.closePath(); ctx.fill();
-  // snow caps
-  ctx.fillStyle = 'rgba(230, 235, 245, 0.9)';
-  for (const p of peaks) {
-    if (p.y < 360) {
-      ctx.beginPath();
-      ctx.moveTo(p.x - 18, p.y + 10);
-      ctx.lineTo(p.x, p.y);
-      ctx.lineTo(p.x + 18, p.y + 10);
-      ctx.lineTo(p.x + 8, p.y + 14);
-      ctx.lineTo(p.x - 8, p.y + 14);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.encoding = THREE.sRGBEncoding;
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide
-  });
-  const mountains = new THREE.Mesh(new THREE.PlaneGeometry(520, 130), mat);
-  mountains.position.set(0, 32, -240);
-  outsideGroup.add(mountains);
-  outsideGroup.userData.mountainsMat = mat;
+// ==========================================================
+// MOUNTAINS & FAR HILLS — layered ranges with aerial perspective
+// ==========================================================
+// Each range is a strip of jittered, flat-shaded terrain. Its crest line is
+// a run of summits roughened with noise, its faces are colored by height
+// and slope (forest low down, bare rock on the steeps, snow on the high
+// shelves), and a haze pass fades it toward the horizon color with distance
+// and toward its valley floor, so the layers separate the way real ranges
+// do. The haze color, and the sun's glow inside it, are copied from the sky
+// every frame (see updateSky), so time of day and weather carry over.
+
+// small seeded RNG + 2D gradient noise (the boulders, trees and clouds use
+// them too): the ranges come out the same on every visit, so the valley the
+// sun sets into is always there
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function makeNoise2D(seed) {
+  const rnd = mulberry32(seed);
+  const p = Array.from({ length: 256 }, (_, i) => i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  const perm = new Uint8Array(512);
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  const grad = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const X = xi & 255, Y = yi & 255;
+    const fx = x - xi, fy = y - yi, u = fade(fx), v = fade(fy);
+    const a = perm[X] + Y, b = perm[X + 1] + Y;
+    const n0 = grad(perm[a], fx, fy) + (grad(perm[b], fx - 1, fy) - grad(perm[a], fx, fy)) * u;
+    const n1 = grad(perm[a + 1], fx, fy - 1) + (grad(perm[b + 1], fx - 1, fy - 1) - grad(perm[a + 1], fx, fy - 1)) * u;
+    return n0 + (n1 - n0) * v;      // about -1..1
+  };
 }
 
-// (Low-opacity backdrop mountains REMOVED at the user's request — they
-// were the very-far-back layer at z = -340 sitting between the 3D peaks
-// and the sun/moon at z = -380, silhouetting the sky bodies. The
-// snow-capped FAR MOUNTAINS at z = -240 + the 3D peaks remain.)
+// shared by every hazed material; updateSky refreshes the values
+const hazeUniforms = {
+  uHazeColor: { value: new THREE.Color(0xff7e51) },
+  uHazeSunDir: { value: new THREE.Vector3(0, 0, -1) },
+  uHazeSunColor: { value: new THREE.Color(0xffd39c) },
+  uHazeSunStrength: { value: 0 },
+};
+// Haze grows from 0 at `near` to `max` at `far` (distance from the camera)
+// and thickens below `floor + depth`, where valley mist pools. It's mixed in
+// after tone mapping, like the built-in fog, so it lands on exactly the
+// horizon color the sky dome draws behind it.
+function addAerialHaze(mat, near, far, floor, depth, max) {
+  const range = { value: new THREE.Vector4(near, far, floor, depth) };
+  const ceiling = { value: max };
+  mat.onBeforeCompile = shader => injectHaze(shader, range, ceiling);
+  return mat;
+}
+function injectHaze(shader, range, ceiling) {
+  Object.assign(shader.uniforms, hazeUniforms, { uHazeRange: range, uHazeMax: ceiling });
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vHazeWorld;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\n  vHazeWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+      varying vec3 vHazeWorld;
+      uniform vec3 uHazeColor, uHazeSunDir, uHazeSunColor;
+      uniform float uHazeSunStrength, uHazeMax;
+      uniform vec4 uHazeRange;`)
+    .replace('#include <fog_fragment>', `#include <fog_fragment>
+      {
+        vec3 hv = vHazeWorld - cameraPosition;
+        float hd = length(hv);
+        vec3 hdir = hv / hd;
+        float haze = smoothstep(uHazeRange.x, uHazeRange.y, hd);
+        float mist = exp(-max(vHazeWorld.y - uHazeRange.z, 0.0) / uHazeRange.w);
+        haze = (1.0 - (1.0 - haze) * (1.0 - mist * 0.65)) * uHazeMax;
+        // the same sun bloom and horizon band the sky dome paints
+        float s = max(dot(hdir, uHazeSunDir), 0.0);
+        vec3 hc = uHazeColor + uHazeSunColor * uHazeSunStrength *
+          (pow(s, 5.0) * 0.20 + pow(s, 2.0) * (1.0 - smoothstep(0.0, 0.32, abs(hdir.y))) * 0.16);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, hc, haze);
+      }`);
+}
 
-// ROLLING HILLS — layered billboards behind the cabin (cabin side, +Z)
-// for parallax depth. four ranges in front-to-back order.
 {
-  // helper: build a hill silhouette canvas with given color/peak params
-  function hillTexture(rgb, alpha, baseY, amp, count, snowChance = 0) {
-    const c = document.createElement('canvas');
-    c.width = 2048; c.height = 512;
-    const ctx = c.getContext('2d');
-    ctx.clearRect(0, 0, 2048, 512);
-    const fill = `rgba(${rgb}, ${alpha})`;
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.moveTo(0, 512);
-    const peaks = [];
-    for (let i = 0; i <= count; i++) {
-      const x = (i * 2048) / count;
-      // gentle rolling hills (lower frequency than mountains)
-      const y = baseY
-        - Math.sin(i * 0.55) * amp
-        - Math.cos(i * 0.21 + 1) * amp * 0.55
-        - Math.random() * amp * 0.25;
-      ctx.lineTo(x, y);
-      peaks.push({ x, y });
+  const W = BEACH_Y;                      // the ocean-side ranges rise out of the water
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+  const ALPINE = { snow: lin(0xf2f4f8), rock: lin(0x6f7488), rock2: lin(0x575b6e), forest: lin(0x31493d), grass: lin(0x4f6a45) };
+  const GREEN = { snow: lin(0xf2f4f8), rock: lin(0x6d7363), rock2: lin(0x575d50), forest: lin(0x2f4a35), grass: lin(0x5f7d45) };
+  // zc/half: crest line and half-width (z); peaks: crest height range above
+  // `base`; snow/forest: lines above the water (or ground); valley: how deep
+  // the dip is where the sun sets (x ≈ -28 at z = -380)
+  const RANGES = [
+    // ocean side (-Z), near to far
+    { seed: 7, zc: -214, half: 24, base: W - 6, peaks: [12, 32], spacing: 44, snow: 999, forest: 22, valley: 0.35, pal: ALPINE,
+      islands: true, haze: [70, 640, W, 10, 0.9] },
+    { seed: 19, zc: -262, half: 34, base: W - 8, peaks: [36, 72], spacing: 56, snow: 46, forest: 16, valley: 0.55, pal: ALPINE,
+      haze: [70, 640, W, 16, 0.9] },
+    { seed: 31, zc: -334, half: 34, base: W - 10, peaks: [56, 98], spacing: 64, snow: 58, forest: 8, valley: 0.6, pal: ALPINE,
+      haze: [70, 640, W, 22, 0.9] },
+    // cabin side (+Z): forested hills, then a snowy range on the horizon
+    { seed: 43, zc: 122, half: 26, base: -6, peaks: [8, 22], spacing: 40, snow: 999, forest: 999, valley: 0, pal: GREEN,
+      haze: [70, 640, 0, 8, 0.9] },
+    { seed: 57, zc: 205, half: 34, base: -10, peaks: [22, 46], spacing: 52, snow: 999, forest: 30, valley: 0, pal: GREEN,
+      haze: [70, 640, 0, 14, 0.9] },
+    { seed: 71, zc: 326, half: 40, base: -14, peaks: [55, 104], spacing: 64, snow: 64, forest: 10, valley: 0, pal: ALPINE,
+      haze: [70, 640, 0, 22, 0.9] },
+  ];
+  const X0 = -440, X1 = 440;
+  const mountains = new THREE.Group();
+  mountains.userData.noBake = true;
+  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+  const _n = new THREE.Vector3(), _e = new THREE.Vector3(), _col = new THREE.Color();
+
+  for (const L of RANGES) {
+    const rnd = mulberry32(L.seed);
+    const noise = makeNoise2D(L.seed * 13 + 5);
+    const summits = [];
+    for (let x = X0 - L.spacing; x < X1 + L.spacing; x += L.spacing * (0.6 + rnd() * 0.7)) {
+      let h = L.peaks[0] + (L.peaks[1] - L.peaks[0]) * Math.pow(rnd(), 0.85);
+      if (L.valley) h *= 1 - L.valley * Math.exp(-Math.pow((x + 28) / 40, 2));
+      summits.push({ x, h, w: L.spacing * (0.85 + rnd() * 0.9), p: 1.05 + rnd() * 0.55 });
     }
-    ctx.lineTo(2048, 512); ctx.closePath(); ctx.fill();
-    // optional sparse highlights on tallest peaks (sun-lit grass)
-    if (snowChance > 0) {
-      ctx.fillStyle = `rgba(255, 250, 220, ${0.25 * alpha})`;
-      for (const p of peaks) {
-        if (Math.random() < snowChance && p.y < baseY - amp * 0.5) {
-          ctx.fillRect(p.x - 8, p.y, 16, 6);
+    const crestH = x => {
+      let c = L.peaks[0] * 0.4;
+      for (const s of summits) {
+        const d = Math.abs(x - s.x) / s.w;
+        if (d < 1) c = Math.max(c, s.h * Math.pow(1 - d, s.p));
+      }
+      c *= 0.94 + noise(x * 0.07, 1.7) * 0.06;
+      // the nearest range breaks into headlands, so the water runs on
+      // between them to the ranges behind
+      if (L.islands) c *= Math.min(1, Math.max(0, 0.45 + noise(x * 0.011, 4.2) * 1.6));
+      return c;
+    };
+    const crestZ = x => L.zc + noise(x * 0.008, 9.1) * L.half * 0.3;
+    const height = (x, z) => {
+      const u = Math.min(1, Math.abs(z - crestZ(x)) / L.half);
+      let h = crestH(x) * Math.pow(1 - u, 1.15);
+      // ridged noise carves gullies and spurs down the flanks
+      const r1 = 1 - Math.abs(noise(x * 0.04, z * 0.04));
+      const r2 = 1 - Math.abs(noise(x * 0.1 + 31, z * 0.1 - 17));
+      h *= 0.72 + 0.22 * r1 * r1 + 0.1 * r2;
+      return L.base + h;
+    };
+
+    // jittered grid → two triangles per cell, split along the diagonal that
+    // follows the terrain so ridges stay crisp
+    const cell = QUALITY.mobile ? 7 : 5.5;
+    const z0 = L.zc - L.half * 1.35, z1 = L.zc + L.half * 1.35;
+    const nx = Math.ceil((X1 - X0) / cell), nz = Math.ceil((z1 - z0) / cell);
+    const grid = new Float32Array((nx + 1) * (nz + 1) * 3);
+    for (let j = 0; j <= nz; j++) {
+      for (let i = 0; i <= nx; i++) {
+        let x = X0 + (X1 - X0) * (i / nx), z = z0 + (z1 - z0) * (j / nz);
+        if (i > 0 && i < nx) x += (rnd() - 0.5) * cell * 0.6;
+        if (j > 0 && j < nz) z += (rnd() - 0.5) * cell * 0.6;
+        const k = (j * (nx + 1) + i) * 3;
+        grid[k] = x; grid[k + 1] = height(x, z); grid[k + 2] = z;
+      }
+    }
+    const pos = new Float32Array(nx * nz * 18), nrm = new Float32Array(nx * nz * 18), col = new Float32Array(nx * nz * 18);
+    let f = 0;
+    const face = (ia, ib, ic) => {
+      _a.fromArray(grid, ia * 3); _b.fromArray(grid, ib * 3); _c.fromArray(grid, ic * 3);
+      _n.subVectors(_c, _b).cross(_e.subVectors(_a, _b)).normalize();
+      if (_n.y < 0) { _n.negate(); _e.copy(_b); _b.copy(_c); _c.copy(_e); }
+      // color by height above the water / ground and by slope
+      const cx = (_a.x + _b.x + _c.x) / 3, cz = (_a.z + _b.z + _c.z) / 3;
+      const hy = (_a.y + _b.y + _c.y) / 3 - (L.zc < 0 ? W : 0);
+      const wobble = noise(cx * 0.06 + 40, cz * 0.06) * 7;
+      const P = L.pal;
+      if ((hy > L.snow + wobble && _n.y > 0.42) || (hy > L.snow + 12 + wobble && _n.y > 0.22)) _col.copy(P.snow);
+      else if (hy < L.forest + wobble * 0.8 && _n.y > 0.5) _col.copy(_n.y > 0.86 && hy < L.forest * 0.5 ? P.grass : P.forest);
+      else _col.copy(P.rock).lerp(P.rock2, Math.min(1, Math.max(0, (0.8 - _n.y) * 1.6 + noise(cx * 0.03, cz * 0.03) * 0.4)));
+      _col.multiplyScalar(0.9 + rnd() * 0.16);
+      for (const v of [_a, _b, _c]) {
+        pos[f] = v.x; pos[f + 1] = v.y; pos[f + 2] = v.z;
+        nrm[f] = _n.x; nrm[f + 1] = _n.y; nrm[f + 2] = _n.z;
+        col[f] = _col.r; col[f + 1] = _col.g; col[f + 2] = _col.b;
+        f += 3;
+      }
+    };
+    const id = (i, j) => j * (nx + 1) + i;
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const a = id(i, j), b = id(i + 1, j), c = id(i, j + 1), d = id(i + 1, j + 1);
+        if (Math.abs(grid[a * 3 + 1] - grid[d * 3 + 1]) < Math.abs(grid[b * 3 + 1] - grid[c * 3 + 1])) {
+          face(a, c, d); face(a, d, b);
+        } else {
+          face(a, c, b); face(b, c, d);
         }
       }
     }
-    const tex = new THREE.CanvasTexture(c);
-    tex.encoding = THREE.sRGBEncoding;
-    return tex;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.computeBoundingSphere();
+    const mat = addAerialHaze(new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), ...L.haze);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.matrixAutoUpdate = false;
+    mountains.add(mesh);
   }
-
-  // each layer: more saturated/darker green as it gets closer; slightly
-  // taller peaks too, so the foreground hills loom larger than the distant ones
-  const layers = [
-    // furthest: pale blue-gray (atmospheric haze)
-    { z: 240, y: 30, w: 560, h: 130,
-      rgb: '110, 132, 142', alpha: 0.85, baseY: 320, amp: 50, count: 26, snow: 0 },
-    // mid-far: muted green-blue
-    { z: 200, y: 22, w: 480, h: 110,
-      rgb:  '92, 122, 110', alpha: 0.95, baseY: 320, amp: 65, count: 22, snow: 0 },
-    // mid: forest green
-    { z: 160, y: 16, w: 420, h: 100,
-      rgb:  '70, 110,  78', alpha: 1.0,  baseY: 320, amp: 80, count: 18, snow: 0.18 },
-    // closest: rich deep green, biggest rolls
-    { z: 120, y: 10, w: 360, h:  90,
-      rgb:  '54,  92,  60', alpha: 1.0,  baseY: 320, amp: 95, count: 16, snow: 0.22 },
-  ];
-
-  outsideGroup.userData.hillMats = [];
-  for (const cfg of layers) {
-    const tex = hillTexture(cfg.rgb, cfg.alpha, cfg.baseY, cfg.amp, cfg.count, cfg.snow);
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide
-    });
-    const hill = new THREE.Mesh(new THREE.PlaneGeometry(cfg.w, cfg.h), mat);
-    hill.position.set(0, cfg.y, cfg.z);
-    // billboards face -Z (toward the cabin / typical camera position)
-    hill.rotation.y = Math.PI;
-    outsideGroup.add(hill);
-    outsideGroup.userData.hillMats.push(mat);
-  }
+  outsideGroup.add(mountains);
 }
 
-// FAR MOUNTAINS (cabin side, +Z) — tall painted silhouette billboard
-// behind the rolling hills, so the +Z horizon has a high snowy backdrop
-// matching the ocean side. Color tracks sky like the front mountains.
-{
-  const c = document.createElement('canvas'); c.width = 2048; c.height = 512;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 2048, 512);
-  // furthest hazy range
-  ctx.fillStyle = 'rgba(85, 100, 130, 0.7)';
-  ctx.beginPath(); ctx.moveTo(0, 512);
-  for (let i = 0; i <= 26; i++) {
-    const x = (i * 2048) / 26;
-    const y = 280 - Math.sin(i * 1.2 + 0.5) * 80 - (i % 3) * 32 - Math.random() * 22;
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(2048, 512); ctx.closePath(); ctx.fill();
-  // mid-back range (taller, sharper)
-  ctx.fillStyle = 'rgba(58, 72, 105, 0.92)';
-  ctx.beginPath(); ctx.moveTo(0, 512);
-  const peaks = [];
-  for (let i = 0; i <= 20; i++) {
-    const x = (i * 2048) / 20;
-    const y = 340 - Math.sin(i * 0.95 + 1.2) * 70 - (i % 2) * 32 - Math.random() * 18;
-    ctx.lineTo(x, y);
-    peaks.push({ x, y });
-  }
-  ctx.lineTo(2048, 512); ctx.closePath(); ctx.fill();
-  // snow caps on the tallest peaks
-  ctx.fillStyle = 'rgba(232, 236, 246, 0.92)';
-  for (const p of peaks) {
-    if (p.y < 320) {
-      ctx.beginPath();
-      ctx.moveTo(p.x - 22, p.y + 14);
-      ctx.lineTo(p.x, p.y);
-      ctx.lineTo(p.x + 22, p.y + 14);
-      ctx.lineTo(p.x + 10, p.y + 18);
-      ctx.lineTo(p.x - 10, p.y + 18);
-      ctx.closePath(); ctx.fill();
-    }
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.encoding = THREE.sRGBEncoding;
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, alphaTest: 0.5,
-    side: THREE.DoubleSide, fog: false
-  });
-  const farBackMt = new THREE.Mesh(new THREE.PlaneGeometry(560, 150), mat);
-  // sit past the rolling hills; +Z direction, taller + further than them
-  farBackMt.position.set(0, 38, 320);
-  // billboard normal +Z by default — flip to face -Z (toward cabin)
-  // Actually default normal +Z is correct for facing camera at +Z side.
-  // We want the painted side to face the camera looking from cabin in
-  // +Z direction. Camera at -Z looking +Z sees this plane's BACK; flipping
-  // rotation so painted side faces -Z (toward cabin):
-  farBackMt.rotation.y = Math.PI;
-  outsideGroup.add(farBackMt);
-  outsideGroup.userData.farBackMtMat = mat;
-}
-
-// 3D HILL MOUNDS — large overlapping rolling hills behind the cabin (+Z).
-// Two layered rows of icosahedron domes build a connected hill range with
-// the back row taller and the front row shorter for natural perspective.
-{
-  // MeshLambertMaterial in three.js r128 doesn't support flatShading —
-  // switched to MeshStandardMaterial (which does). Same lighting cost,
-  // same flat-faceted look on the icosahedron domes.
-  const hillBack = new THREE.MeshStandardMaterial({
-    color: 0x466d4a, roughness: 0.95, flatShading: true
-  });
-  const hillFront = new THREE.MeshStandardMaterial({
-    color: 0x55865a, roughness: 0.95, flatShading: true
-  });
-  // BACK ROW — taller, wider, further away. Spaced so adjacent hills
-  // overlap by roughly half a width, forming a continuous undulating ridge.
-  const backRow = [];
-  for (let i = 0; i < 14; i++) {
-    const x = -380 + i * 60 + (Math.random() - 0.5) * 22;
-    const z = 105 + (Math.random() - 0.5) * 18;
-    const sx = 60 + Math.random() * 30;
-    const sy = 20 + Math.random() * 14;
-    const sz = 38 + Math.random() * 18;
-    backRow.push({ x, z, sx, sy, sz });
-  }
-  // FRONT ROW — closer, smaller; fills foreground gaps between back hills.
-  const frontRow = [];
-  for (let i = 0; i < 12; i++) {
-    const x = -350 + i * 65 + (Math.random() - 0.5) * 28;
-    const z = 65 + (Math.random() - 0.5) * 22;
-    const sx = 35 + Math.random() * 22;
-    const sy = 11 + Math.random() * 8;
-    const sz = 26 + Math.random() * 14;
-    frontRow.push({ x, z, sx, sy, sz });
-  }
-  for (const p of backRow) {
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hillBack);
-    m.scale.set(p.sx, p.sy, p.sz);
-    m.position.set(p.x, terrainHeight(p.x, p.z) - p.sy * 0.55, p.z);
-    m.rotation.y = Math.random() * Math.PI;
-    m.receiveShadow = true;
-    outsideGroup.add(m);
-  }
-  for (const p of frontRow) {
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hillFront);
-    m.scale.set(p.sx, p.sy, p.sz);
-    m.position.set(p.x, terrainHeight(p.x, p.z) - p.sy * 0.55, p.z);
-    m.rotation.y = Math.random() * Math.PI;
-    m.receiveShadow = true;
-    outsideGroup.add(m);
-  }
-}
-
-// 3D MOUNTAIN RANGE — a row of overlapping rocky peaks rising from the
-// ocean to form a connected range, plus shorter foothills in front so the
-// silhouette has multiple depth layers instead of isolated cones.
-{
-  const rockMat = new THREE.MeshStandardMaterial({
-    color: 0x495b76, roughness: 0.95, flatShading: true
-  });
-  const rockMidMat = new THREE.MeshStandardMaterial({
-    color: 0x576a85, roughness: 0.95, flatShading: true
-  });
-  const snowMat = new THREE.MeshStandardMaterial({
-    color: 0xeae8ee, roughness: 0.95, flatShading: true
-  });
-  // MAIN RANGE — tall peaks at the back, packed closely so each base
-  // overlaps its neighbour and forms a continuous rocky ridge.
-  // Pushed back to z ≈ -270 so they read as distant range, not looming
-  // right behind the cabin.
-  const mainPeaks = [];
-  for (let i = 0; i < 18; i++) {
-    const x = -300 + i * 36 + (Math.random() - 0.5) * 18;
-    const z = -270 + (Math.random() - 0.5) * 26;
-    const r = 28 + Math.random() * 18;
-    const h = 44 + Math.random() * 30;
-    mainPeaks.push({ x, z, r, h, mid: false });
-  }
-  // FOOTHILLS — shorter peaks in front of the main range to break the
-  // ridge into multiple silhouette layers
-  for (let i = 0; i < 12; i++) {
-    const x = -280 + i * 48 + (Math.random() - 0.5) * 26;
-    const z = -210 + (Math.random() - 0.5) * 18;
-    const r = 18 + Math.random() * 10;
-    const h = 18 + Math.random() * 12;
-    mainPeaks.push({ x, z, r, h, mid: true });
-  }
-  for (const p of mainPeaks) {
-    const mat = p.mid ? rockMidMat : rockMat;
-    const mountain = new THREE.Mesh(
-      new THREE.ConeGeometry(p.r, p.h, 8), mat
-    );
-    mountain.position.set(p.x, BEACH_Y + p.h / 2 - 2, p.z);
-    mountain.rotation.y = Math.random() * Math.PI * 2;
-    // slight non-uniform scale so each peak isn't a perfect cone
-    mountain.scale.set(
-      1 + (Math.random() - 0.5) * 0.25,
-      1,
-      1 + (Math.random() - 0.5) * 0.25
-    );
-    mountain.receiveShadow = true;
-    outsideGroup.add(mountain);
-    // snow cap only on the tallest peaks (above the snow line).
-    // Cap base radius must be ≤ the mountain's radius at that height
-    // (which is r * snowH/h = 0.32r for snowH=0.32h). 0.28r fits inside.
-    if (p.h > 50) {
-      const snowH = p.h * 0.32;
-      const snowR = p.r * 0.28;
-      const snow = new THREE.Mesh(
-        new THREE.ConeGeometry(snowR, snowH, 8), snowMat
-      );
-      snow.position.set(p.x, BEACH_Y + p.h - snowH / 2 - 2, p.z);
-      snow.rotation.y = mountain.rotation.y;
-      snow.scale.copy(mountain.scale);
-      outsideGroup.add(snow);
-    }
-  }
-}
-
-// TREES — low-poly pine + round, scattered on the field
-function makeTree(x, z, scale, type) {
-  const tree = new THREE.Group();
-  const trunkMat = matStandard(0x4a3018, 0.92);
-  const leafMat = matStandard(type === 'pine' ? 0x2a4d22 : 0x3a6b32, 0.95);
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16 * scale, 0.22 * scale, 1.2 * scale, 7),
-    trunkMat
-  );
-  trunk.position.y = 0.6 * scale;
-  trunk.castShadow = true;
-  tree.add(trunk);
-  // snow cap material (one per tree so each can fade independently if needed)
-  const snowMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, transparent: true, opacity: 0, depthWrite: false
-  });
-  if (type === 'pine') {
-    for (let i = 0; i < 3; i++) {
-      const cone = new THREE.Mesh(
-        new THREE.ConeGeometry((1.4 - i * 0.32) * scale, 1.5 * scale, 9),
-        leafMat
-      );
-      cone.position.y = (1.0 + i * 0.7) * scale;
-      cone.castShadow = true;
-      tree.add(cone);
-    }
-    // snow cap — small white cone perched on the top tier
-    const cap = new THREE.Mesh(
-      new THREE.ConeGeometry(0.78 * scale, 0.9 * scale, 9), snowMat);
-    cap.position.y = 2.5 * scale;
-    tree.add(cap);
-    snowCaps.push(cap);
-  } else {
-    const foliage = new THREE.Mesh(new THREE.SphereGeometry(1.25 * scale, 10, 8), leafMat);
-    foliage.position.y = 1.7 * scale;
-    foliage.scale.y = 0.95;
-    foliage.castShadow = true;
-    tree.add(foliage);
-    // snow cap — top hemisphere of a slightly larger sphere
-    const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(1.27 * scale, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2.4),
-      snowMat
-    );
-    cap.position.y = 1.7 * scale;
-    cap.scale.y = 0.95;
-    tree.add(cap);
-    snowCaps.push(cap);
-  }
-  tree.position.set(x, terrainHeight(x, z), z);
-  tree.rotation.y = Math.random() * Math.PI * 2;
-  return tree;
-}
+// TREES — layered pines and fluffy broadleaf trees
+// Pines are stacked skirts with serrated, drooping rims: lighter at the tips,
+// dark underneath. A broadleaf crown is a few dozen leaf-cluster cards that
+// always face the camera; each card is lit with the normal of the crown's
+// overall shape, so the crown shades like one soft ball while its outline
+// stays leafy. The whole forest is three meshes, and the wind sway, the leaf
+// flutter and the snow all happen in the vertex shader (FX uniforms).
 // Procedurally scatter many trees in a broad ring around the building. The
 // room footprint is roughly x: ±5, z: ±5 — we steer trees away from there
 // and away from the direct view-out-the-window so they don't crowd the ocean.
@@ -3612,8 +3581,10 @@ function safeFromHomeView(x, z) {
   d = Math.atan2(Math.sin(d), Math.cos(d));
   return Math.abs(d) > 0.26;
 }
+// trees gather into groves where this noise is high, with open meadow between
+const groveNoise = makeNoise2D(97);
 let attempts = 0;
-while (treePositions.length < 110 && attempts < 2400) {
+while (treePositions.length < 140 && attempts < 5000) {
   attempts++;
   // ring around building: random angle, random radius. Pulled out to 130
   // (was 44) so trees fill the wider field on the ±X sides instead of
@@ -3630,52 +3601,263 @@ while (treePositions.length < 110 && attempts < 2400) {
   // also keep them in front of the beach (z > -86)
   // keep them on the plateau (cliff edge is at z = CLIFF_EDGE_Z = -30)
   if (z < CLIFF_EDGE_Z + 2) continue;
+  if (Math.random() > 0.15 + 0.85 * THREE.MathUtils.smoothstep(groveNoise(x * 0.03, z * 0.03), -0.2, 0.3)) continue;
   // not too close to other trees
   let tooClose = false;
   for (const [px, pz] of treePositions) {
     const dx = x - px, dz = z - pz;
-    if (dx * dx + dz * dz < 9) { tooClose = true; break; }
+    if (dx * dx + dz * dz < 7) { tooClose = true; break; }
   }
   if (tooClose) continue;
   const scale = 0.85 + Math.random() * 0.55;
   const type = Math.random() < 0.55 ? 'pine' : 'round';
   treePositions.push([x, z, scale, type]);
 }
-// Chunked tree placement — instead of building all 110 trees synchronously
-// (which blocks the first paint), spread them across animation frames.
-// The cabin + critical scene shows up immediately. The trees are collected
-// in a holding group and merged into a few meshes once the forest is
-// complete (~500 draw calls → ~3), then added to the scene in one go.
-(function placeTreesInChunks(positions, idx, forest) {
-  const PER_TICK = 10;
-  const end = Math.min(idx + PER_TICK, positions.length);
-  for (let i = idx; i < end; i++) {
-    const [x, z, s, t] = positions[i];
-    forest.add(makeTree(x, z, s, t));
+// Build the forest straight into three merged meshes: pines + trunks (one
+// Lambert mesh), broadleaf crowns (billboard leaf cards) and the cards'
+// shadow caster. Typed arrays only, so it's quick enough to do up front.
+const forest = (() => {
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+  const rnd = mulberry32(2024);
+  const group = new THREE.Group();
+  group.userData.noBake = true;          // custom attributes — keep out of static batching
+
+  // ---- pines + trunks: non-indexed, smooth normals, vertex colors ----
+  const P = [], N = [], C = [], B = [];
+  const _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3(), _fn = new THREE.Vector3();
+  function tri(a, b, c, na, nb, nc, ca, cb, cc, base) {
+    // keep the winding facing the way the normals point
+    _e1.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    _e2.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+    _fn.crossVectors(_e1, _e2);
+    if (_fn.x * (na[0] + nb[0] + nc[0]) + _fn.y * (na[1] + nb[1] + nc[1]) + _fn.z * (na[2] + nb[2] + nc[2]) < 0) {
+      [b, c] = [c, b]; [nb, nc] = [nc, nb]; [cb, cc] = [cc, cb];
+    }
+    for (const [p, n, col] of [[a, na, ca], [b, nb, cb], [c, nc, cc]]) {
+      P.push(p[0], p[1], p[2]); N.push(n[0], n[1], n[2]); C.push(col.r, col.g, col.b); B.push(base[0], base[1], base[2]);
+    }
   }
-  if (end < positions.length) {
-    requestAnimationFrame(() => placeTreesInChunks(positions, end, forest));
-  } else {
-    replaceSnowCaps(bakeStaticMeshes(forest, { allowTransparent: true }));
-    // the merged forest bends gently in the wind (see FX)
-    for (const m of forest.children) if (m.userData.baked) addWindSway(m.material, 0.035);
-    outsideGroup.add(forest);
+  const shade = (c, k) => ({ r: c.r * k, g: c.g * k, b: c.b * k });
+
+  // `base` is where the cylinder starts; `tree` is the tree's foot, which
+  // the wind sway measures height from (limbs start partway up the trunk)
+  function trunk(base, h, r0, r1, bark, lean = 0, leanDir = 0, tree = base) {
+    const [x, y0, z] = base, sides = 6;
+    const tx = Math.cos(leanDir) * lean, tz = Math.sin(leanDir) * lean;
+    const low = shade(bark, 0.7), high = shade(bark, 1.05);
+    for (let i = 0; i < sides; i++) {
+      const a0 = i / sides * Math.PI * 2, a1 = (i + 1) / sides * Math.PI * 2;
+      const n0 = [Math.cos(a0), 0, Math.sin(a0)], n1 = [Math.cos(a1), 0, Math.sin(a1)];
+      const b0 = [x + n0[0] * r0, y0 - 0.2, z + n0[2] * r0], b1 = [x + n1[0] * r0, y0 - 0.2, z + n1[2] * r0];
+      const t0 = [x + tx + n0[0] * r1, y0 + h, z + tz + n0[2] * r1], t1 = [x + tx + n1[0] * r1, y0 + h, z + tz + n1[2] * r1];
+      tri(b0, b1, t1, n0, n1, n1, low, low, high, tree);
+      tri(b0, t1, t0, n0, n1, n0, low, high, high, tree);
+    }
   }
-})(treePositions, 0, new THREE.Group());
+
+  const PINE_BODY = [lin(0x2c5232), lin(0x2f5a3a), lin(0x335a2e)];
+  const PINE_TIP = lin(0x5a8a4c), PINE_UNDER = lin(0x14261a), PINE_BARK = lin(0x4a3220);
+  function pine(x, y0, z, s) {
+    const base = [x, y0, z];
+    const tiers = s > 1.05 ? 4 : 3;
+    const body = shade(PINE_BODY[Math.floor(rnd() * PINE_BODY.length)], 0.88 + rnd() * 0.24);
+    const notch = shade(body, 0.72), under = shade(PINE_UNDER, 0.9 + rnd() * 0.2), underCore = shade(under, 0.6);
+    trunk(base, 1.0 * s, 0.17 * s, 0.1 * s, PINE_BARK);
+    const rot = rnd() * Math.PI;
+    for (let i = 0; i < tiers; i++) {
+      const f = i / (tiers - 1);                         // 0 bottom tier → 1 top
+      const R = (1.32 - 0.8 * f) * s * (0.94 + rnd() * 0.12);
+      const yb = y0 + (0.72 + f * (tiers === 4 ? 1.9 : 1.5)) * s;
+      const th = (1.3 - 0.32 * f) * s;
+      const apex = [x, yb + th, z];
+      const up = [0, 1, 0];
+      // cone normal in the (radial, up) plane, tipped upward a little so the
+      // tiers catch the sky light
+      const nr = th * 0.85, nu = R * 1.25, nl = Math.hypot(nr, nu);
+      const K = 16, rim = [];
+      for (let k = 0; k < K; k++) {
+        const a = rot + i * 0.45 + k / K * Math.PI * 2;
+        const outer = k % 2 === 0;
+        const r = outer ? R * (0.88 + rnd() * 0.24) : R * 0.66;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        rim.push({
+          p: [x + ca * r, outer ? yb - 0.12 * s : yb + 0.16 * s, z + sa * r],
+          n: [ca * nr / nl, nu / nl, sa * nr / nl],
+          c: outer ? body : notch,
+          dn: [ca * 0.35, -0.94, sa * 0.35],
+        });
+      }
+      const tipCol = shade(PINE_TIP, 0.9 + rnd() * 0.2);
+      const underC = [x, yb + 0.28 * th, z];
+      for (let k = 0; k < K; k++) {
+        const p = rim[k], q = rim[(k + 1) % K];
+        tri(apex, p.p, q.p, up, p.n, q.n, tipCol, p.c, q.c, base);
+        tri(underC, q.p, p.p, [0, -1, 0], q.dn, p.dn, underCore, under, under, base);
+      }
+    }
+  }
+
+  // ---- broadleaf crowns: camera-facing leaf cards ----
+  const LEAF = [lin(0x5a8a3a), lin(0x679a3e), lin(0x4a7a3c), lin(0x7d9a3a), lin(0x5d8a45)];
+  const BARK = lin(0x5b3f2a);
+  const cardPos = [], cardNor = [], cardCol = [], cardUv = [], cardCorner = [], cardTree = [], cardIdx = [];
+  const density = QUALITY.mobile ? 0.7 : 1;
+  const _d = new THREE.Vector3(), _n = new THREE.Vector3();
+  function card(px, py, pz, n, col, size, ang, base) {
+    const v0 = cardPos.length / 3, c = Math.cos(ang) * size, s = Math.sin(ang) * size;
+    for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+      const ox = u - 0.5, oy = v - 0.5;
+      cardPos.push(px, py, pz);
+      cardNor.push(n.x, n.y, n.z);
+      cardCol.push(col.r, col.g, col.b);
+      cardUv.push(u, v);
+      cardCorner.push(ox * c - oy * s, ox * s + oy * c);
+      cardTree.push(base[0], base[1], base[2]);
+    }
+    cardIdx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
+  }
+  function broadleaf(x, y0, z, s) {
+    const base = [x, y0, z];
+    trunk(base, 1.7 * s, 0.18 * s, 0.1 * s, BARK, 0.1 * s, rnd() * Math.PI * 2);
+    // a couple of limbs reaching up into the crown
+    for (let b = 0; b < 2; b++) {
+      const a = rnd() * Math.PI * 2, by = y0 + (0.9 + rnd() * 0.35) * s;
+      trunk([x, by, z], 0.85 * s, 0.07 * s, 0.035 * s, BARK, 0.55 * s, a, base);
+    }
+    const cy = y0 + 2.25 * s;
+    const lobes = [{ x, y: cy, z, r: 1.15 * s }];
+    const extra = 3 + Math.floor(rnd() * 2);
+    for (let k = 0; k < extra; k++) {
+      const a = (k + rnd() * 0.6) / extra * Math.PI * 2, d = (0.55 + rnd() * 0.3) * s;
+      lobes.push({ x: x + Math.cos(a) * d, y: cy + (rnd() - 0.4) * 0.7 * s, z: z + Math.sin(a) * d, r: (0.72 + rnd() * 0.25) * s });
+    }
+    const weights = lobes.map(l => l.r * l.r), total = weights.reduce((a, b) => a + b, 0);
+    const leaf = LEAF[Math.floor(rnd() * LEAF.length)];
+    const count = Math.round((44 + 34 * s) * density);
+    for (let i = 0; i < count; i++) {
+      let pick = rnd() * total, L = lobes[0];
+      for (let k = 0; k < lobes.length; k++) { pick -= weights[k]; if (pick <= 0) { L = lobes[k]; break; } }
+      _d.set(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize();
+      if (_d.y < -0.4) _d.y *= 0.6;                     // fewer cards underneath
+      const rr = L.r * (0.7 + 0.3 * Math.sqrt(rnd()));
+      const px = L.x + _d.x * rr, py = L.y + _d.y * rr * 0.85, pz = L.z + _d.z * rr;
+      // light it as part of the whole crown, with a nod to its own lobe
+      _n.set(px - x, py - cy, pz - z).normalize().multiplyScalar(0.8).addScaledVector(_d, 0.2);
+      _n.y += 0.2; _n.normalize();
+      // darker toward the crown's core and underside
+      const ao = Math.min(1.05, Math.max(0.5, 0.66 + 0.26 * (py - cy) / s + 0.4 * (rr / L.r - 0.7)));
+      card(px, py, pz, _n, shade(leaf, ao * (0.9 + rnd() * 0.2)), (1.0 + rnd() * 0.45) * s, rnd() * Math.PI * 2, base);
+    }
+  }
+
+  for (const [x, z, s, type] of treePositions) {
+    const y0 = terrainHeight(x, z);
+    if (type === 'pine') pine(x, y0, z, s); else broadleaf(x, y0, z, s);
+  }
+
+  // ---- shaders ----
+  // whole tree leans with the gust, more the higher up it is
+  const SWAY = `
+  float treeH = max(0.0, transformed.y - aTree.y - 0.6);
+  float swayT = uTime * 1.05 + aTree.x * 0.13 + aTree.z * 0.09;
+  transformed.x += sin(swayT) * 0.03 * treeH * uWind;
+  transformed.z += cos(swayT * 0.83) * 0.021 * treeH * uWind;`;
+  // leaf cards: expand around the card center in view space, with a little
+  // flutter so the crown shimmers in the wind
+  const BILLBOARD = `
+  vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+  float flutter = sin(uTime * 3.7 + position.x * 1.9 + position.z * 2.3) * 0.16 * uWind;
+  mvPosition.xy += mat2(cos(flutter), sin(flutter), -sin(flutter), cos(flutter)) * aCorner;
+  gl_Position = projectionMatrix * mvPosition;`;
+  const SNOW = `
+  vColor = mix(vColor, vec3(0.86, 0.88, 0.93), uSnow * smoothstep(0.45, 0.85, normal.y) * 0.9);`;
+  const HEAD = 'uniform float uTime, uWind, uSnow;\nattribute vec3 aTree;\n';
+
+  const leafTex = (() => {
+    const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d'), r = mulberry32(23);
+    // a dense, roundish cluster of leaves: solid in the middle, leafy at the edge
+    for (let i = 0; i < 34; i++) {
+      const a = r() * Math.PI * 2, d = Math.pow(r(), 0.7) * S * 0.27;
+      const len = S * (0.1 + r() * 0.06), wid = len * 0.62;
+      const v = 190 + Math.floor(r() * 65);
+      g.save();
+      g.translate(S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d);
+      g.rotate(a + (r() - 0.5) * 1.3);
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.beginPath();
+      g.moveTo(-len, 0);
+      g.quadraticCurveTo(0, -wid * 1.3, len, 0);
+      g.quadraticCurveTo(0, wid * 1.3, -len, 0);
+      g.fill();
+      g.restore();
+    }
+    return new THREE.CanvasTexture(c);
+  })();
+
+  const woodMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  woodMat.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, { uTime: FX.time, uWind: FX.wind, uSnow: FX.snow });
+    shader.vertexShader = HEAD + shader.vertexShader
+      .replace('#include <color_vertex>', '#include <color_vertex>' + SNOW)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>' + SWAY);
+  };
+  const woodGeo = new THREE.BufferGeometry();
+  woodGeo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  woodGeo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  woodGeo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  woodGeo.setAttribute('aTree', new THREE.Float32BufferAttribute(B, 3));
+  const wood = new THREE.Mesh(woodGeo, woodMat);
+  wood.castShadow = wood.receiveShadow = true;
+  wood.frustumCulled = false;
+  wood.matrixAutoUpdate = false;
+  group.add(wood);
+
+  const leafMat = new THREE.MeshLambertMaterial({ map: leafTex, vertexColors: true, alphaTest: 0.5 });
+  leafMat.shadowSide = THREE.DoubleSide;       // the cards face the light in the shadow pass
+  const cardHead = HEAD + 'attribute vec2 aCorner;\n';
+  leafMat.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, { uTime: FX.time, uWind: FX.wind, uSnow: FX.snow });
+    shader.vertexShader = cardHead + shader.vertexShader
+      .replace('#include <color_vertex>', '#include <color_vertex>' + SNOW)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>' + SWAY)
+      .replace('#include <project_vertex>', BILLBOARD);
+  };
+  // shadows: the same cards, turned toward the sun instead of the camera
+  const leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leafTex, alphaTest: 0.5 });
+  leafDepth.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, { uTime: FX.time, uWind: FX.wind });
+    shader.vertexShader = 'uniform float uTime, uWind;\nattribute vec3 aTree;\nattribute vec2 aCorner;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>', '#include <begin_vertex>' + SWAY)
+      .replace('#include <project_vertex>', BILLBOARD);
+  };
+  const cardGeo = new THREE.BufferGeometry();
+  cardGeo.setAttribute('position', new THREE.Float32BufferAttribute(cardPos, 3));
+  cardGeo.setAttribute('normal', new THREE.Float32BufferAttribute(cardNor, 3));
+  cardGeo.setAttribute('color', new THREE.Float32BufferAttribute(cardCol, 3));
+  cardGeo.setAttribute('uv', new THREE.Float32BufferAttribute(cardUv, 2));
+  cardGeo.setAttribute('aCorner', new THREE.Float32BufferAttribute(cardCorner, 2));
+  cardGeo.setAttribute('aTree', new THREE.Float32BufferAttribute(cardTree, 3));
+  cardGeo.setIndex(cardIdx);
+  const crowns = new THREE.Mesh(cardGeo, leafMat);
+  crowns.customDepthMaterial = leafDepth;
+  crowns.castShadow = true;
+  crowns.frustumCulled = false;
+  crowns.matrixAutoUpdate = false;
+  group.add(crowns);
+
+  outsideGroup.add(group);
+  return group;
+})();
 
 // ----- ROCKS / BOULDERS scattered around the yard -----
 function makeRock(x, z, scale) {
-  // low-poly icosahedron, slightly squashed and tinted for variation
-  const tone = 0x7a + Math.floor(Math.random() * 0x18);
-  const mat = new THREE.MeshStandardMaterial({
-    color: (tone << 16) | (tone << 8) | tone,
-    roughness: 0.95, flatShading: true
-  });
-  const r = new THREE.Mesh(new THREE.IcosahedronGeometry(scale, 0), mat);
-  // sit the rock's center about 0.55*scale above the terrain so its lower
-  // half is partly buried, never floating, even where the ground rolls
-  r.position.set(x, terrainHeight(x, z) + scale * 0.45, z);
-  r.scale.set(1.1 + Math.random() * 0.4, 0.6 + Math.random() * 0.3, 1.0 + Math.random() * 0.4);
+  // a mossy boulder, slightly squashed for variation
+  const r = makeBoulder(scale, true);
+  // sit the rock's center a little above the terrain so its lower half is
+  // partly buried, never floating, even where the ground rolls
+  r.position.set(x, terrainHeight(x, z) + scale * 0.3, z);
+  r.scale.multiply(new THREE.Vector3(1.1 + Math.random() * 0.4, 0.6 + Math.random() * 0.3, 1.0 + Math.random() * 0.4));
   r.rotation.set(
     Math.random() * 0.4 - 0.2,
     Math.random() * Math.PI * 2,
@@ -3729,7 +3911,7 @@ function makeRock(x, z, scale) {
     if (end < positions.length) {
       requestAnimationFrame(() => placeRocksInChunks(positions, end, rocks));
     } else {
-      bakeStaticMeshes(rocks);   // 70 tinted rocks → one mesh (tints become vertex colors)
+      bakeStaticMeshes(rocks);   // 70 boulders → one mesh
       outsideGroup.add(rocks);
     }
   })(rockPositions, 0, new THREE.Group());
@@ -3738,15 +3920,34 @@ function makeRock(x, z, scale) {
 // SUN — large sphere parked beyond the mountains. Mountain peaks (alpha-tested)
 // silhouette the lower portion of the sun.
 // transparent so heavy cloud cover can fade it (see updateSky)
-const sunMat = new THREE.MeshBasicMaterial({ color: 0xfff0c2, transparent: true });
+// not tone-mapped: ACES would pull it below the sky's own glow, a gray disc at noon
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xfff0c2, transparent: true, toneMapped: false });
 const sun = new THREE.Mesh(new THREE.SphereGeometry(11, 32, 24), sunMat);
 sun.position.set(-25, 30, -380);
 root.add(sun);
-// soft glow halo around the sun
-const sunGlowMat = new THREE.MeshBasicMaterial({
-  color: 0xffd99c, transparent: true, opacity: 0.35, depthWrite: false
-});
-const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(18, 24, 16), sunGlowMat);
+// soft additive halo: brightest where the sphere faces the camera and gone
+// at its rim, so the glow has no edge (a flat translucent sphere read as a
+// dull ring around the disc)
+function haloMaterial(color, opacity) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: opacity } },
+    vertexShader: `
+      varying float vFacing;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vFacing = max(dot(normalize(normalMatrix * normal), normalize(-mv.xyz)), 0.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying float vFacing;
+      void main() { gl_FragColor = vec4(uColor * pow(vFacing, 3.0) * uOpacity, 1.0); }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+}
+const sunGlowMat = haloMaterial(0xffd99c, 0.35);
+const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(28, 24, 16), sunGlowMat);
 sun.add(sunGlow);
 
 // MOON — separate sphere, only visible at night
@@ -3778,10 +3979,8 @@ const moon = new THREE.Mesh(new THREE.SphereGeometry(8, 32, 24), moonMat);
 moon.position.set(-25, 40, -380);
 moon.visible = false;
 root.add(moon);
-const moonGlowMat = new THREE.MeshBasicMaterial({
-  color: 0xb8c4e0, transparent: true, opacity: 0.22, depthWrite: false
-});
-const moonGlow = new THREE.Mesh(new THREE.SphereGeometry(9, 24, 16), moonGlowMat);
+const moonGlowMat = haloMaterial(0xb8c4e0, 0.22);
+const moonGlow = new THREE.Mesh(new THREE.SphereGeometry(16, 24, 16), moonGlowMat);
 moon.add(moonGlow);
 
 // SKY DOME — a vertical gradient from the horizon up to a deeper zenith,
@@ -3878,18 +4077,22 @@ let starsPoints;
   sg.addColorStop(1, 'rgba(255,255,255,0)');
   sctx.fillStyle = sg; sctx.fillRect(0, 0, 64, 64);
   const starTex = new THREE.CanvasTexture(starCanvas);
+  // drawn as part of the sky: right after the dome and before any solid
+  // geometry, without a depth test, so terrain and mountains always cover
+  // the stars instead of stars twinkling on the near side of a far range
   const starMat = new THREE.PointsMaterial({
     map: starTex,
     size: 3.2,
     sizeAttenuation: true,
-    transparent: true,
     depthWrite: false,
+    depthTest: false,
     opacity: 0.0,
     color: 0xffffff,
     blending: THREE.AdditiveBlending
   });
   starsPoints = new THREE.Points(starGeom, starMat);
   starsPoints.frustumCulled = false;
+  starsPoints.renderOrder = -999;
   root.add(starsPoints);
 }
 
@@ -6273,16 +6476,16 @@ let porchOwl = null;
 // WEATHER SYSTEM — clouds, rain, lightning, thunder
 // ==========================================================
 // "weather" is one of: 'clear' | 'overcast' | 'rain' | 'storm'
-// each state cross-fades visual elements (cloud opacity/coverage, rain
+// each state cross-fades visual elements (cloud coverage and color, rain
 // emission rate, lightning chance, sky tint).
 const weather = { state: 'clear', target: 'clear', blend: 1 };
 // rain/snow keys: 0..2 — drives both opacity and fall speed multiplier
 const WEATHER_PRESETS = {
-  clear:    { cloudCount: 6,  cloudOpacity: 0.55, cloudColor: 0xffffff, rain: 0,   snow: 0,   lightning: 0,    skyMul: 1.00, skyGray: 0 },
-  overcast: { cloudCount: 18, cloudOpacity: 0.92, cloudColor: 0xc0c0c8, rain: 0,   snow: 0,   lightning: 0,    skyMul: 0.65, skyGray: 0.55 },
-  rain:     { cloudCount: 22, cloudOpacity: 0.94, cloudColor: 0xa6a8b0, rain: 0.55,snow: 0,   lightning: 0,    skyMul: 0.62, skyGray: 0.7 },
-  storm:    { cloudCount: 26, cloudOpacity: 0.98, cloudColor: 0x5e6068, rain: 1.7, snow: 0,   lightning: 1.0,  skyMul: 0.40, skyGray: 0.88 },
-  snow:     { cloudCount: 22, cloudOpacity: 0.92, cloudColor: 0xd6d8de, rain: 0,   snow: 1.0, lightning: 0,    skyMul: 0.78, skyGray: 0.5 },
+  clear:    { cloudCount: 9,  cloudColor: 0xffffff, rain: 0,   snow: 0,   lightning: 0,    skyMul: 1.00, skyGray: 0 },
+  overcast: { cloudCount: 18, cloudColor: 0xc0c0c8, rain: 0,   snow: 0,   lightning: 0,    skyMul: 0.65, skyGray: 0.55 },
+  rain:     { cloudCount: 22, cloudColor: 0xa6a8b0, rain: 0.55,snow: 0,   lightning: 0,    skyMul: 0.62, skyGray: 0.7 },
+  storm:    { cloudCount: 26, cloudColor: 0x5e6068, rain: 1.7, snow: 0,   lightning: 1.0,  skyMul: 0.40, skyGray: 0.88 },
+  snow:     { cloudCount: 22, cloudColor: 0xd6d8de, rain: 0,   snow: 1.0, lightning: 0,    skyMul: 0.78, skyGray: 0.5 },
 };
 
 // cabin + porch footprint that rain/snow shouldn't fall inside (so it doesn't
@@ -6297,47 +6500,106 @@ function inShelter(x, y, z) {
       && z > SHELTER_BOX.zMin && z < SHELTER_BOX.zMax;
 }
 
-// ----- CLOUDS — fluffy clusters of overlapping spheres drifting in the sky.
-// We allocate the maximum cloud count up-front; weather state controls how
-// many are visible (and their opacity/tint) so we never recreate geometry.
-const clouds = [];
+// ----- CLOUDS — puffy, flat-bottomed cumulus: white on top, blue-gray
+// underneath, lit by the sun. Every cloud lives in one merged mesh, and each
+// cloud's drift and "presence" sit in a slot of a uniform array, so the whole
+// sky is a single draw call animated on the GPU. As the weather changes,
+// clouds form (they grow and fill in) or dissolve away instead of fading
+// through each other.
+const CLOUD_MAX = 26;
+const cloudSlots = Array.from({ length: CLOUD_MAX }, () => new THREE.Vector4(0, -500, 0, 0));
+const clouds = [];      // { x, y, z, speed, presence } per slot
+let cloudMat = null;
+const cloudGlow = { value: 0.3 };    // self-glow, dimmed after dark (weather block)
+const _cloudTarget = new THREE.Color();
 {
-  const CLOUD_MAX = 26;
-  const cloudY = ROOM.h + 14;            // float above the cabin
-  const cloudSpread = 220;
-  const cloudGeo = new THREE.SphereGeometry(1, 8, 6);
-  for (let i = 0; i < CLOUD_MAX; i++) {
-    const grp = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({
-      color: 0xffffff, transparent: true, opacity: 0,
-      depthWrite: false
-    });
-    // a cluster of overlapping puffs of varied size makes a fluffy silhouette
-    const puffs = 4 + Math.floor(Math.random() * 4);
-    for (let p = 0; p < puffs; p++) {
-      const puff = new THREE.Mesh(cloudGeo, mat);
-      const r = 1.6 + Math.random() * 1.4;
-      puff.scale.set(r, r * 0.55, r);
-      puff.position.set(
-        (Math.random() - 0.5) * 4.5,
-        (Math.random() - 0.5) * 0.8,
-        (Math.random() - 0.5) * 2.2
-      );
-      grp.add(puff);
+  const rnd = mulberry32(77);
+  const puff = new THREE.SphereGeometry(1, 11, 8);
+  const pp = puff.attributes.position, pn = puff.attributes.normal, pi = puff.index.array;
+  const P = [], N = [], C = [], I = [], idx = [];
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+  const TOP = lin(0xffffff), BOTTOM = lin(0xb4bfd2);
+  for (let c = 0; c < CLOUD_MAX; c++) {
+    // a row of big puffs along the base, smaller ones heaped on top
+    const len = 16 + rnd() * 20, H = 5 + rnd() * 4.5;
+    const puffs = [];
+    const base = 3 + Math.floor(rnd() * 3);
+    for (let k = 0; k < base; k++) {
+      const u = base === 1 ? 0 : k / (base - 1) - 0.5;
+      const r = (0.32 + rnd() * 0.12) * len * (1 - Math.abs(u) * 0.55);
+      puffs.push([u * len * 0.78, r * 0.35, (rnd() - 0.5) * len * 0.25, r]);
     }
-    grp.position.set(
-      (Math.random() - 0.5) * cloudSpread,
-      cloudY + (Math.random() - 0.5) * 8,
-      (Math.random() - 0.5) * cloudSpread - 30
-    );
-    grp.userData = {
-      mat,
-      driftSpeed: 0.5 + Math.random() * 0.6,
-      visible: false
-    };
-    scene.add(grp);
-    clouds.push(grp);
+    const top = 2 + Math.floor(rnd() * 3);
+    for (let k = 0; k < top; k++) {
+      const r = (0.2 + rnd() * 0.14) * len;
+      puffs.push([(rnd() - 0.5) * len * 0.5, H * (0.45 + rnd() * 0.35), (rnd() - 0.5) * len * 0.2, r]);
+    }
+    for (const [px, py, pz, r] of puffs) {
+      const v0 = P.length / 3;
+      for (let i = 0; i < pp.count; i++) {
+        let x = px + pp.getX(i) * r, y = py + pp.getY(i) * r * 0.78, z = pz + pp.getZ(i) * r * 0.85;
+        let nx = pn.getX(i), ny = pn.getY(i), nz = pn.getZ(i);
+        if (y < 0) { y = 0; nx *= 0.3; ny = -1; nz *= 0.3; }      // flat bottom
+        P.push(x, y, z); N.push(nx, ny, nz);
+        const k = Math.min(1, Math.max(0, y / (H * 1.1)));
+        const col = BOTTOM.clone().lerp(TOP, Math.sqrt(k));
+        C.push(col.r, col.g, col.b);
+        I.push(c);
+      }
+      for (let i = 0; i < pi.length; i++) idx.push(v0 + pi[i]);
+    }
+    clouds.push({
+      x: (rnd() - 0.5) * 500, y: 30 + rnd() * 24, z: -230 + rnd() * 300,
+      speed: 0.5 + rnd() * 0.6, presence: 0,
+    });
   }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  geo.setAttribute('aCloud', new THREE.Float32BufferAttribute(I, 1));
+  geo.setIndex(idx.length > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+  cloudMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const range = { value: new THREE.Vector4(90, 700, -100, 1) }, ceiling = { value: 0.75 };
+  cloudMat.onBeforeCompile = shader => {
+    shader.uniforms.uClouds = { value: cloudSlots };
+    shader.uniforms.uCloudGlow = cloudGlow;
+    shader.vertexShader = `uniform vec4 uClouds[${CLOUD_MAX}];
+attribute float aCloud;
+varying vec3 vCloudLocal;
+varying float vPresence;
+` + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  vec4 cl = uClouds[int(aCloud + 0.5)];
+  vCloudLocal = position;
+  vPresence = cl.w;
+  // a cloud that's gone collapses to a point, so it costs no pixels
+  transformed = transformed * (0.6 + 0.4 * cl.w) * step(0.01, cl.w) + cl.xyz;`);
+    shader.fragmentShader = `varying vec3 vCloudLocal;
+varying float vPresence;
+uniform float uCloudGlow;
+float cloudHash(vec3 p) { return fract(sin(dot(p, vec3(17.1, 113.7, 59.3))) * 43758.5453); }
+float cloudNoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(cloudHash(i), cloudHash(i + vec3(1, 0, 0)), f.x), mix(cloudHash(i + vec3(0, 1, 0)), cloudHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(cloudHash(i + vec3(0, 0, 1)), cloudHash(i + vec3(1, 0, 1)), f.x), mix(cloudHash(i + vec3(0, 1, 1)), cloudHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+` + shader.fragmentShader
+      // forming / dissolving: the cloud wears away from its rim inward, with
+      // a ragged noisy edge, rather than going see-through
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+  float rim = length(vCloudLocal.xz / vec2(18.0, 9.0)) + vCloudLocal.y / 10.0;
+  if (rim * 0.75 + cloudNoise(vCloudLocal * 0.4) * 0.45 > vPresence * 1.3) discard;`)
+      // a little self-glow so the sunless side reads as soft white, not gray
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  totalEmissiveRadiance += diffuseColor.rgb * uCloudGlow;`);
+    injectHaze(shader, range, ceiling);
+  };
+  const mesh = new THREE.Mesh(geo, cloudMat);
+  mesh.frustumCulled = false;      // the vertex shader moves every cloud
+  mesh.matrixAutoUpdate = false;
+  mesh.userData.noBake = true;
+  scene.add(mesh);
 }
 
 // ----- RAIN — N short vertical line segments falling from the sky -----
@@ -8636,22 +8898,6 @@ const SUN_DISC_STOPS = [
   { t: 0.36, value: new THREE.Color(0xfff5e1) },
   { t: 0.55, value: new THREE.Color(0xff8055) }
 ];
-const MOUNTAIN_TINT_STOPS = [
-  { t: 0.00, value: new THREE.Color(0x12162a) },
-  { t: 0.18, value: new THREE.Color(0xb89a8a) },
-  { t: 0.36, value: new THREE.Color(0xffffff) },
-  { t: 0.55, value: new THREE.Color(0xc97a5a) },
-  { t: 0.72, value: new THREE.Color(0x4a3a5a) },
-  { t: 1.00, value: new THREE.Color(0x12162a) }
-];
-const HILL_TINT_STOPS = [
-  { t: 0.00, value: new THREE.Color(0x161a30) },
-  { t: 0.18, value: new THREE.Color(0xc8a99a) },
-  { t: 0.36, value: new THREE.Color(0xffffff) },
-  { t: 0.55, value: new THREE.Color(0xd48a64) },
-  { t: 0.72, value: new THREE.Color(0x52456a) },
-  { t: 1.00, value: new THREE.Color(0x161a30) }
-];
 // the sky dome's color straight overhead, paired with SKY_STOPS (horizon)
 const ZENITH_STOPS = [
   { t: 0.00, value: new THREE.Color(0x03061c) }, // night
@@ -8754,27 +9000,6 @@ function applyTime(t) {
   }
   multiLerp(SUN_DISC_STOPS, THREE.MathUtils.clamp(t, 0.18, 0.55), sun.material.color);
 
-  // tint the far mountains so they read warm at sunset, dark at night
-  if (outsideGroup && outsideGroup.userData.mountainsMat) {
-    const mtTint = multiLerp(MOUNTAIN_TINT_STOPS, t, _tintCol);
-    outsideGroup.userData.mountainsMat.color.copy(mtTint);
-    if (outsideGroup.userData.mtBackdropMat) {
-      outsideGroup.userData.mtBackdropMat.color.copy(mtTint);
-    }
-  }
-
-  // tint the rolling hills the same way so they track lighting too. they
-  // sit closer than the mountains so warm/cool tones read a bit stronger.
-  if (outsideGroup && outsideGroup.userData.hillMats) {
-    const hillTint = multiLerp(HILL_TINT_STOPS, t, _tintCol);
-    for (const m of outsideGroup.userData.hillMats) m.color.copy(hillTint);
-  }
-
-  // tint the back-side far mountain billboard with the same mountain curve
-  if (outsideGroup && outsideGroup.userData.farBackMtMat) {
-    outsideGroup.userData.farBackMtMat.color.copy(multiLerp(MOUNTAIN_TINT_STOPS, t, _tintCol));
-  }
-
   // only touch the DOM when the label actually changes
   const label = timeLabel(t);
   if (label !== _timeLabelText) {
@@ -8816,10 +9041,23 @@ function updateSky() {
     skyUniforms.moonDir.value.copy(moon.position).sub(camera.position).normalize();
     skyUniforms.moonStrength.value = clear;
   } else skyUniforms.moonStrength.value = 0;
+  // the ocean reflects this same sky
+  oceanUniforms.uHorizon.value.copy(_skyHorizon);
+  oceanUniforms.uZenith.value.copy(_skyZenith);
+  oceanUniforms.uSunDir.value.copy(skyUniforms.sunDir.value);
+  oceanUniforms.uSunColor.value.copy(skyUniforms.sunColor.value);
+  oceanUniforms.uSunStrength.value = skyUniforms.sunStrength.value;
+  oceanUniforms.uMoonDir.value.copy(skyUniforms.moonDir.value);
+  oceanUniforms.uMoonStrength.value = skyUniforms.moonStrength.value;
+  // the mountains' haze is the same horizon, sun glow included
+  hazeUniforms.uHazeColor.value.copy(_skyHorizon);
+  hazeUniforms.uHazeSunDir.value.copy(skyUniforms.sunDir.value);
+  hazeUniforms.uHazeSunColor.value.copy(skyUniforms.sunColor.value);
+  hazeUniforms.uHazeSunStrength.value = skyUniforms.sunStrength.value;
   sunMat.opacity = 1 - 0.85 * w;
-  sunGlowMat.opacity = 0.35 * clear;
+  sunGlowMat.uniforms.uOpacity.value = 0.35 * clear;
   moonMat.opacity = 1 - 0.8 * w;
-  moonGlowMat.opacity = 0.22 * clear;
+  moonGlowMat.uniforms.uOpacity.value = 0.22 * clear;
 }
 
 const slider = document.getElementById('time-slider');
@@ -9555,6 +9793,11 @@ attribute float aTip;
   // snow weighs them down
   transformed.y = mix(transformed.y, aBase.y + (transformed.y - aBase.y) * 0.35, uSnow);`)
       .replace('#include <color_vertex>', `#include <color_vertex>
+  // the crest of each gust shows as a brighter band rolling over the
+  // meadow, the way wind-combed grass catches the light
+  float gustBand = sin(uTime * 1.25 - aBase.x * 0.16 + aBase.z * 0.11) * 0.5 + 0.5;
+  gustBand *= 0.65 + 0.35 * sin(uTime * 0.37 + aBase.x * 0.05 - aBase.z * 0.08);
+  vColor *= 1.0 + pow(gustBand, 4.0) * 0.55 * aTip * min(uWind, 1.6);
   vColor = mix(vColor, vec3(0.86, 0.88, 0.92), uSnow * aTip * 0.85);`);
     // both faces share the up-facing light (no dark back faces)
     shader.fragmentShader = '#undef DOUBLE_SIDED\n' + shader.fragmentShader;
@@ -9705,6 +9948,75 @@ function makeDrift(n, min, size, drift, tint, sizeRange) {
 }
 const pollen = makeDrift(fxCount(240, 100), [-26, 0.2, -27], [52, 4.6, 48], 0.35, 0xfff1cc, [0.035, 0.07]);
 const roomDust = makeDrift(fxCount(90, 40), [-4.3, 0.3, -4.3], [8.6, 4.4, 8.6], 0.04, 0xffe2b8, [0.02, 0.035]);
+
+// ---- LEAVES — now and then one tumbles out of a broadleaf crown and drifts
+// downwind, turning over as it falls ----
+const LEAF_VS = FX_POINT_HEAD + `
+  uniform float uFall;
+  varying float vSpin;
+  void main() {
+    float life = fract(uTime * aSeed.y + aSeed.x);
+    vec3 p = position;
+    p.y -= life * uFall;
+    p.x += life * 2.4 + sin(uTime * 1.7 + aSeed.x * 23.0) * 0.4;
+    p.z += life * 1.0 + cos(uTime * 1.3 + aSeed.x * 11.0) * 0.3;
+    vSpin = uTime * (1.5 + aSeed.z * 2.5) + aSeed.x * 40.0;
+    vAlpha = smoothstep(0.0, 0.05, life) * (1.0 - smoothstep(0.88, 1.0, life)) * uIntensity;
+    vColor = mix(vec3(0.36, 0.5, 0.14), vec3(0.78, 0.55, 0.16), aSeed.z * aSeed.z) * clamp(uLight, 0.15, 1.1);
+    place(p, aSeed.w);
+  }`;
+const LEAF_FS = `
+  varying vec3 vColor;
+  varying float vAlpha, vSpin;
+  void main() {
+    vec2 q = gl_PointCoord - 0.5;
+    float c = cos(vSpin), s = sin(vSpin);
+    q = mat2(c, -s, s, c) * q;
+    q.x /= 0.3 + 0.7 * abs(sin(vSpin * 0.6));        // flips edge-on and back
+    float d = length(q * vec2(2.4, 1.05));
+    if (d > 0.46 || vAlpha < 0.01) discard;
+    gl_FragColor = vec4(vColor * (0.82 + 0.4 * (0.46 - d)), vAlpha);
+  }`;
+const fallingLeaves = (() => {
+  const near = treePositions.filter(([x, z, , type]) => type !== 'pine' && x * x + z * z < 48 * 48);
+  const n = near.length ? fxCount(90, 36) : 0;
+  return fxPoints(Math.max(1, n), fxSeeds(Math.max(1, n), (i, p, sd) => {
+    const [x, z, s] = near.length ? near[i % near.length] : [0, 0, 1];
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 1.3 * s;
+    p.set([x + Math.cos(a) * r, terrainHeight(x, z) + (2.0 + Math.random() * 0.8) * s, z + Math.sin(a) * r], i * 3);
+    sd.set([Math.random(), 0.09 + Math.random() * 0.07, Math.random(), 0.12 + Math.random() * 0.06], i * 4);
+  }), LEAF_VS, { additive: false, fragmentShader: LEAF_FS, renderOrder: 26, uniforms: { uFall: { value: 2.6 }, uMinPx: { value: 2 } } });
+})();
+
+// ---- BUTTERFLIES — a few flutter about the meadow on fair days ----
+const BUTTERFLY_VS = FX_POINT_HEAD + `
+  varying float vFlap;
+  void main() {
+    float t = uTime * aSeed.y + aSeed.x * 6.2832;
+    vec3 p = position + vec3(sin(t) * 2.4 + sin(t * 2.3) * 0.5, abs(sin(t * 1.7)) * 0.45, cos(t * 0.8) * 2.4);
+    vFlap = abs(sin(uTime * 13.0 + aSeed.x * 30.0));
+    vAlpha = uIntensity;
+    vColor = (aSeed.z < 0.4 ? vec3(1.0, 0.97, 0.9) : aSeed.z < 0.75 ? vec3(1.0, 0.82, 0.25) : vec3(1.0, 0.55, 0.2))
+             * clamp(uLight, 0.2, 1.1);
+    place(p, aSeed.w);
+  }`;
+const BUTTERFLY_FS = `
+  varying vec3 vColor;
+  varying float vAlpha, vFlap;
+  void main() {
+    vec2 q = gl_PointCoord - 0.5;
+    q.x /= max(0.12, vFlap);                       // wings fold up and open
+    float wing = length(vec2(abs(q.x) - 0.2, (q.y + 0.04) * 1.2));
+    if ((wing > 0.2 && abs(q.x) > 0.035) || abs(q.y) > 0.3 || vAlpha < 0.01) discard;
+    gl_FragColor = vec4(abs(q.x) < 0.035 ? vColor * 0.25 : vColor, vAlpha);
+  }`;
+const butterflies = fxPoints(fxCount(14, 7), fxSeeds(fxCount(14, 7), (i, p, s) => {
+  let x, z;
+  do { const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * 14; x = Math.cos(a) * r; z = Math.sin(a) * r; }
+  while (grassBlocked(x, z));
+  p.set([x, terrainHeight(x, z) + 0.45 + Math.random() * 0.6, z], i * 3);
+  s.set([Math.random(), 0.25 + Math.random() * 0.25, Math.random(), 0.16 + Math.random() * 0.05], i * 4);
+}), BUTTERFLY_VS, { additive: false, fragmentShader: BUTTERFLY_FS, renderOrder: 26, uniforms: { uMinPx: { value: 3 } } });
 
 // ---- RAIN SPLASHES — rings that open and fade on the ground ----
 const splashTex = (() => {
@@ -9915,6 +10227,8 @@ function updateFX(t) {
   set(campfireSmokeFx, campfireWetness);
   set(fireflies, fair ? night * (w === 'clear' ? 1 : 0.6) : 0);
   set(pollen, fair ? (1 - night) * 0.55 : 0);
+  set(fallingLeaves, w === 'snow' ? 0 : 1);
+  set(butterflies, w === 'clear' ? Math.max(0, 1 - night * 2) : 0);
   set(roomDust, 0.35 + (1 - night) * 0.25);
   set(rainSplashes, rainSystem ? Math.min(1, rainSystem.intensity / 1.2) : 0);
   set(oceanGlints, (0.25 + (1 - night) * 0.75) * (1 - skyWeather * 0.8));
@@ -10146,7 +10460,7 @@ function replaceSnowCaps(replaced) {
     sun, moon, starsPoints, programmer, deskChairObj, sideChairObj, tvObject, doorPivot,
     porchOwl, boatObj, campfireEmbers, fpHighlight, fpFlashlight,
     rainSystem && rainSystem.mesh, snowSystem && snowSystem.mesh, lightningBolt && lightningBolt.mesh,
-    ...campChairObjs, ...dogs, ...yardAnimals, ...birds, ...clouds,
+    ...campChairObjs, ...dogs, ...yardAnimals, ...birds,
     ...flames, ...campfireFlames, ...campfireSmoke, ...smokeParticles,
     ...fireplaceInteriorParts, ...snowCaps, ...foamRibbons, ...infoIcons,
     ...wallData.map(w => w.mesh), ...lavaBlobs.map(b => b.mesh),
@@ -10170,8 +10484,6 @@ function replaceSnowCaps(replaced) {
   for (const g of [programmer, deskChairObj, sideChairObj, tvObject, boatObj, ...campChairObjs]) {
     if (g) bakeStaticMeshes(g);
   }
-  // each cloud's puffs share one material, so a cloud can be a single mesh
-  for (const cl of clouds) bakeStaticMeshes(cl, { allowTransparent: true });
   bakeStaticMeshes(contactShadows, { allowTransparent: true });
 }
 
@@ -10497,6 +10809,8 @@ const guide = (() => {
     () => 'Every project you open dims its little “i”, so you can see what\'s left to find.',
     () => 'Tip: the speaker button turns on ambient sound — rain, crickets and a crackling fireplace.',
     () => 'Fun fact: the Hydrogen explorer samples |ψ|² with no rejection — two 1D lookups and a free angle.',
+    () => 'Tip: zoom all the way out at sunset. The sun goes down right into the gap between the peaks. 🏔️',
+    () => 'Look at the grass — you can see each gust of wind roll across the meadow. 🌾',
   ];
   const JOKES = [
     'Why do programmers prefer dark mode? Because light attracts bugs. 🐛',
@@ -10610,7 +10924,7 @@ const guide = (() => {
   });
   window.addEventListener('world:celebrate', () => say('You found every single project! 🎆 Thanks for exploring — these fireworks are for you.', { tag: 'Byte', hold: 9000 }));
   window.addEventListener('world:time', e => {
-    if (e.detail === 'Night') sayOnce('night', 'It\'s getting dark… fireflies come out at night. ✨');
+    if (e.detail === 'Night') sayOnce('night', 'It\'s getting dark… fireflies come out, and the moon lays a path across the water. ✨');
     else if (e.detail === 'Sunset') sayOnce('sunset', 'Golden hour! 🌅 Best light in the cabin.');
   });
   window.addEventListener('world:weather', e => {
@@ -10639,6 +10953,159 @@ const guide = (() => {
     bot.style.setProperty('--ey', (dy / d * 1.6 * k).toFixed(2) + 'px');
   }, { passive: true });
   return { say, greet, startTour, goTo, show, respond, get touring() { return tour.active; } };
+})();
+
+// ==========================================================
+// POST — bloom, vignette and a gentle grade
+// ==========================================================
+// The scene renders into an antialiased offscreen buffer that holds exactly
+// the pixels the canvas would have shown. Its bright parts are pulled out,
+// blurred down a small chain of ever-smaller buffers and screened back over
+// the image, so fires, lamps, screens, fireflies, the sun and the glitter on
+// the water glow; a soft vignette, a touch of contrast and a dither finish
+// it. Needs WebGL2 (multisampled buffers); without it the world renders
+// straight to the screen as before. If a device still can't keep up at its
+// lowest resolution, the bloom switches off and only the cheap final pass
+// stays (see adaptiveRes).
+const post = (() => {
+  if (!POST_FX || !renderer.capabilities.isWebGL2) return null;
+  const size = new THREE.Vector2(-1, -1), want = new THREE.Vector2();
+  const sceneRT = new THREE.WebGLMultisampleRenderTarget(1, 1, { format: THREE.RGBAFormat });
+  sceneRT.samples = 4;
+  sceneRT.texture.encoding = THREE.sRGBEncoding;   // materials write display-ready color, as on screen
+  const LEVELS = QUALITY.mobile ? 3 : 4;            // 1/4, 1/8, 1/16 (, 1/32) of the screen
+  const mips = [];
+  for (let i = 0; i < LEVELS; i++) {
+    mips.push(new THREE.WebGLRenderTarget(1, 1, {
+      format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    }));
+  }
+
+  // one oversized triangle covers the screen
+  const tri = new THREE.BufferGeometry();
+  tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+  tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+  const quad = new THREE.Mesh(tri);
+  quad.frustumCulled = false;
+  const quadScene = new THREE.Scene();
+  quadScene.add(quad);
+  const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const VERT = `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+  const pass = (fragmentShader, uniforms, blending = THREE.NoBlending) => new THREE.ShaderMaterial({
+    uniforms, vertexShader: VERT, fragmentShader, blending,
+    depthTest: false, depthWrite: false, transparent: blending !== THREE.NoBlending,
+  });
+
+  // bright pass: 4 bilinear taps (a 4×4 texel box) with a soft threshold
+  const brightMat = pass(`
+    uniform sampler2D tSrc;
+    uniform vec2 uTexel;
+    uniform float uThreshold, uKnee;
+    varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tSrc, vUv + uTexel * vec2(-1.0, -1.0)).rgb + texture2D(tSrc, vUv + uTexel * vec2(1.0, -1.0)).rgb
+             + texture2D(tSrc, vUv + uTexel * vec2(-1.0, 1.0)).rgb + texture2D(tSrc, vUv + uTexel * vec2(1.0, 1.0)).rgb;
+      c *= 0.25;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c *= smoothstep(uThreshold, uThreshold + uKnee, l);
+      gl_FragColor = vec4(c, 1.0);
+    }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uThreshold: { value: 0.88 }, uKnee: { value: 0.18 } });
+  const downMat = pass(`
+    uniform sampler2D tSrc;
+    uniform vec2 uTexel;
+    varying vec2 vUv;
+    void main() {
+      gl_FragColor = vec4((texture2D(tSrc, vUv + uTexel * vec2(-1.0, -1.0)).rgb + texture2D(tSrc, vUv + uTexel * vec2(1.0, -1.0)).rgb
+                         + texture2D(tSrc, vUv + uTexel * vec2(-1.0, 1.0)).rgb + texture2D(tSrc, vUv + uTexel * vec2(1.0, 1.0)).rgb) * 0.25, 1.0);
+    }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+  // upsample: a 9-tap tent added onto the next larger level
+  const upMat = pass(`
+    uniform sampler2D tSrc;
+    uniform vec2 uTexel;
+    uniform float uGain;
+    varying vec2 vUv;
+    void main() {
+      vec2 t = uTexel;
+      vec3 c = texture2D(tSrc, vUv).rgb * 4.0
+        + (texture2D(tSrc, vUv + vec2(-t.x, 0.0)).rgb + texture2D(tSrc, vUv + vec2(t.x, 0.0)).rgb
+         + texture2D(tSrc, vUv + vec2(0.0, -t.y)).rgb + texture2D(tSrc, vUv + vec2(0.0, t.y)).rgb) * 2.0
+        + texture2D(tSrc, vUv - t).rgb + texture2D(tSrc, vUv + t).rgb
+        + texture2D(tSrc, vUv + vec2(-t.x, t.y)).rgb + texture2D(tSrc, vUv + vec2(t.x, -t.y)).rgb;
+      gl_FragColor = vec4(c * (uGain / 16.0), 1.0);
+    }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uGain: { value: 0.85 } }, THREE.AdditiveBlending);
+  const compositeMat = pass(`
+    uniform sampler2D tScene, tBloom;
+    uniform float uBloom, uVignette, uContrast, uSaturation;
+    uniform vec2 uAspect;
+    varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tScene, vUv).rgb;
+      vec3 b = texture2D(tBloom, vUv).rgb * uBloom;
+      c = 1.0 - (1.0 - c) * (1.0 - min(b, 1.0));          // screen: glows lift without clipping
+      c = mix(c, c * c * (3.0 - 2.0 * c), uContrast);      // gentle S-curve
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, uSaturation);
+      vec2 d = (vUv - 0.5) * uAspect;
+      c *= 1.0 - uVignette * smoothstep(0.32, 0.92, length(d));
+      c += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
+      gl_FragColor = vec4(c, 1.0);
+    }`, {
+      tScene: { value: sceneRT.texture }, tBloom: { value: mips[0].texture },
+      uBloom: { value: 0.5 }, uVignette: { value: 0.22 }, uContrast: { value: 0.12 }, uSaturation: { value: 1.06 },
+      uAspect: { value: new THREE.Vector2(1, 1) },
+    });
+
+  function draw(material, target) {
+    quad.material = material;
+    renderer.setRenderTarget(target);
+    renderer.render(quadScene, quadCam);
+  }
+  let bloomOn = true;
+  return {
+    get bloom() { return bloomOn; },
+    // first resort when a device is still too slow at its lowest resolution
+    dropBloom() { if (bloomOn) { bloomOn = false; compositeMat.uniforms.uBloom.value = 0; } },
+    render() {
+      renderer.getDrawingBufferSize(want);
+      if (!want.equals(size)) {
+        size.copy(want);
+        sceneRT.setSize(size.x, size.y);
+        for (let i = 0; i < LEVELS; i++) {
+          mips[i].setSize(Math.max(1, size.x >> (i + 2)), Math.max(1, size.y >> (i + 2)));
+        }
+        compositeMat.uniforms.uAspect.value.set(size.x / size.y, 1);
+      }
+      const autoClear = renderer.autoClear;
+      renderer.setRenderTarget(sceneRT);
+      renderer.render(scene, camera);
+      renderer.autoClear = false;
+      if (bloomOn) {
+        // glow harder after dark, when fires and lamps are the light; by day
+        // only the sun, its glitter and white-hot highlights bloom
+        const night = starsPoints ? starsPoints.userData.targetOpacity || 0 : 0;
+        brightMat.uniforms.uThreshold.value = 0.88 - night * 0.14;
+        compositeMat.uniforms.uBloom.value = 0.5 + night * 0.4;
+        brightMat.uniforms.tSrc.value = sceneRT.texture;
+        brightMat.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
+        draw(brightMat, mips[0]);
+        for (let i = 1; i < LEVELS; i++) {
+          downMat.uniforms.tSrc.value = mips[i - 1].texture;
+          downMat.uniforms.uTexel.value.set(1 / mips[i - 1].width, 1 / mips[i - 1].height);
+          draw(downMat, mips[i]);
+        }
+        for (let i = LEVELS - 1; i > 0; i--) {
+          upMat.uniforms.tSrc.value = mips[i].texture;
+          upMat.uniforms.uTexel.value.set(1 / mips[i].width, 1 / mips[i].height);
+          draw(upMat, mips[i - 1]);
+        }
+      }
+      draw(compositeMat, null);
+      renderer.autoClear = autoClear;
+    },
+  };
 })();
 
 // ==========================================================
@@ -10680,6 +11147,12 @@ const adaptiveRes = {
     this.samples.length = 0;
     if (now - this.lastChange < 2500) return;
     let next = this.ratio;
+    // already at the floor and still slow: give up the bloom passes first
+    if (median > 24 && this.ratio <= QUALITY.minPixelRatio && post && post.bloom) {
+      post.dropBloom();
+      this.lastChange = now;
+      return;
+    }
     if (median > 24) next = Math.max(QUALITY.minPixelRatio, this.ratio - (median > 40 ? 0.35 : 0.2));
     else if (median < 17.5 && !this.noMoreUpgrades) next = Math.min(QUALITY.maxPixelRatio, this.ratio + 0.15);
     next = Math.round(next * 100) / 100;
@@ -10991,12 +11464,8 @@ function animate() {
     }
   }
 
-  // ocean waves — slow texture drift creates the sense of moving wavelets
-  if (outsideGroup.userData.oceanMat && outsideGroup.userData.oceanMat.map) {
-    const m = outsideGroup.userData.oceanMat.map;
-    m.offset.x = (t * 0.000022) % 1;
-    m.offset.y = (t * 0.000014) % 1;
-  }
+  // ocean waves roll on the GPU
+  oceanUniforms.uTime.value = t / 1000;
 
   // SEA-ROCK FOAM — each rock has a ring that grows + fades and an inner
   // splash disc on an opposite phase, so the water reads as bouncing off it.
@@ -11087,21 +11556,18 @@ function animate() {
     const visibleCount = active.cloudCount;
     const tintC = active.tint || (active.tint = new THREE.Color(active.cloudColor));
 
-    // CLOUDS — drift + cycle visibility/opacity
-    const cWind = 0.018; // X drift per ms
+    // CLOUDS — drift, and form or dissolve to match the weather
     for (let i = 0; i < clouds.length; i++) {
       const cl = clouds[i];
-      cl.position.x += cl.userData.driftSpeed * cWind * FRAME_SCALE;
-      // wrap around the spread so clouds keep moving
-      if (cl.position.x > 130) cl.position.x = -130;
-      const wantVisible = i < visibleCount;
-      const targetOp = wantVisible ? active.cloudOpacity : 0;
-      const m = cl.userData.mat;
-      m.opacity += (targetOp - m.opacity) * easeK(0.04);
-      // tint toward the active cloud color
-      m.color.lerp(tintC, easeK(0.04));
-      cl.visible = m.opacity > 0.005;
+      cl.x += cl.speed * 0.018 * FRAME_SCALE;
+      if (cl.x > 260) cl.x = -260;          // wrap behind the side haze
+      cl.presence += ((i < visibleCount ? 1 : 0) - cl.presence) * easeK(0.03);
+      cloudSlots[i].set(cl.x, cl.y, cl.z, cl.presence);
     }
+    // moonlit clouds sit darker against the night sky
+    const cloudNight = starsPoints.userData.targetOpacity || 0;
+    cloudMat.color.lerp(_cloudTarget.copy(tintC).multiplyScalar(1 - 0.45 * cloudNight), easeK(0.04));
+    cloudGlow.value = 0.3 * (1 - 0.9 * cloudNight);
 
     // RAIN — fall + recycle. opacity scales with intensity; speed scales
     // with intensity above 1 so storm rain visibly drives down faster.
@@ -11180,6 +11646,8 @@ function animate() {
     if (window.snowGroundMeshes && window.snowGroundMeshes.length) {
       const op = snowAccum * 0.92;
       window.snowGroundMeshes[0].material.opacity = op;
+      // a fully transparent blanket still costs a full pass over the field
+      for (const m of window.snowGroundMeshes) m.visible = op > 0.002;
     }
 
     // SKY DIM — scale lights by the preset multiplier ON TOP OF the
@@ -11294,7 +11762,7 @@ function animate() {
     _shadowTick = 0;
     renderer.shadowMap.needsUpdate = true;
   }
-  renderer.render(scene, camera);
+  if (post) post.render(); else renderer.render(scene, camera);
 }
 animate();
 
