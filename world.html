@@ -7654,7 +7654,8 @@ const openPlan = (() => {
     wood: cabinKit(), logs: cabinKit(), glow: cabinKit(),               // floor-standing
     front: cabinKit(), frontWood: cabinKit(), frontMetal: cabinKit(),   // on the front wall
     ceiling: cabinKit(), ceilingGlow: cabinKit(),                       // the dining pendant
-    right: cabinKit(), rightGlow: cabinKit(),                           // the mantel and the right wall
+    right: cabinKit(),                                                  // on the right wall
+    mantel: cabinKit(), mantelGlow: cabinKit(),                         // on the mantel (stays in X-ray view)
   };
   const UP = new THREE.Vector3(0, 1, 0), ONE = new THREE.Vector3(1, 1, 1), _e = new THREE.Euler();
   // One piece of furniture: a frame standing at (x, z), turned `ry` about Y.
@@ -8339,7 +8340,7 @@ const openPlan = (() => {
     }
   }
 
-  // ---- on the mantel and the right wall (they hide with it in X-ray view) ----
+  // ---- on the mantel, and on the right wall (that one hides with the wall in X-ray view) ----
   // The mantel beam (see FIREPLACE) runs along the right wall: its top is at
   // y 1.53, centred 0.79 m out from the wall, from z 2.02 to 3.98.
   {
@@ -8347,32 +8348,32 @@ const openPlan = (() => {
     const MX = ROOM.w / 2 - 0.79, MY = 1.53, WOOD = 0x6e4a2c, GILT = 0xd2aa5c;
     // a tambour mantel clock at ten past ten
     const CZ = 3.0;
-    m.into(kits.right, rbox(0.1, 0.16, 0.28, 0.03, 2), WOOD, MX, MY + 0.08, CZ);
-    m.into(kits.right, capsule(0.075, 0.13, 3, 12), WOOD, MX, MY + 0.16, CZ, Math.PI / 2, 0, 0, 0.62, 1, 1);
-    m.into(kits.right, rcyl(0.06, 0.012, 0.004, 16, 1), 0xf2e8d0, MX - 0.052, MY + 0.12, CZ, 0, 0, Math.PI / 2);
-    m.into(kits.right, new THREE.TorusGeometry(0.062, 0.009, 5, 18), GILT, MX - 0.056, MY + 0.12, CZ, 0, Math.PI / 2);
+    m.into(kits.mantel, rbox(0.1, 0.16, 0.28, 0.03, 2), WOOD, MX, MY + 0.08, CZ);
+    m.into(kits.mantel, capsule(0.075, 0.13, 3, 12), WOOD, MX, MY + 0.16, CZ, Math.PI / 2, 0, 0, 0.62, 1, 1);
+    m.into(kits.mantel, rcyl(0.06, 0.012, 0.004, 16, 1), 0xf2e8d0, MX - 0.052, MY + 0.12, CZ, 0, 0, Math.PI / 2);
+    m.into(kits.mantel, new THREE.TorusGeometry(0.062, 0.009, 5, 18), GILT, MX - 0.056, MY + 0.12, CZ, 0, Math.PI / 2);
     for (const [len, th] of [[0.036, -1.05], [0.05, 1.05]]) {
-      m.into(kits.right, new THREE.BoxGeometry(0.004, len, 0.006), 0x1a1410, MX - 0.06, MY + 0.12 + Math.cos(th) * len / 2,
+      m.into(kits.mantel, new THREE.BoxGeometry(0.004, len, 0.006), 0x1a1410, MX - 0.06, MY + 0.12 + Math.cos(th) * len / 2,
         CZ + Math.sin(th) * len / 2, th);
     }
     // a pair of brass candlesticks
     const stick = lathe([[0, 0], [0.04, 0], [0.04, 0.01], [0.015, 0.026], [0.011, 0.11], [0.02, 0.12], [0.018, 0.13], [0, 0.13]], 12);
     for (const [z, sy, ch] of [[2.3, 1, 0.16], [2.48, 0.72, 0.12]]) {
-      m.into(kits.right, stick, GILT, MX, MY, z, 0, 0, 0, 1, sy, 1);
+      m.into(kits.mantel, stick, GILT, MX, MY, z, 0, 0, 0, 1, sy, 1);
       const top = MY + 0.13 * sy;
-      m.into(kits.right, rcyl(0.013, ch, 0.004, 10, 1), 0xf2e8d2, MX, top + ch / 2, z);
-      m.into(kits.rightGlow, taper(0.01, 0.002, 0.02, 2, 6), 0xffe2a8, MX, top + ch + 0.018, z);
+      m.into(kits.mantel, rcyl(0.013, ch, 0.004, 10, 1), 0xf2e8d2, MX, top + ch / 2, z);
+      m.into(kits.mantelGlow, taper(0.01, 0.002, 0.02, 2, 6), 0xffe2a8, MX, top + ch + 0.018, z);
     }
     // a little pothos trailing over the front edge
     const PZ = 3.68;
-    m.into(kits.right, shapes.pot, TERRACOTTA, MX, MY, PZ);
-    m.into(kits.right, shapes.soil, SOIL, MX, MY + 0.1, PZ);
+    m.into(kits.mantel, shapes.pot, TERRACOTTA, MX, MY, PZ);
+    m.into(kits.mantel, shapes.soil, SOIL, MX, MY + 0.1, PZ);
     for (const [dz, len] of [[-0.05, 5], [0.04, 4], [0.0, 3]]) {
       let p = [MX - 0.02, MY + 0.11, PZ + dz * 0.3];
       for (let i = 0; i < len; i++) {
         const q = [MX - 0.07 - Math.min(i, 2) * 0.035, MY + 0.12 - i * 0.07 - (i > 1 ? 0.03 : 0), PZ + dz * (1 + i * 0.4)];
-        m.rod(p, q, 0.004, 0.004, 0x46663a, kits.right, 4);
-        m.into(kits.right, shapes.leaf, i % 2 ? 0x5a8044 : 0x6e9652, q[0], q[1], q[2], 0, rnd(-0.6, 0.6), 0, 0.45, 0.9, 0.95);
+        m.rod(p, q, 0.004, 0.004, 0x46663a, kits.mantel, 4);
+        m.into(kits.mantel, shapes.leaf, i % 2 ? 0x5a8044 : 0x6e9652, q[0], q[1], q[2], 0, rnd(-0.6, 0.6), 0, 0.45, 0.9, 0.95);
         p = q;
       }
     }
@@ -8489,12 +8490,13 @@ const openPlan = (() => {
     [kits.front, paintMat, wallRef('front')], [kits.frontWood, woodMat, wallRef('front')],
     [kits.frontMetal, metalMat, wallRef('front')],
     [kits.ceiling, paintMat, ceilingRef()], [kits.ceilingGlow, glowMat, ceilingRef()],
-    [kits.right, paintMat, wallRef('right')], [kits.rightGlow, glowMat, wallRef('right')],
+    [kits.right, paintMat, wallRef('right')],
+    [kits.mantel, paintMat, null], [kits.mantelGlow, glowMat, null],
   ]) {
     const m = kit.build(mat, { cast: false });
     m.userData.noBake = true;
     root.add(m);
-    trackLike(m, ref);
+    if (ref) trackLike(m, ref);
   }
   // shades and flames brighten as the lamps come on after dark
   propTickers.push(() => { glowMat.emissiveIntensity = 0.25 + 0.75 * Math.min(1, lampLight.intensity / 2.4); });
@@ -10390,8 +10392,8 @@ const FIRE_Z = 3.0;                           // along the right wall, in the li
 const smokeParticles = [];
 const flames = [];
 let fireLight = null;
-// interior fireplace pieces hide together with the right wall in X-ray view,
-// so the brick mass doesn't block the camera when peeking in from outside
+// the chimney breast and the stack hide together with the right wall in X-ray
+// view, so the stone mass doesn't block the camera when peeking in from outside
 const fireplaceInteriorParts = [];
 let chimneyStack = null;   // the stack above the roof (it lifts off with the roof in X-ray view)
 {
@@ -10426,7 +10428,7 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
     kit.add(rbox(0.34, 0.05, 0.34, 0.015, 1), 0x141008, FIRE_X, top + 0.13, FIRE_Z);
     const stack = chimneyStack = kit.build(cabinStoneMat);
     root.add(stack);
-    fireplaceInteriorParts.push(stack);   // hides with the right wall in X-ray view, like the hearth
+    fireplaceInteriorParts.push(stack);   // hides with the right wall in X-ray view, like the chimney breast
   }
 
   // ---------- interior fireplace ----------
@@ -10435,20 +10437,27 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
   // room sees. Mounted on the right wall: length along Z, depth along X.
   // The mass extends a touch past the ceiling so its top face isn't
   // coplanar with the ceiling plane (which caused z-fighting flicker).
-  const fpW = 1.6, fpH = ROOM.h + 0.1, fpD = 0.55;
-  const mass = new THREE.Mesh(new THREE.BoxGeometry(fpD, fpH, fpW), matStandard(0x2a2622, 0.95));
-  mass.position.set(FIRE_X, fpH / 2, FIRE_Z);
-  mass.castShadow = true;
-  mass.receiveShadow = true;
-  root.add(mass);
-  fireplaceInteriorParts.push(mass);
+  // In X-ray view, when the right wall hides, only the chimney breast above
+  // the mantel goes with it (cut at FIRE_CUT, like the interior walls' stubs)
+  // and the hearth, the fire and the mantel stay in view.
+  const fpW = 1.6, fpH = ROOM.h + 0.1, fpD = 0.55, FIRE_CUT = 1.62;
+  const mortar = matStandard(0x2a2622, 0.95);
+  for (const [y0, y1] of [[0, FIRE_CUT], [FIRE_CUT, fpH]]) {
+    const mass = new THREE.Mesh(new THREE.BoxGeometry(fpD, y1 - y0, fpW), mortar);
+    mass.position.set(FIRE_X, (y0 + y1) / 2, FIRE_Z);
+    mass.castShadow = true;
+    mass.receiveShadow = true;
+    root.add(mass);
+    if (y0 > 0) fireplaceInteriorParts.push(mass);
+  }
   // mass front face faces into the room in the -X direction
   const massFrontX = FIRE_X - fpD / 2;
   const fbW = fpW - 0.5, fbH = 0.9, fbY0 = 0.15;       // firebox opening
   {
-    const kit = cabinKit();
+    const low = cabinKit(), high = cabinKit();
     for (let y = 0; y < ROOM.h - 0.04;) {
       const h = Math.min(0.16 + Math.random() * 0.08, ROOM.h - y);
+      const kit = y + h / 2 < FIRE_CUT ? low : high;
       // front face, leaving the firebox opening clear
       for (let p = -fpW / 2 - 0.04; p < fpW / 2;) {
         const len = Math.min(0.22 + Math.random() * 0.2, fpW / 2 + 0.04 - p);
@@ -10473,12 +10482,13 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
       y += h;
     }
     // a long lintel stone over the opening
-    kit.add(rbox(0.16, 0.2, fbW + 0.34, 0.04, 2), 0x57514a, massFrontX - 0.05, fbY0 + fbH + 0.1, FIRE_Z);
+    low.add(rbox(0.16, 0.2, fbW + 0.34, 0.04, 2), 0x57514a, massFrontX - 0.05, fbY0 + fbH + 0.1, FIRE_Z);
     // hearth — a rounded stone slab on the floor in front of the firebox
-    kit.add(rbox(0.6, 0.1, fpW + 0.4, 0.04, 2), 0x4f4a44, massFrontX - 0.28, 0.05, FIRE_Z);
-    const face = kit.build(cabinStoneMat, { cast: false });
-    root.add(face);
-    fireplaceInteriorParts.push(face);
+    low.add(rbox(0.6, 0.1, fpW + 0.4, 0.04, 2), 0x4f4a44, massFrontX - 0.28, 0.05, FIRE_Z);
+    root.add(low.build(cabinStoneMat, { cast: false }));
+    const breast = high.build(cabinStoneMat, { cast: false });
+    root.add(breast);
+    fireplaceInteriorParts.push(breast);
   }
   // mantle — a rough-hewn beam above the firebox, and the log pile inside it
   {
@@ -10487,16 +10497,13 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
     for (let i = 0; i < 3; i++) {
       kit.log('z', 0.055, fbW - 0.12, 0x6a4a30, massFrontX - 0.07 + i * 0.04, 0.21 + (i % 2) * 0.06, FIRE_Z);
     }
-    const wood = kit.build(cabinTimberMat);
-    root.add(wood);
-    fireplaceInteriorParts.push(wood);
+    root.add(kit.build(cabinTimberMat));
   }
   // firebox opening — dark panel just in front of the mortar, recessed
   // behind the stones so it reads as an opening with the logs/flames in front
   const firebox = new THREE.Mesh(new THREE.BoxGeometry(0.04, fbH, fbW), fireboxMat);
   firebox.position.set(massFrontX - 0.025, fbY0 + fbH / 2, FIRE_Z);
   root.add(firebox);
-  fireplaceInteriorParts.push(firebox);
 
   // FLAMES — animated cones with additive blending for a glow look
   const flameGeo = new THREE.ConeGeometry(0.10, 0.42, 8);
@@ -10515,7 +10522,6 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
     fl.userData = { ph: Math.random() * Math.PI * 2, baseY: 0.32, baseZ: fl.position.z };
     root.add(fl);
     flames.push(fl);
-    fireplaceInteriorParts.push(fl);
   }
 
   // FIRELIGHT — warm orange point light just in front of the firebox
@@ -10676,8 +10682,8 @@ function updateSeeThrough() {
     // right wall has a normal pointing in -X (into the room)
     if (w.normal.x < -0.5) rightWallVisible = visible;
   }
-  // hide the interior brick mass + hearth + flames when the right wall is
-  // hidden, otherwise the fireplace blocks the view from outside
+  // hide the chimney breast above the mantel when the right wall is hidden,
+  // otherwise it blocks the view from outside (the hearth and fire stay)
   for (const p of fireplaceInteriorParts) p.visible = rightWallVisible;
   // looking down from above the walls: lift the roof, gables and chimney
   // off so every room shows, like a dollhouse
@@ -13189,7 +13195,7 @@ function updateFX(t) {
   const fair = w === 'clear' || w === 'overcast';
   const dryness = 1 - campfireWetness;
   const set = (pts, k) => { pts.material.uniforms.uIntensity.value = k; pts.visible = k > 0.01; };
-  set(fireplaceSparks, flames.length && flames[0].visible ? 1 : 0);   // hidden with the right wall in X-ray
+  set(fireplaceSparks, 1);
   set(campfireSparks, dryness);
   set(chimneySmoke, chimneyStack && !chimneyStack.visible ? 0 : 1);   // no smoke from a lifted-off chimney
   set(campfireSmokeFx, campfireWetness);
