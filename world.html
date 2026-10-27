@@ -8063,8 +8063,13 @@ function updateFpHighlight(target, now) {
 }
 
 // ---- player flashlight (toggle with F in first-person) ----
-const fpFlashlight = new THREE.SpotLight(0xfff2d0, 3.0, 26, Math.PI / 6, 0.45, 1.1);
-fpFlashlight.visible = false;
+// Always in the scene and switched by intensity: adding or removing a light
+// changes every lit material's shader, so toggling `visible` made three.js
+// compile a new copy of all of them on the first press, freezing the page
+// for seconds (longest on phones).
+const FLASHLIGHT_INTENSITY = 3.0;
+const fpFlashlight = new THREE.SpotLight(0xfff2d0, 0, 26, Math.PI / 6, 0.45, 1.1);
+fpFlashlight.position.set(0, 60, 0);   // parked high, pointing down, until first used
 scene.add(fpFlashlight);
 scene.add(fpFlashlight.target);
 const _flDir = new THREE.Vector3();
@@ -8438,7 +8443,7 @@ function updateFP(now) {
   // flashlight follows the camera; lit only while toggled on in active FP
   {
     const on = FP.flashlight && FP.state === 'active' && !FP.portal;
-    fpFlashlight.visible = on;
+    fpFlashlight.intensity = on ? FLASHLIGHT_INTENSITY : 0;
     if (on) {
       fpFlashlight.position.copy(camera.position);
       camera.getWorldDirection(_flDir);
