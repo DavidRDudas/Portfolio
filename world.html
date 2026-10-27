@@ -5108,7 +5108,7 @@ root.add(deskGroup);
 }
 
 // ==========================================================
-// SIDE CHAIR — tucked against the front wall next to the door
+// SIDE CHAIR — outside against the front wall, left of the door
 // ==========================================================
 {
   const chair = new THREE.Group();
@@ -6434,7 +6434,7 @@ const tvAnim = tvScreenTexture();
 }
 
 // ==========================================================
-// BOOKSHELF (left wall) — books inc. Charlie & Pip
+// BOOKSHELF (office, left wall) — books inc. Charlie & Pip
 // ==========================================================
 {
   const shelf = new THREE.Group();
@@ -6735,7 +6735,7 @@ const tvAnim = tvScreenTexture();
 }
 
 // ==========================================================
-// ARCADE CABINET (SW corner) — Klast, neon twin-stick shooter
+// ARCADE CABINET (game room corner) — Klast, neon twin-stick shooter
 // ==========================================================
 {
   function arcadeScreenTexture() {
@@ -6873,7 +6873,7 @@ const tvAnim = tvScreenTexture();
   cab.add(marqueeFace);
 
   makeInteractive(screen, 'klast', 'Arcade Cabinet · Klast');
-  // tucked into the SW corner, angled to face the middle of the room
+  // tucked into the game room's back-right corner, angled to face the room
   cab.position.set(6.25, 0, -6.25);   // game room, back-right corner
   cab.rotation.y = -Math.PI / 4;
   root.add(cab);
@@ -7553,7 +7553,7 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
 }
 
 // ==========================================================
-// BED / FUTON (front-left, decorative)
+// BED / FUTON (bedroom, decorative)
 // ==========================================================
 {
   const bed = new THREE.Group();
@@ -9618,7 +9618,7 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
 }
 
 // ==========================================================
-// FRONT DOOR — on the front wall, behind the programmer's back. Clicking it
+// FRONT DOOR — on the front wall, into the living room. Clicking it
 // turns see-through ON and flies the camera to the default room view.
 // ==========================================================
 let doorMesh = null;
@@ -9670,8 +9670,8 @@ let doorPivot = null;   // hinge group: swings open in first-person mode
   knob.position.set(HX + 0.34, 0.0, -0.05);
   doorPivot.add(knob);
 
-  // FRONT WALL is at z = +ROOM.d/2 = +4.5, behind the programmer (programmer
-  // faces -Z, so +Z is at his back). Door X = 1.6 matches buildFrontWall().
+  // in the front wall (z = +ROOM.d/2), opening into the living room at
+  // CABIN_DOOR.at — the same opening the walls and logs are cut around
   doorGroup.position.set(CABIN_DOOR.at, 1.20, ROOM.d / 2 + 0.01);
   root.add(doorGroup);
 
