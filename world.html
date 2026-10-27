@@ -2055,6 +2055,20 @@ const furnitureShadows = [];
 // the ceiling's X-ray entry: things hung from the ceiling track it so they
 // lift away with it when looking down into the rooms
 const ceilingRef = () => wallData.find(w => w.normal.y < -0.9);
+// Things hung on an outer wall hide with it in X-ray view (seen from behind
+// they would float in mid-air). Each keeps its own meshes (merged per object
+// in STATIC BATCHING) so it can switch with its wall.
+const wallMounted = [];
+function mountOnWall(obj, side) {
+  trackLike(obj, wallRef(side));
+  wallMounted.push(obj);
+  return obj;
+}
+// is an object actually drawn (it and every parent visible)?
+function isShown(o) {
+  for (; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
 // the floor rectangle of the room a point is in (the kitchen and living
 // room count as one open space), or null outside the cabin
 function roomRectAt(x, z) {
@@ -7003,7 +7017,7 @@ const monitorAnim = monitorScreenTexture();
 }
 
 // ==========================================================
-// WHITEBOARD (left wall, above bookshelf)
+// WHITEBOARD (office, left wall, over the monitor)
 // ==========================================================
 // Picture frame for the wall art: a softened backing slab (face at
 // z = depth/2, where the artwork goes) ringed by a raised rounded moulding
@@ -7049,10 +7063,11 @@ function pictureFrame(w, h, border, depth, mat) {
   wb.position.set(-ROOM.w / 2 + 0.14, 3.3, -2.4);
   wb.rotation.y = Math.PI / 2;
   root.add(wb);
+  mountOnWall(wb, 'left');
 }
 
 // ==========================================================
-// FRAMED GAME ART — Shatterwing (left wall, above the bookshelf)
+// FRAMED GAME ART — Shatterwing (game room, back wall, above the TV)
 // ==========================================================
 {
   const display = new THREE.Group();
@@ -7080,9 +7095,10 @@ function pictureFrame(w, h, border, depth, mat) {
   makeInteractive(screen, 'shatterwing', 'Framed Game Art · Shatterwing');
 
   // Clear the camera and ant farm on the shelf, beside the research whiteboard.
-  display.position.set(3.5, 3.45, -ROOM.d / 2 + 0.14);   // game room, above the TV
+  display.position.set(3.5, 3.7, -ROOM.d / 2 + 0.14);   // game room, above the TV
   display.rotation.y = 0;
   root.add(display);
+  mountOnWall(display, 'back');
 }
 
 // ==========================================================
@@ -7101,10 +7117,11 @@ function pictureFrame(w, h, border, depth, mat) {
   // face doesn't z-fight with the back wall when the camera is zoomed way out
   grp.position.set(-0.99, 3.0, -ROOM.d / 2 + 0.14);   // office back wall, right of the window
   root.add(grp);
+  mountOnWall(grp, 'back');
 }
 
 // ==========================================================
-// FRAMED ASCII PRINT — Raster Tide (back wall, left of window)
+// FRAMED ASCII PRINT — Raster Tide (office, left wall, above the bookshelf)
 // ==========================================================
 {
   const grp = new THREE.Group();
@@ -7122,10 +7139,11 @@ function pictureFrame(w, h, border, depth, mat) {
   grp.position.set(-ROOM.w / 2 + 0.14, 3.75, -4.6);
   grp.rotation.y = Math.PI / 2;
   root.add(grp);
+  mountOnWall(grp, 'left');
 }
 
 // ==========================================================
-// FRAMED BLUEPRINT — Dudas Engineering (right wall, above TV)
+// FRAMED BLUEPRINT — Dudas Engineering (office, back wall, left of the window)
 // ==========================================================
 {
   const grp = new THREE.Group();
@@ -7140,6 +7158,7 @@ function pictureFrame(w, h, border, depth, mat) {
   grp.position.set(-6.06, 3.3, -ROOM.d / 2 + 0.14);   // office back wall, left of the window
   grp.rotation.y = 0;
   root.add(grp);
+  mountOnWall(grp, 'back');
 }
 
 // ==========================================================
@@ -9636,18 +9655,22 @@ let doorPivot = null;   // hinge group: swings open in first-person mode
 let porchPointLight = null;
 {
   const grp = new THREE.Group();
+  // the fixture hides with the front wall in X-ray view; the light itself
+  // stays (switching a light's visibility recompiles every shader)
+  const fixture = new THREE.Group();
+  grp.add(fixture);
   const fixMat = matStandard(0x1e1c1a, 0.45, 0.55);
   // wall plate and a short arm out to the lantern
   const plate = new THREE.Mesh(rbox(0.13, 0.22, 0.03, 0.012, 1), fixMat);
-  grp.add(plate);
+  fixture.add(plate);
   const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.14, 8), fixMat);
   arm.rotation.x = Math.PI / 2;
   arm.position.set(0, 0.07, 0.07);
-  grp.add(arm);
+  fixture.add(arm);
   // lantern: domed cap, glowing glass, flared base
   const cap = new THREE.Mesh(lathe([[0, 0.12], [0.03, 0.115], [0.1, 0.06], [0.115, 0.04], [0.09, 0.03], [0, 0.03]], 12), fixMat);
   cap.position.set(0, 0.02, 0.15);
-  grp.add(cap);
+  fixture.add(cap);
   const glass = new THREE.Mesh(
     new THREE.CylinderGeometry(0.07, 0.06, 0.16, 12),
     new THREE.MeshStandardMaterial({
@@ -9656,10 +9679,10 @@ let porchPointLight = null;
     })
   );
   glass.position.set(0, -0.04, 0.15);
-  grp.add(glass);
+  fixture.add(glass);
   const base = new THREE.Mesh(lathe([[0, -0.03], [0.075, -0.03], [0.085, -0.01], [0.06, 0], [0, 0]], 12), fixMat);
   base.position.set(0, -0.12, 0.15);
-  grp.add(base);
+  fixture.add(base);
   // light source
   porchPointLight = new THREE.PointLight(0xffd29c, 0.8, 7, 2);
   porchPointLight.position.set(0, -0.06, 0.2);
@@ -9668,6 +9691,7 @@ let porchPointLight = null;
   // on the log face, to the right of the door casing
   grp.position.set(CABIN_DOOR.at + 1.0, 2.4, ROOM.d / 2 + LOG_FACE + 0.02);
   root.add(grp);
+  mountOnWall(fixture, 'front');
 }
 
 // ==========================================================
@@ -11156,10 +11180,10 @@ function checkHover() {
   // when X-ray is OFF the cabin reads as a closed exterior — only the door
   // is clickable, since the other interactives are hidden behind the walls
   const activeInteractives = seeThrough
-    ? interactives
+    ? interactives.filter(isShown)
     : interactives.filter(m => m.userData.key === 'door');
   const activeIcons = seeThrough
-    ? infoIcons
+    ? infoIcons.filter(s => s.visible)
     : infoIcons.filter(s => s.userData.mesh && s.userData.mesh.userData.key === 'door');
   // include the floating info-icon sprites; resolve them back to their parent mesh
   const targets = activeInteractives.concat(activeIcons);
@@ -12450,7 +12474,7 @@ function replaceSnowCaps(replaced) {
     rainSystem && rainSystem.mesh, snowSystem && snowSystem.mesh, lightningBolt && lightningBolt.mesh,
     ...campChairObjs, ...dogs, ...yardAnimals, ...birds,
     ...flames, ...campfireFlames, ...campfireSmoke, ...smokeParticles,
-    ...fireplaceInteriorParts, ...snowCaps, ...foamRibbons, ...infoIcons,
+    ...fireplaceInteriorParts, ...snowCaps, ...foamRibbons, ...infoIcons, ...wallMounted,
     ...wallData.map(w => w.mesh), ...lavaBlobs.map(b => b.mesh),
     ...seaRocks.flatMap(r => [r.ring, r.splash]),
     ...dogs.map(d => d.userData.ball),
@@ -12472,7 +12496,7 @@ function replaceSnowCaps(replaced) {
   // (any of them, and the animated models below, can list parts that move on
   // their own — tail, legs, head, wings, hands — in userData.animParts; those
   // stay separate and everything else is merged)
-  for (const g of [programmer, deskChairObj, sideChairObj, tvObject, boatObj, ...campChairObjs]) {
+  for (const g of [programmer, deskChairObj, sideChairObj, tvObject, boatObj, ...campChairObjs, ...wallMounted]) {
     if (g) bakeStaticMeshes(g, { skip: new Set(g.userData.animParts || []) });
   }
   for (const g of [...dogs, ...yardAnimals, ...birds, porchOwl]) {
@@ -12697,13 +12721,25 @@ const guide = (() => {
   }
   const PLACES = {
     cabin:    { pos: () => HOME_CAM, target: () => HOME_TARGET, xray: true, line: 'Home sweet cabin. 🏡' },
-    campfire: { pos: () => new THREE.Vector3(3.6, 3.1, -9.6), target: () => new THREE.Vector3(-1.5, 0.7, -16.3), xray: false,
+    campfire: { pos: () => new THREE.Vector3(3.6, 3.1, -11.4), target: () => new THREE.Vector3(-1.5, 0.7, -16.3), xray: false,
                 line: 'The campfire. In first person you can pull up a chair — it\'s cozy at night.' },
     beach:    { pos: () => new THREE.Vector3(7.5, 2.4, -27.2), target: () => new THREE.Vector3(-5, -10.4, -41), xray: false,
                 line: 'Down the cliff stairs: the beach, the dock, and a rowboat you can take out in first person. 🚣' },
     view:     { pos: () => new THREE.Vector3(18, 15, 24), target: () => new THREE.Vector3(0, 2, -18), xray: false,
                 line: 'The whole place — the cabin on its cliff, the ocean and the mountains.' },
+    // the rooms, looked into from above their doorways
+    office:   { pos: () => new THREE.Vector3(-1.2, 4.2, -0.6), target: () => new THREE.Vector3(-4.0, 1.2, -5.0), xray: true,
+                line: 'The office: David\'s desk under the window, the bookshelf and the whiteboard.' },
+    game:     { pos: () => new THREE.Vector3(1.6, 4.0, -0.4), target: () => new THREE.Vector3(4.2, 1.2, -5.2), xray: true,
+                line: 'The game room: Painted Crowns on the TV and Klast in the arcade cabinet. 🎮' },
+    bedroom:  { pos: () => new THREE.Vector3(-1.5, 4.2, 6.2), target: () => new THREE.Vector3(-5.2, 0.8, 3.2), xray: true,
+                line: 'The bedroom. Luna is usually asleep on the futon.' },
+    kitchen:  { pos: () => new THREE.Vector3(3.2, 4.4, 5.6), target: () => new THREE.Vector3(-0.6, 0.9, 3.4), xray: true,
+                line: 'The kitchen and the dining table.' },
+    living:   { pos: () => new THREE.Vector3(1.0, 4.0, 6.0), target: () => new THREE.Vector3(5.2, 1.0, 2.6), xray: true,
+                line: 'The living room, by the fire. Ellie is usually chasing her ball here. 🔥' },
   };
+  const ROOM_PLACES = [['office', 'Office'], ['game', 'Game room'], ['living', 'Living room'], ['kitchen', 'Kitchen'], ['bedroom', 'Bedroom']];
   function goTo(name) {
     const p = PLACES[name];
     if (!p) return;
@@ -12712,16 +12748,16 @@ const guide = (() => {
 
   // ---------- the guided tour ----------
   const TOUR = [
-    { key: 'laptop', line: 'This is where David works. On the laptop: Hokku, his real-time ticketing platform built for heavy enterprise traffic.' },
+    { key: 'laptop', line: 'This is David\'s office. On the laptop: Hokku, his real-time ticketing platform built for heavy enterprise traffic.' },
     { key: 'rigid', line: 'This little graph is rigid — a programming language he\'s building where every definition is a SHA-256 hash, so a rename can never silently break things.' },
     { key: 'orbital', line: 'The atom is the Hydrogen Orbital Explorer: exact quantum states drawn as up to a million grains.' },
-    { key: 'tv', line: 'The TV is running Painted Crowns, his indie game. In first person you can actually play it!' },
-    { key: 'klast', line: 'Klast! A neon twin-stick shooter — rescue missions, arena battles, and fights on fully spherical planets.' },
-    { key: 'shatterwing', line: 'Shatterwing: a bullet-hell where you dash to leave mirrors that bounce enemy fire back. Coming to Steam.' },
+    { key: 'lavaLamp', line: 'The lava lamp is his particle physics simulator.' },
     { key: 'bookCharlie', line: 'He writes, too. Charlie & Pip, Cognitive Blindspot and The Wheel are all on this shelf.' },
     { key: 'monitor', line: 'The old monitor shows Code Constellation — source code drawn as a night sky. Recursion gets a ring, dead code becomes a black hole.' },
     { key: 'whiteboard', line: 'Research scribbles: physics, AI and the math underneath.' },
-    { key: 'lavaLamp', line: 'Last stop: the lava lamp is his particle physics simulator. Everything in here is a project — find all of them for a firework show! 🎆' },
+    { key: 'tv', line: 'Next door in the game room, the TV is running Painted Crowns, his indie game. In first person you can actually play it!' },
+    { key: 'shatterwing', line: 'Shatterwing: a bullet-hell where you dash to leave mirrors that bounce enemy fire back. Coming to Steam.' },
+    { key: 'klast', line: 'Last stop: Klast! A neon twin-stick shooter — rescue missions, arena battles, and fights on fully spherical planets. Everything in here is a project — find all of them for a firework show! 🎆' },
   ];
   function startTour() {
     if (FP.state !== 'orbit') { say('Step out of first person first (Exit, top-right) and I\'ll show you around.'); return; }
@@ -12858,6 +12894,15 @@ const guide = (() => {
     if (has('beach', 'boat', 'dock', 'ocean', ' sea', 'water', 'shore')) return goTo('beach');
     if (has('campfire', 'camp fire', 'tent', 'camp ')) return goTo('campfire');
     if (has('outside', 'view', 'mountain', 'everything', 'zoom out', 'overview', 'cliff')) return goTo('view');
+    if (has('rooms', 'floor plan', 'layout', 'whole house')) {
+      return say('Five rooms: the office and the game room at the back, then the bedroom, kitchen and living room. Pick one.', {
+        actions: ROOM_PLACES.map(([name, label]) => ({ label, run: () => goTo(name) })),
+      });
+    }
+    for (const [name, words] of [['office', ['office', ' desk', 'study']], ['game', ['game room', 'gaming room', 'tv room']],
+      ['bedroom', ['bedroom', ' bed ', 'sleep']], ['kitchen', ['kitchen', 'dining', 'cook', ' eat ']], ['living', ['living room', 'fireplace', 'sofa', 'couch', 'lounge']]]) {
+      if (has(...words)) return goTo(name);
+    }
     if (has('home', ' back', 'cabin', 'inside', 'room')) { goTo('cabin'); return; }
     if (has('secret', 'easter', 'firework', 'hidden', 'how many', 'progress', 'left', 'remaining', 'missed', 'unfound', 'find')) {
       const n = discoveredKeys.size;
@@ -12881,7 +12926,7 @@ const guide = (() => {
   }
   const CHIPS = [
     ['Give me a tour', startTour], ['Games', () => respond('games')], ['Physics & sims', () => respond('physics')],
-    ['Books', () => respond('books')], ['Surprise me', () => respond('surprise')], ['Make it snow', () => respond('snow')],
+    ['Show me the rooms', () => respond('rooms')], ['Books', () => respond('books')], ['Surprise me', () => respond('surprise')], ['Make it snow', () => respond('snow')],
     ['Night time', () => respond('night')], ['Take me to the beach', () => respond('beach')], ['How do I walk around?', () => respond('how do i walk')],
     ['Contact David', () => respond('contact')],
   ];
@@ -13790,7 +13835,7 @@ function animate() {
     m.getWorldPosition(icon.position);
     icon.position.y += icon.userData.yOffset + Math.sin(t * 0.003 + icon.userData.bob) * 0.025;
     const isDoor = m.userData.key === 'door';
-    icon.visible = !modalOpen && m !== hovered && (seeThrough || isDoor);
+    icon.visible = !modalOpen && m !== hovered && (seeThrough || isDoor) && isShown(m);
     // shrink markers the camera is right up against (guide close-ups, first person)
     const k = icon.userData.size * Math.min(1, Math.max(0.38, icon.position.distanceTo(camera.position) / 7));
     icon.scale.set(k, k, 1);
