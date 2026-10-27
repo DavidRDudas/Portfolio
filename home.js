@@ -1,8 +1,9 @@
 /* Landing page: the opening ("wavefunction collapse") and the live orbital in
    the hero. Grains are drawn from |ψ|² with the same exact sampler as the
-   Hydrogen explorer (HydrogenAtom/orbitals.js) and rendered as ink stipple in
-   a single WebGL draw call; position, rotation, morphing and the collapse all
-   happen in the vertex shader, so a frame costs almost nothing on the CPU.
+   Hydrogen explorer (HydrogenAtom/orbitals.js) and rendered as glowing grains
+   (added up, so dense regions burn brighter) in a single WebGL draw call;
+   position, rotation, morphing and the collapse all happen in the vertex
+   shader, so a frame costs almost nothing on the CPU.
 
    Opening: grains accumulate into a 3d z² orbital while a ket of disciplines
    sits beneath it; "measurement" collapses every grain onto the glyphs of the
@@ -49,7 +50,7 @@
   }
 
   // positions scaled so the 95th-percentile radius sits at 1, plus the sign
-  // of ψ at each grain (green for +, rust for −, like a textbook plate)
+  // of ψ at each grain (amber for +, violet for −)
   function sampleOrbital(index) {
     if (samples.has(index)) return samples.get(index);
     const o = ORBITALS[index];
@@ -77,7 +78,7 @@
     attribute vec3 aPosB;
     attribute float aSignA;
     attribute float aSignB;
-    attribute vec3 aTarget;   // xy: a point inside the name's glyphs; z: 1 on the rust dot
+    attribute vec3 aTarget;   // xy: a point inside the name's glyphs; z: 1 on the amber dot
     attribute vec4 aRand;     // x reveal order, y collapse delay, z morph delay, w phase
     uniform vec2 uOrigin;     // canvas top-left and size, in the layout's px
     uniform vec2 uSize;
@@ -122,20 +123,22 @@
       gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
       float depth = clamp(r.z * 0.45 + 0.5, 0.0, 1.0);
       gl_PointSize = step(aRand.x, uReveal) * uScale * mix((0.72 + depth * 0.6) * persp, 0.95, c);
-      vec3 green = vec3(0.149, 0.247, 0.204);
-      vec3 rust = vec3(0.663, 0.325, 0.204);
-      vec3 ink = vec3(0.125, 0.169, 0.161);
-      vColor = mix(s >= 0.0 ? green : rust, mix(ink, rust, aTarget.z), c);
-      vAlpha = mix(0.36 + depth * 0.54, 0.9, c);
+      vec3 warm = vec3(1.0, 0.6, 0.28);
+      vec3 cool = vec3(0.52, 0.46, 1.0);
+      vec3 name = vec3(0.98, 0.96, 1.0);
+      vColor = mix(s >= 0.0 ? warm : cool, mix(name, warm, aTarget.z), c);
+      vAlpha = mix(0.2 + depth * 0.42, 0.8, c);
     }`;
   const FRAG = `
     precision mediump float;
     varying vec3 vColor;
     varying float vAlpha;
     void main() {
-      float a = vAlpha * smoothstep(0.5, 0.3, length(gl_PointCoord - 0.5));
-      if (a < 0.01) discard;
-      gl_FragColor = vec4(vColor * a, a);
+      // a soft round glow; the grains add up, so the cloud's core burns brighter
+      float d = length(gl_PointCoord - 0.5);
+      float a = vAlpha * exp(-d * d * 13.0) * smoothstep(0.5, 0.42, d);
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(vColor * a, a * 0.6);
     }`;
 
   function createRenderer(canvas, count) {
@@ -174,7 +177,7 @@
       'uCollapse', 'uLift', 'uPointer', 'uPointerAmt', 'uTime', 'uScale']) uni[name] = gl.getUniformLocation(prog, name);
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE);
     gl.clearColor(0, 0, 0, 0);
     return {
       gl,
@@ -239,7 +242,7 @@
     yaw: 0.6, pitch: -0.32, fromB: 0, morph: 0, reveal: 0, collapse: 0, lift: 0,
     px: -1e5, py: -1e5, pointerAmt: 0, time: 0, scale: 2
   };
-  const BASE_POINT = phone ? 1.75 : 1.9;
+  const BASE_POINT = phone ? 2.5 : 2.7;
   let dpr = 1;
 
   function sizeCanvas(cssW, cssH, maxDpr) {
@@ -343,26 +346,29 @@
   const capEnergy = document.querySelector('.orbital-energy');
   const capGrains = document.querySelector('.orbital-grains');
   const capStatus = document.getElementById('orbital-status');
+  const readouts = [['.qn-n', 'n'], ['.qn-l', 'l'], ['.qn-m', 'm']].map(([sel, key]) => [document.querySelector(sel), key]);
   function updateCaption(announce) {
     const o = ORBITALS[current];
     const sub = o.m < 0 ? `${o.n},${o.l},${o.m}`.replace('-', '−') : `${o.n}${o.l}${o.m}`;
     const energy = (-13.6057 / (o.n * o.n)).toFixed(2).replace('-', '−');
     const subN = String(o.n).replace(/\d/g, d => '₀₁₂₃₄₅₆₇₈₉'[d]);
     const set = () => {
+      for (const [el, key] of readouts) if (el) el.textContent = String(o[key]).replace('-', '−');
       if (capSymbol) capSymbol.innerHTML = `ψ<sub>${esc(sub)}</sub>`;
       if (capName) capName.textContent = o.label;
       if (capEnergy) capEnergy.textContent = `E${subN} = ${energy} eV`;
       if (capGrains) capGrains.textContent = `${COUNT.toLocaleString('en-US')} grains sampled live from |ψ|²`;
     };
     if (!announce) return set();
-    for (const el of [capSymbol, capName, capEnergy]) if (el) el.classList.add('is-swapping');
+    const swapping = [capSymbol, capName, capEnergy, ...readouts.map(([el]) => el)];
+    for (const el of swapping) if (el) el.classList.add('is-swapping');
     setTimeout(() => {
       set();
-      for (const el of [capSymbol, capName, capEnergy]) if (el) el.classList.remove('is-swapping');
+      for (const el of swapping) if (el) el.classList.remove('is-swapping');
     }, 230);
     if (capStatus) capStatus.textContent = `Excited to the ${o.label} orbital, n = ${o.n}.`;
   }
-  for (const el of [capSymbol, capName, capEnergy]) if (el) el.setAttribute('data-swap', '');
+  for (const el of [capSymbol, capName, capEnergy, ...readouts.map(([el]) => el)]) if (el) el.setAttribute('data-swap', '');
   const capHint = document.querySelector('.caption-hint');
   if (capHint && !mq('(pointer: coarse)')) capHint.textContent = 'Click the cloud to excite it';
 
@@ -634,8 +640,8 @@
     else setTimeout(fn, 400);
   }
 
-  // No WebGL (or no sampler): keep the page fully usable — watercolor in the
-  // plate, and the opening reduced to a quick fade.
+  // No WebGL (or no sampler): keep the page fully usable — a painted glow in
+  // the plate (CSS), and the opening reduced to a quick fade.
   function fallback() {
     root.classList.add('no-webgl');
     if (introRequested) {
@@ -659,11 +665,40 @@
     list.innerHTML = PORTFOLIO_SECTIONS.map((section, i) => {
       const [id, label] = ids[i] || ['', section.title];
       const count = section.items.length;
-      return `<li><a href="portfolio.html${id ? '#' + id : ''}">` +
+      const img = section.items[0] && section.items[0].img;
+      return `<li><a href="portfolio.html${id ? '#' + id : ''}"${img ? ` data-preview="images/${esc(img)}"` : ''}>` +
         `<span class="di-num">${String(i + 1).padStart(2, '0')}</span>` +
         `<span class="di-title">${esc(label)}</span>` +
         `<span class="di-count">${count} ${count === 1 ? 'project' : 'projects'}</span>` +
-        `<span class="di-arrow" aria-hidden="true">↗</span></a></li>`;
+        `<span class="di-arrow" aria-hidden="true">→</span></a></li>`;
     }).join('');
+
+    // with a mouse, a preview of each discipline's work trails the cursor
+    const preview = document.querySelector('.index-preview');
+    if (!preview || !mq('(hover: hover) and (pointer: fine)')) return;
+    const img = preview.querySelector('img');
+    let x = 0, y = 0, frame = 0, warmed = false;
+    const place = () => {
+      frame = 0;
+      preview.style.setProperty('--px', x + 'px');
+      preview.style.setProperty('--py', y + 'px');
+    };
+    list.addEventListener('pointerenter', () => {
+      if (warmed) return;
+      warmed = true;
+      list.querySelectorAll('a[data-preview]').forEach(a => { new Image().src = a.dataset.preview; });
+    });
+    list.addEventListener('pointermove', e => {
+      x = e.clientX; y = e.clientY;
+      if (!frame) frame = requestAnimationFrame(place);
+    });
+    list.addEventListener('pointerover', e => {
+      const a = e.target.closest('a[data-preview]');
+      if (!a) return;
+      if (!preview.classList.contains('is-on')) { x = e.clientX; y = e.clientY; place(); }
+      if (img.getAttribute('src') !== a.dataset.preview) img.src = a.dataset.preview;
+      preview.classList.add('is-on');
+    });
+    list.addEventListener('pointerleave', () => preview.classList.remove('is-on'));
   }
 })();

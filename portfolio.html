@@ -1,29 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#08090d">
 <title>David Dudas — Portfolio</title>
 <meta name="description" content="Explore David Dudas’s work across software, games, simulations, writing, and research. Search the full catalogue or browse by discipline.">
 <meta property="og:title" content="David Dudas — Portfolio">
 <meta property="og:description" content="Explore David Dudas’s work across software, games, simulations, writing, and research. Search the full catalogue or browse by discipline.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://dudas.ai/images/interests-hero.png">
+<meta property="og:image" content="https://dudas.ai/images/og-cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico">
+<script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portfolio-site.css">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portfolio-site.css?v=db10f356">
 <script defer src="portfolio-data.js"></script>
-<script defer src="portfolio-ui.js"></script>
+<script defer src="portfolio-ui.js?v=43426205"></script>
 </head>
 <body class="portfolio-page">
 
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="shell header-inner">
-      <a class="wordmark" href="index.html" aria-label="David Dudas — home"><span class="monogram" aria-hidden="true">dd.</span><span>David Dudas</span></a>
+      <a class="wordmark" href="index.html" aria-label="David Dudas — home"><span class="monogram" aria-hidden="true">dd</span><span class="wordmark-name">David Dudas</span></a>
       <nav class="site-nav" aria-label="Main navigation">
         <a href="portfolio.html" aria-current="page">Portfolio</a>
         <a href="world.html">3D World <span aria-hidden="true">↗</span></a>
@@ -32,41 +35,59 @@
     </div>
   </header>
   <main id="main">
-    <section class="portfolio-intro shell" aria-labelledby="portfolio-title">
-      <div class="intro-main"><p class="eyebrow">Portfolio / David Dudas</p><h1 id="portfolio-title">Software, games<br><em>&amp; research.</em></h1><p class="intro-deck">Browse my projects by category or search by name and technology.</p></div>
-      <aside class="intro-aside" aria-label="About David">
-        <span class="eyebrow">About</span>
-        <p>Software architect.<br>Creator. PhD student.</p>
-        <div class="academic-note"><p>Computer Science<br><span class="university">Mississippi State University</span></p></div>
-      </aside>
-    </section>
-
-    <section class="catalogue shell" aria-labelledby="catalogue-title">
-      <div class="catalogue-top">
-        <h2 id="catalogue-title">All projects</h2>
-        <div class="search-wrap"><label class="sr-only" for="project-search">Search projects</label><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input type="search" id="project-search" placeholder="Search projects or technology…" autocomplete="off" aria-controls="project-sections"><button type="button" class="search-clear" id="clear-search" aria-label="Clear search" hidden>×</button></div>
-      </div>
-      <div class="catalogue-layout">
-        <aside class="catalogue-sidebar"><p class="eyebrow">Categories</p><nav id="category-nav" aria-label="Project categories"></nav></aside>
-        <div class="catalogue-results">
-          <div class="results-toolbar"><p id="result-count" role="status" aria-live="polite" aria-atomic="true"></p><button type="button" id="toggle-sections" class="quiet-button">Expand all <span aria-hidden="true">+</span></button></div>
-          <div id="project-sections"></div>
-          <div class="empty-state" id="empty-state" hidden><h3>No matching projects</h3><p>Try a different name or technology, or reset the filters.</p><button type="button" id="reset-filters" class="button">Show all projects <span aria-hidden="true">↗</span></button></div>
-          <noscript><p>The searchable catalogue needs JavaScript. You can also explore <a href="https://github.com/davidrdudas">my work on GitHub</a>.</p></noscript>
+    <section class="pf-hero" aria-labelledby="portfolio-title">
+      <div class="shell pf-hero-grid">
+        <div>
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Portfolio / David Dudas</p>
+          <h1 id="portfolio-title">Software, games<br> <span class="glow-text">&amp; research.</span></h1>
+          <p class="lede">Browse my projects by category or search by name and technology.</p>
+        </div>
+        <div class="pf-about">
+          <p class="eyebrow">About</p>
+          <p class="pf-about-main">Software architect.<br> Creator. PhD student.</p>
+          <p class="pf-about-note">Computer Science<br> Mississippi State University</p>
         </div>
       </div>
+    </section>
+
+    <div class="pf-tools">
+      <div class="shell pf-tools-inner">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+          <label class="sr-only" for="project-search">Search projects</label>
+          <input type="search" id="project-search" placeholder="Search projects or technology…" autocomplete="off" aria-controls="project-sections">
+          <kbd class="search-kbd" aria-hidden="true">/</kbd>
+          <button type="button" class="search-clear" id="clear-search" aria-label="Clear search" hidden>×</button>
+        </div>
+        <nav class="chips" id="category-nav" aria-label="Project categories"></nav>
+      </div>
+    </div>
+
+    <section class="results shell" aria-labelledby="catalogue-title">
+      <h2 id="catalogue-title" class="sr-only">All projects</h2>
+      <p class="result-count" id="result-count" role="status" aria-live="polite" aria-atomic="true"></p>
+      <div id="project-sections"></div>
+      <div class="empty-state" id="empty-state" hidden>
+        <h3>No matching projects</h3>
+        <p>Try a different name or technology, or reset the filters.</p>
+        <button type="button" id="reset-filters" class="btn btn-ghost">Show all projects <span class="arrow" aria-hidden="true">→</span></button>
+      </div>
+      <noscript><p class="pf-noscript">The searchable catalogue needs JavaScript. You can also explore <a href="https://github.com/davidrdudas">my work on GitHub</a>.</p></noscript>
     </section>
   </main>
 
   <footer class="site-footer">
-    <div class="shell footer-inner">
-      <div><a class="footer-name" href="index.html">David Dudas<span aria-hidden="true">.</span></a></div>
-      <nav aria-label="Contact links">
-        <a href="mailto:daviddudas@outlook.com">Email ↗</a>
-        <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
-        <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">ORCID ↗</a>
-      </nav>
-      <span class="copyright">© 2026 David Dudas</span>
+    <div class="shell">
+      <p class="footer-mark" aria-hidden="true">David Dudas<span class="accent-dot">.</span></p>
+      <div class="footer-bottom">
+        <a class="footer-name" href="index.html"><span class="monogram" aria-hidden="true">dd</span>David Dudas</a>
+        <nav aria-label="Contact links">
+          <a href="mailto:daviddudas@outlook.com">Email ↗</a>
+          <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+          <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">ORCID ↗</a>
+        </nav>
+        <span class="copyright">© 2026 David Dudas</span>
+      </div>
     </div>
   </footer>
 </body>

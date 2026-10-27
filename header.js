@@ -15,9 +15,8 @@ function loadHeader() {
         return;
     }
 
-    // The 3D room is the site root now (index.html at the top level), so
-    // both nav links point one folder up from any project subpage to reach
-    // the room.
+    // Project subpages sit one folder down: the name goes to the homepage,
+    // "Back to Room" to the 3D room (world.html).
     const headerHTML = `
         <nav class="header-nav subpage-nav">
             <a href="../index.html" class="logo">
@@ -33,7 +32,7 @@ function loadHeader() {
                 </div>
                 <span>David Dudas</span>
             </a>
-            <a href="../index.html" class="back-link">
+            <a href="../world.html" class="back-link">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>

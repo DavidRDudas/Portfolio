@@ -2,15 +2,16 @@
 <html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<meta name="theme-color" content="#f8f6ef">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#08090d">
 <title>David Dudas — Software Architect</title>
 <meta name="description" content="Software architect, creator, and Computer Science PhD student. Explore David Dudas’s software, games, simulations, and writing.">
 <meta property="og:title" content="David Dudas — Software Architect">
 <meta property="og:description" content="Software architect, creator, and Computer Science PhD student. Explore David Dudas’s software, games, simulations, and writing.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://dudas.ai/images/interests-hero.png">
+<meta property="og:image" content="https://dudas.ai/images/og-cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico">
 <script>
   /* Decide before first paint whether the opening plays: a fresh visit or a
@@ -37,17 +38,17 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="portfolio-site.css">
-<link rel="stylesheet" href="home.css">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="portfolio-site.css?v=db10f356">
+<link rel="stylesheet" href="home.css?v=adf5bf53">
 <script defer src="portfolio-data.js"></script>
-<script defer src="portfolio-ui.js"></script>
+<script defer src="portfolio-ui.js?v=43426205"></script>
 <script defer src="HydrogenAtom/orbitals.js"></script>
-<script defer src="home.js"></script>
+<script defer src="home.js?v=3283ca71"></script>
 </head>
 <body class="home-page">
 
-  <!-- the opening: ink grains sample a hydrogen orbital, then "measurement"
+  <!-- the opening: glowing grains sample a hydrogen orbital, then "measurement"
        collapses them into the name (drawn by home.js on the orbital canvas) -->
   <div class="intro-veil" aria-hidden="true">
     <div class="intro-caption">
@@ -60,7 +61,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="shell header-inner">
-      <a class="wordmark" href="index.html" aria-label="David Dudas — home"><span class="monogram" aria-hidden="true">dd.</span><span>David Dudas</span></a>
+      <a class="wordmark" href="index.html" aria-label="David Dudas — home"><span class="monogram" aria-hidden="true">dd</span><span class="wordmark-name">David Dudas</span></a>
       <nav class="site-nav" aria-label="Main navigation">
         <a href="portfolio.html">Portfolio</a>
         <a href="world.html">3D World <span aria-hidden="true">↗</span></a>
@@ -69,96 +70,135 @@
     </div>
   </header>
   <main id="main">
-    <section class="hero shell" aria-labelledby="hero-title">
-      <div class="hero-text">
-        <p class="eyebrow hero-eyebrow"><span class="small-line" aria-hidden="true"></span> Software architect &amp; creator</p>
-        <h1 id="hero-title" class="hero-title">David<br> Dudas<span class="accent-dot">.</span></h1>
-        <p class="hero-lede">I build software, games, and computational tools.</p>
-        <p class="hero-note"><span class="note-mark" aria-hidden="true">↳</span>PhD student in Computer Science <span class="hero-note-sep" aria-hidden="true">·</span> <span class="university">Mississippi State University</span></p>
-        <div class="hero-actions">
-          <a class="button" href="portfolio.html">Explore my work <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="world.html">Walk through the 3D cabin <span aria-hidden="true">↗</span></a>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="shell hero-grid">
+        <div class="hero-text">
+          <p class="eyebrow hero-eyebrow"><span class="dot" aria-hidden="true"></span>Software architect &amp; creator</p>
+          <h1 id="hero-title" class="hero-title">David<br> Dudas<span class="accent-dot">.</span></h1>
+          <p class="hero-lede">I build software, games, and computational tools.</p>
+          <p class="hero-note">PhD student in Computer Science <span class="hero-note-sep" aria-hidden="true">·</span> <span class="university">Mississippi State University</span></p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="portfolio.html">Explore my work <span class="arrow" aria-hidden="true">→</span></a>
+            <a class="btn btn-ghost" href="world.html">
+              <svg class="byte-mini" viewBox="0 0 72 72" aria-hidden="true"><line x1="36" y1="15" x2="36" y2="7.5" stroke="#8a6646" stroke-width="3" stroke-linecap="round"/><circle cx="36" cy="6" r="4.2" fill="#ffb87a"/><rect x="11" y="14" width="50" height="38" rx="15" fill="#f4e2c6"/><rect x="17" y="21" width="38" height="24" rx="10" fill="#1d140f"/><ellipse cx="28" cy="32" rx="3.8" ry="4.7" fill="#ffc48a"/><ellipse cx="44" cy="32" rx="3.8" ry="4.7" fill="#ffc48a"/><rect x="24" y="51" width="24" height="11.5" rx="5.75" fill="#f4e2c6"/></svg>
+              Walk through the 3D cabin
+            </a>
+          </div>
         </div>
-      </div>
 
-      <figure class="orbital-figure" aria-labelledby="orbital-caption">
-        <div class="orbital-plate">
-          <span class="plate-mark tl" aria-hidden="true"></span><span class="plate-mark tr" aria-hidden="true"></span>
-          <span class="plate-mark bl" aria-hidden="true"></span><span class="plate-mark br" aria-hidden="true"></span>
-          <span class="plate-axis" aria-hidden="true"></span>
-          <!-- fallback art: shown when WebGL isn't available -->
-          <picture class="orbital-fallback">
-            <source srcset="images/interests-hero-web.webp" type="image/webp">
-            <img src="images/interests-hero.png" width="1697" height="927" alt="" decoding="async">
-          </picture>
-          <button class="orbital-excite" type="button" aria-describedby="orbital-caption">
-            <span class="sr-only">Excite the electron to the next orbital</span>
-          </button>
-        </div>
-        <figcaption id="orbital-caption" class="orbital-caption">
-          <span class="caption-fig">Fig. 1</span>
-          <span class="caption-main">Hydrogen <span class="orbital-symbol">ψ<sub>320</sub></span> · <span class="orbital-name">3d z²</span></span>
-          <span class="caption-detail"><span class="orbital-grains">Sampled live from |ψ|²</span> · <span class="orbital-energy">E₃ = −1.51 eV</span></span>
-          <span class="caption-actions"><span class="caption-hint" aria-hidden="true">Tap the cloud to excite it</span><a class="caption-link" href="HydrogenAtom/index.html">Open the explorer <span aria-hidden="true">↗</span></a></span>
-        </figcaption>
-        <p class="sr-only" aria-live="polite" id="orbital-status"></p>
-      </figure>
+        <figure class="orbital-figure" aria-labelledby="orbital-caption">
+          <div class="orbital-plate">
+            <span class="plate-mark tl" aria-hidden="true"></span><span class="plate-mark tr" aria-hidden="true"></span>
+            <span class="plate-mark bl" aria-hidden="true"></span><span class="plate-mark br" aria-hidden="true"></span>
+            <span class="plate-rings" aria-hidden="true"></span>
+            <span class="plate-axis" aria-hidden="true"></span>
+            <span class="plate-readout plate-readout-tl" aria-hidden="true">n <b class="qn-n">3</b> · l <b class="qn-l">2</b> · m <b class="qn-m">0</b></span>
+            <span class="plate-readout plate-readout-br" aria-hidden="true">|ψ|²</span>
+            <button class="orbital-excite" type="button" aria-describedby="orbital-caption">
+              <span class="sr-only">Excite the electron to the next orbital</span>
+            </button>
+          </div>
+          <figcaption id="orbital-caption" class="orbital-caption">
+            <span class="caption-fig">Fig. 1</span>
+            <span class="caption-main">Hydrogen <span class="orbital-symbol">ψ<sub>320</sub></span> · <span class="orbital-name">3d z²</span></span>
+            <span class="caption-detail"><span class="orbital-grains">Sampled live from |ψ|²</span> · <span class="orbital-energy">E₃ = −1.51 eV</span></span>
+            <span class="caption-actions"><span class="caption-hint" aria-hidden="true">Tap the cloud to excite it</span><a class="caption-link" href="HydrogenAtom/index.html">Open the explorer <span aria-hidden="true">↗</span></a></span>
+          </figcaption>
+          <p class="sr-only" aria-live="polite" id="orbital-status"></p>
+        </figure>
+      </div>
     </section>
 
     <section class="explore-section shell" aria-labelledby="explore-title">
-      <div class="section-label"><h2 id="explore-title" class="eyebrow">Explore</h2><span class="section-rule"></span></div>
-      <div class="entry-grid">
-        <a class="entry-card entry-work" href="portfolio.html">
-          <div class="entry-top"><span class="eyebrow">01 / Projects</span><span class="entry-arrow" aria-hidden="true">↗</span></div>
-          <h3>Portfolio</h3>
-          <p>Software, games, simulations, and writing.<br> Search or browse by category.</p>
-          <span class="entry-bottom">Explore the portfolio <span aria-hidden="true">→</span></span>
+      <h2 id="explore-title" class="eyebrow section-eyebrow">Explore</h2>
+      <div class="explore-grid">
+        <a class="entry-card entry-work" href="portfolio.html" data-reveal>
+          <div class="entry-stack" aria-hidden="true">
+            <img src="images/klast.png" alt="" loading="lazy" decoding="async">
+            <img src="images/codeuniverse.png" alt="" loading="lazy" decoding="async">
+            <img src="images/hokku.png" alt="" loading="lazy" decoding="async">
+            <img src="images/prism.png" alt="" loading="lazy" decoding="async">
+          </div>
+          <div class="entry-copy">
+            <span class="entry-label">01 / Projects</span>
+            <h3>Portfolio</h3>
+            <p>Software, games, simulations, and writing.<br> Search or browse by category.</p>
+            <span class="entry-cta">Explore the portfolio <span class="arrow" aria-hidden="true">→</span></span>
+          </div>
         </a>
-        <a class="entry-card entry-world" href="world.html">
-          <div class="entry-top"><span class="eyebrow">02 / Interactive</span><span class="entry-arrow" aria-hidden="true">↗</span></div>
-          <img class="world-thumb" src="images/world-thumb.jpg" width="360" height="259" alt="" loading="lazy" decoding="async">
-          <h3>3D World</h3>
-          <p>A cozy cabin where every object is a project — with weather, a campfire, and Byte, a little robot guide.</p>
-          <span class="entry-bottom">Enter the world <span class="entry-device">Touch &amp; desktop</span></span>
+        <a class="entry-card entry-world" href="world.html" data-reveal style="--reveal-delay:.08s">
+          <picture class="entry-bg">
+            <source type="image/webp" srcset="images/world-golden-1200.webp 1200w, images/world-golden-2400.webp 2400w" sizes="(min-width: 900px) 60vw, 100vw">
+            <img src="images/world-golden-1200.jpg" srcset="images/world-golden-1200.jpg 1200w, images/world-golden-2400.jpg 2400w" sizes="(min-width: 900px) 60vw, 100vw" width="1200" height="600" alt="The cabin at golden hour, cut away to show the room inside, with mountains and the ocean behind" loading="lazy" decoding="async">
+          </picture>
+          <div class="entry-copy">
+            <span class="entry-label">02 / Interactive</span>
+            <h3>3D World</h3>
+            <p>Explore my projects in a first-person walkthrough of a cabin.</p>
+            <span class="entry-cta">Enter the world <span class="arrow" aria-hidden="true">→</span></span>
+          </div>
+          <div class="byte-peek" aria-hidden="true">
+            <span class="byte-bubble">Hi, I'm Byte!</span>
+            <svg viewBox="0 0 72 72">
+              <defs>
+                <radialGradient id="hbGlow"><stop offset="0" stop-color="#ffd9a8" stop-opacity="0.95"/><stop offset="1" stop-color="#ffb87a" stop-opacity="0"/></radialGradient>
+                <linearGradient id="hbShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff5e4"/><stop offset="1" stop-color="#e2c8a4"/></linearGradient>
+                <linearGradient id="hbFace" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1d16"/><stop offset="1" stop-color="#140e0a"/></linearGradient>
+              </defs>
+              <g class="byte-body">
+                <line x1="36" y1="15" x2="36" y2="7.5" stroke="#8a6646" stroke-width="2.2" stroke-linecap="round"/>
+                <circle cx="36" cy="6" r="6.5" fill="url(#hbGlow)"/>
+                <circle class="byte-bulb" cx="36" cy="6" r="3.2" fill="#ffb87a"/>
+                <rect x="6.5" y="25.5" width="6.5" height="14" rx="3.25" fill="#c9a37a"/>
+                <g class="byte-wave"><rect x="59" y="25.5" width="6.5" height="14" rx="3.25" fill="#c9a37a"/></g>
+                <rect x="11" y="14" width="50" height="38" rx="15" fill="url(#hbShell)" stroke="#8a6646" stroke-width="1.6"/>
+                <rect x="17" y="21" width="38" height="24" rx="10" fill="url(#hbFace)"/>
+                <path d="M21 24.5 Q24 22.6 29 22.4" stroke="#fff" stroke-opacity="0.12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+                <g class="byte-eyes">
+                  <ellipse cx="28" cy="32" rx="3.6" ry="4.5" fill="#ffc48a"/>
+                  <ellipse cx="44" cy="32" rx="3.6" ry="4.5" fill="#ffc48a"/>
+                </g>
+                <path d="M32.5 39.6 Q36 42.4 39.5 39.6" stroke="#ffc48a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+                <circle cx="21.6" cy="39" r="2.2" fill="#ff8f7a" opacity="0.45"/>
+                <circle cx="50.4" cy="39" r="2.2" fill="#ff8f7a" opacity="0.45"/>
+                <rect x="24" y="51" width="24" height="11.5" rx="5.75" fill="url(#hbShell)" stroke="#8a6646" stroke-width="1.6"/>
+                <circle class="byte-bulb" cx="36" cy="56.8" r="2.1" fill="#ffb87a"/>
+              </g>
+            </svg>
+          </div>
         </a>
       </div>
     </section>
 
-    <section class="worlds-section shell" aria-labelledby="worlds-title">
-      <figure class="worlds-figure">
-        <picture>
-          <source srcset="images/interests-hero-web.webp" type="image/webp">
-          <img class="worlds-art" src="images/interests-hero.png" width="1697" height="927" alt="Watercolor illustration of the worlds I explore: software, mathematics, physics, music, and games." loading="lazy" decoding="async">
-        </picture>
-        <figcaption class="worlds-caption">
-          <h2 id="worlds-title">The worlds I explore</h2>
-          <p>Software, mathematics, physics, music, and games.</p>
-        </figcaption>
-      </figure>
-    </section>
-
     <section class="selected-section shell" aria-labelledby="selected-title">
-      <div class="section-heading"><h2 id="selected-title">Selected projects</h2><a class="text-link" href="portfolio.html">View all projects <span aria-hidden="true">↗</span></a></div>
-      <div class="featured-grid" id="featured-projects"></div>
+      <div class="section-head">
+        <h2 id="selected-title">Selected projects</h2>
+        <a class="link-arrow" href="portfolio.html">View all projects <span class="arrow" aria-hidden="true">→</span></a>
+      </div>
+      <div class="bento" id="featured-projects"></div>
       <noscript><p><a href="portfolio.html">Explore my portfolio of software, games, and creative projects.</a></p></noscript>
     </section>
 
     <section class="index-section shell" aria-labelledby="index-title">
-      <div class="section-label"><h2 id="index-title" class="eyebrow">Index</h2><span class="section-rule"></span></div>
+      <h2 id="index-title" class="eyebrow section-eyebrow">Index</h2>
       <ol class="discipline-index" id="discipline-index"></ol>
       <noscript><p><a href="portfolio.html">Browse every project by discipline.</a></p></noscript>
+      <div class="index-preview" aria-hidden="true"><img alt=""></div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <div class="shell footer-inner">
-      <div><a class="footer-name" href="index.html">David Dudas<span aria-hidden="true">.</span></a></div>
-      <nav aria-label="Contact links">
-        <a href="mailto:daviddudas@outlook.com">Email ↗</a>
-        <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
-        <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">ORCID ↗</a>
-      </nav>
-      <span class="copyright">© 2026 David Dudas</span>
+    <div class="shell">
+      <p class="footer-mark" aria-hidden="true">David Dudas<span class="accent-dot">.</span></p>
+      <div class="footer-bottom">
+        <a class="footer-name" href="index.html"><span class="monogram" aria-hidden="true">dd</span>David Dudas</a>
+        <nav aria-label="Contact links">
+          <a href="mailto:daviddudas@outlook.com">Email ↗</a>
+          <a href="https://github.com/davidrdudas" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+          <a href="https://orcid.org/0009-0000-9348-5438" target="_blank" rel="noopener noreferrer">ORCID ↗</a>
+        </nav>
+        <span class="copyright">© 2026 David Dudas</span>
+      </div>
     </div>
   </footer>
 </body>
