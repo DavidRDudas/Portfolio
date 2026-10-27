@@ -1173,7 +1173,7 @@ const easeK = k => 1 - Math.pow(1 - k, FRAME_SCALE);
 
 // far plane large enough to render the outside scenery (mountains, sun/moon, stars)
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 600);
-camera.position.set(7.5, 4.2, 8.5);
+camera.position.set(10.3, 10.55, 12.9);
 
 // Bloom and the final grade (see POST) render through an antialiased
 // offscreen buffer, which needs WebGL2. When that's available the canvas
@@ -1205,7 +1205,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
-controls.target.set(0, 1.6, -1.2);
+controls.target.set(0, 0.8, -0.5);
 controls.minDistance = 5.5;
 controls.maxDistance = 100; // can pull WAY back to see the cabin, cliff, and shoreline together
 controls.minPolarAngle = 0.2;
@@ -1213,8 +1213,8 @@ controls.minPolarAngle = 0.2;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
 // no azimuth limits while zoomed out — can orbit fully around the building
 controls.enablePan = false;
-const HOME_CAM = new THREE.Vector3(7.5, 4.2, 8.5);
-const HOME_TARGET = new THREE.Vector3(0, 1.6, -1.2);
+const HOME_CAM = new THREE.Vector3(10.3, 10.55, 12.9);
+const HOME_TARGET = new THREE.Vector3(0, 0.8, -0.5);
 
 // -------- RESPONSIVE FRAMING --------
 // The home shot is composed for landscape screens. On a portrait phone the
@@ -2031,7 +2031,70 @@ function vinylTexture() {
 const root = new THREE.Group();
 scene.add(root);
 
-const ROOM = { w: 9, h: 5, d: 9 };
+const ROOM = { w: 14, h: 5, d: 14 };
+
+// ---- floor plan ----
+// One log shell split by interior walls: an office and a game room along the
+// back (the ocean side, with the porch), and a bedroom, a kitchen and a
+// living room along the front. The kitchen and living room share one open
+// space. Each room is a rectangle on the floor plan.
+const ROOMS = {
+  office:  { x0: -7,   x1: 0,    z0: -7, z1: -1 },
+  game:    { x0: 0,    x1: 7,    z0: -7, z1: -1 },
+  bedroom: { x0: -7,   x1: -2.5, z0: -1, z1: 7 },
+  kitchen: { x0: -2.5, x1: 2,    z0: -1, z1: 7 },
+  living:  { x0: 2,    x1: 7,    z0: -1, z1: 7 },
+};
+// is (x, z) inside the cabin's walls? (shrunk by m; a negative m grows it)
+const inCabin = (x, z, m = 0) => Math.abs(x) < ROOM.w / 2 - m && Math.abs(z) < ROOM.d / 2 - m;
+// Furniture registers its first-person colliders (Box3, only things that
+// should block a walker) and its floor contact shadows ([x, z, w, d, rot])
+// here; buildFPColliders() and the CONTACT SHADOWS pass pick them up.
+const furnitureColliders = [];
+const furnitureShadows = [];
+// the ceiling's X-ray entry: things hung from the ceiling track it so they
+// lift away with it when looking down into the rooms
+const ceilingRef = () => wallData.find(w => w.normal.y < -0.9);
+// the floor rectangle of the room a point is in (the kitchen and living
+// room count as one open space), or null outside the cabin
+function roomRectAt(x, z) {
+  for (const [key, r] of Object.entries(ROOMS)) {
+    if (x < r.x0 || x > r.x1 || z < r.z0 || z > r.z1) continue;
+    return key === 'kitchen' || key === 'living'
+      ? { x0: ROOMS.kitchen.x0, x1: ROOMS.living.x1, z0: ROOMS.living.z0, z1: ROOMS.living.z1 } : r;
+  }
+  return null;
+}
+// Openings in the outer walls. `at` is the centre along the wall (x on the
+// front and back walls, z on the sides); y0..y1 is the opening's height.
+const CABIN_DOOR = { kind: 'door', at: 3.6, w: 0.92, y0: 0, y1: 2.45 };
+const CABIN_OPENINGS = {
+  back:  [{ kind: 'window', at: -3.5, w: 3.0, y0: 1.6, y1: 3.6, shutters: true, flowers: true }],   // office, over the desk
+  front: [{ kind: 'window', at: -4.75, w: 1.6, y0: 1.7, y1: 3.3, shutters: true, flowers: true },  // bedroom
+          { kind: 'window', at: -0.25, w: 1.6, y0: 1.9, y1: 3.3 },                                   // kitchen, over the sink
+          CABIN_DOOR,
+          { kind: 'window', at: 5.6, w: 1.2, y0: 1.7, y1: 3.3 }],                                    // living room
+  left:  [{ kind: 'window', at: 4.4, w: 1.8, y0: 1.7, y1: 3.3, shutters: true }],                    // bedroom
+  right: [{ kind: 'window', at: -4.0, w: 2.0, y0: 1.6, y1: 3.4, shutters: true }],                   // game room
+};
+// Each outer wall in its own frame: `along` runs with the wall (x on the
+// front and back, z on the sides) and `out` is the distance out from its
+// inside plane (negative = into the room).
+const WALL_AXIS = { front: 'x', back: 'x', left: 'z', right: 'z' };
+function wallPoint(side, along, y, out) {
+  const HW = ROOM.w / 2, HD = ROOM.d / 2;
+  return side === 'front' ? [along, y, HD + out] : side === 'back' ? [along, y, -(HD + out)]
+    : side === 'left' ? [-(HW + out), y, along] : [HW + out, y, along];
+}
+// a rounded box `a` long, `h` high and `o` deep in a wall's frame
+const wallBox = (side, a, h, o, r = 0.03) => WALL_AXIS[side] === 'x' ? rbox(a, h, o, r, 1) : rbox(o, h, a, r, 1);
+// an outer wall's X-ray reference (normal into the room, centre): parts
+// tracked with it hide whenever that wall does
+function wallRef(side) {
+  const n = { front: [0, 0, -1], back: [0, 0, 1], left: [1, 0, 0], right: [-1, 0, 0] }[side];
+  const [x, y, z] = wallPoint(side, 0, ROOM.h / 2, 0);
+  return { normal: new THREE.Vector3(...n), center: new THREE.Vector3(x, y, z) };
+}
 
 // All wall + ceiling meshes are tracked so the see-through toggle can hide
 // only the ones that sit between the camera and the room interior — keeping
@@ -2052,7 +2115,7 @@ function trackWall(m) {
 // ---- floor ----
 {
   const tex = woodTexture(COL.floor, COL.floorPlank, 12);
-  tex.repeat.set(2, 2);
+  tex.repeat.set(ROOM.w / 4.5, ROOM.d / 4.5);
   tex.anisotropy = MAX_ANISO;   // the floor is mostly seen at a glancing angle
   const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78, metalness: 0.05 });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat);
@@ -2065,7 +2128,7 @@ function trackWall(m) {
   // pale wood planks; double-sided so it doubles as a roof when viewed from
   // above (zoomed out)
   const tex = woodTexture(0xc49a6a, 0x9a7048, 14);
-  tex.repeat.set(2, 2);
+  tex.repeat.set(ROOM.w / 4.5, ROOM.d / 4.5);
   tex.anisotropy = MAX_ANISO;
   const mat = new THREE.MeshStandardMaterial({
     map: tex, roughness: 0.92, side: THREE.DoubleSide
@@ -2097,78 +2160,39 @@ const wallMat = new THREE.MeshStandardMaterial({
   polygonOffset: true, polygonOffsetFactor: 1.0, polygonOffsetUnits: 1.0
 });
 
-// ---- back wall (with window cut) ----
-function buildBackWall() {
+// ---- outer walls: one plane per strip around each window and door ----
+function buildWallPlanes(side) {
   const g = new THREE.Group();
-  const W = ROOM.w, H = ROOM.h;
-  const winW = 3.4, winH = 2.0, winY = 2.6, winX = 0;
-  const left = (W - winW) / 2 - winX;
-  const right = (W - winW) / 2 + winX;
-  const top = H - (winY + winH / 2);
-  const bottom = winY - winH / 2;
-  const panel = (w, h, x, y) => {
-    const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(w, h), x, y), wallMat);
-    m.position.set(x, y, -ROOM.d / 2);
+  const len = side === 'back' || side === 'front' ? ROOM.w : ROOM.d, H = ROOM.h;
+  // u runs along the wall: world x on the front/back walls, z on the sides
+  const panel = (a, b, y0, y1) => {
+    if (b - a < 0.01 || y1 - y0 < 0.01) return;
+    const u = (a + b) / 2, y = (y0 + y1) / 2;
+    const geo = new THREE.PlaneGeometry(b - a, y1 - y0);
+    const m = new THREE.Mesh(geo, wallMat);
+    // each plane faces into the room; the UV offsets keep the log bands
+    // continuous from one strip to the next
+    if (side === 'back')  { m.position.set(u, y, -ROOM.d / 2); wallUV(geo, u, y); }
+    if (side === 'front') { m.position.set(u, y, ROOM.d / 2); m.rotation.y = Math.PI; wallUV(geo, -u, y); }
+    if (side === 'left')  { m.position.set(-ROOM.w / 2, y, u); m.rotation.y = Math.PI / 2; wallUV(geo, -u, y); }
+    if (side === 'right') { m.position.set(ROOM.w / 2, y, u); m.rotation.y = -Math.PI / 2; wallUV(geo, u, y); }
     m.castShadow = true;
     m.receiveShadow = true;
     trackWall(m);
     g.add(m);
   };
-  panel(left, H, -W / 2 + left / 2, H / 2);
-  panel(right, H, W / 2 - right / 2, H / 2);
-  panel(winW, top, 0, H - top / 2);
-  panel(winW, bottom, 0, bottom / 2);
+  let p = -len / 2;
+  for (const o of CABIN_OPENINGS[side].slice().sort((a, b) => a.at - b.at)) {
+    const a = o.at - o.w / 2, b = o.at + o.w / 2;
+    panel(p, a, 0, H);
+    panel(a, b, 0, o.y0);     // under a window
+    panel(a, b, o.y1, H);     // over a window or door
+    p = b;
+  }
+  panel(p, len / 2, 0, H);
   return g;
 }
-root.add(buildBackWall());
-
-// ---- front wall (with door cut) ----
-function buildFrontWall() {
-  const g = new THREE.Group();
-  const W = ROOM.w, H = ROOM.h;
-  const doorW = 0.92, doorH = 2.45;   // taller opening so a standing player clears it
-  const doorCx = 1.6;                       // door is right of centre
-  const doorLeft = doorCx - doorW / 2;
-  const doorRight = doorCx + doorW / 2;
-  const panel = (w, h, x, y) => {
-    const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(w, h), -x, y), wallMat);
-    m.position.set(x, y, ROOM.d / 2);
-    m.rotation.y = Math.PI; // texture/normal face into the room (-Z)
-    m.castShadow = true;
-    m.receiveShadow = true;
-    trackWall(m);
-    g.add(m);
-  };
-  // strip left of door
-  panel((doorLeft - (-W / 2)), H, ((-W / 2) + doorLeft) / 2, H / 2);
-  // strip right of door
-  panel((W / 2 - doorRight), H, (doorRight + W / 2) / 2, H / 2);
-  // header above door
-  panel(doorW, H - doorH, doorCx, doorH + (H - doorH) / 2);
-  return g;
-}
-root.add(buildFrontWall());
-
-// ---- left wall ----
-{
-  const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(ROOM.d, ROOM.h), 0, ROOM.h / 2), wallMat);
-  m.rotation.y = Math.PI / 2;
-  m.position.set(-ROOM.w / 2, ROOM.h / 2, 0);
-  m.castShadow = true;
-  m.receiveShadow = true;
-  trackWall(m);
-  root.add(m);
-}
-// ---- right wall ----
-{
-  const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(ROOM.d, ROOM.h), 0, ROOM.h / 2), wallMat);
-  m.rotation.y = -Math.PI / 2;
-  m.position.set(ROOM.w / 2, ROOM.h / 2, 0);
-  m.castShadow = true;
-  m.receiveShadow = true;
-  trackWall(m);
-  root.add(m);
-}
+for (const side of ['back', 'front', 'left', 'right']) root.add(buildWallPlanes(side));
 
 // ==========================================================
 // LOG CABIN KIT — shared pieces for the cabin's exterior. Parts are laid out
@@ -2318,10 +2342,12 @@ function trackLike(mesh, ref) {
 // ridge runs along Z axis (front-to-back), eaves on +X and -X (sides),
 // triangular gable ends face FRONT (door side) and BACK (window side).
 // ==========================================================
-const PEAK_Y = 8.0;
+const PEAK_Y = ROOM.h + ROOM.w / 2 * 0.6;   // ridge height for a 0.6 pitch
+const roofParts = [];   // lifted off in X-ray view from above (see updateSeeThrough)
 {
-  const pitchSlope = (PEAK_Y - ROOM.h) / (ROOM.w / 2); // rise/run = 3/4.5
-  const pitchAngle = Math.atan(pitchSlope);            // ≈ 33.7°
+  const roofFrom = wallData.length;
+  const pitchSlope = (PEAK_Y - ROOM.h) / (ROOM.w / 2); // rise/run
+  const pitchAngle = Math.atan(pitchSlope);            // ≈ 31°
   // the roof overhangs the log walls (which stand ~0.37 proud of the wall
   // planes): 0.95 past the eave walls, 0.9 past the gables
   const EAVE_RUN = 0.95, GABLE_OVER = 0.9;
@@ -2405,7 +2431,7 @@ const PEAK_Y = 8.0;
       trackLike(m, ref);
     }
   }
-  // LEFT roof panel — slope from -X eave (-4.5, ROOM.h) up to ridge (0, PEAK_Y)
+  // LEFT roof panel — slope from the -X eave (-ROOM.w / 2, ROOM.h) up to the ridge (0, PEAK_Y)
   // rotation.order = 'ZXY' so the pitch tilt (around world Z = ridge) is
   // applied BEFORE the X rotation that lays the plane on its side; with the
   // default 'XYZ' order, rotation.x runs first and spins the local Z axis to
@@ -2435,7 +2461,7 @@ const PEAK_Y = 8.0;
     snowCaps.push(snow);
     dressRoofSide(-1, ref);
   }
-  // RIGHT roof panel — slope from +X eave (+4.5, ROOM.h) up to ridge
+  // RIGHT roof panel — slope from the +X eave (+ROOM.w / 2, ROOM.h) up to the ridge
   {
     const right = new THREE.Mesh(
       new THREE.PlaneGeometry(roofRun, roofLen), roofMat
@@ -2485,6 +2511,7 @@ const PEAK_Y = 8.0;
     trackWall(front);
     root.add(front);
   }
+  for (let i = roofFrom; i < wallData.length; i++) roofParts.push(wallData[i].mesh);
 }
 
 // ==========================================================
@@ -2501,8 +2528,6 @@ const LOG_OFF = LOG_R + 0.025;       // wall plane → log axis
 const LOG_FACE = LOG_OFF + LOG_R;    // wall plane → outer face of the logs
 const LOG_EXT = 0.3;                 // how far the log ends run past a corner
 const FOOT_H = 0.3;                  // fieldstone footing height
-const CABIN_DOOR = { cx: 1.6, w: 0.92, h: 2.45 };   // as cut in buildFrontWall()
-const CABIN_WIN = { w: 3.4, y0: 1.6, y1: 3.6 };     // as cut in buildBackWall()
 const LOG_TONES = [0x9a6235, 0x8f5a31, 0xa36a3a, 0x86532d, 0x99643a, 0xa06838];
 const STONE_TONES = [0x4d4842, 0x423d37, 0x57504a, 0x3a3631, 0x52483e, 0x5f5850, 0x47403a];
 const pickTone = list => list[(Math.random() * list.length) | 0];
@@ -2510,20 +2535,28 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
   const HW = ROOM.w / 2, HD = ROOM.d / 2, H = ROOM.h;
   const slope = (PEAK_Y - H) / HW;
   const TRIM = 0x5d3b22;
-  const wall = (normal, center) => ({ logs: cabinKit(), stones: cabinKit(), ref: { normal, center } });
-  const W = {
-    front: wall(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, H / 2, HD)),
-    back:  wall(new THREE.Vector3(0, 0, 1),  new THREE.Vector3(0, H / 2, -HD)),
-    left:  wall(new THREE.Vector3(1, 0, 0),  new THREE.Vector3(-HW, H / 2, 0)),
-    right: wall(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(HW, H / 2, 0)),
+  const SIDES = ['front', 'back', 'left', 'right'];
+  const W = {};
+  // gable logs (above the eaves) are kept apart so they can lift off with the roof
+  for (const side of SIDES) W[side] = { logs: cabinKit(), stones: cabinKit(), gable: cabinKit(), ref: wallRef(side) };
+  const AX = WALL_AXIS, toWorld = wallPoint, wbox = wallBox;
+  // place a part in a wall's frame; `spin` turns it within the wall's plane
+  const put = (kit, side, geo, color, along, y, out, spin = 0, scale = 1) => {
+    const [x, yy, z] = toWorld(side, along, y, out);
+    return AX[side] === 'x' ? kit.add(geo, color, x, yy, z, 0, 0, spin, scale) : kit.add(geo, color, x, yy, z, spin, 0, 0, scale);
   };
   // spans of [a, b] minus the opening [o0, o1]
   const cut = (spans, o0, o1) => spans.flatMap(([a, b]) =>
     (o1 <= a || o0 >= b) ? [[a, b]] : [[a, o0], [o1, b]].filter(([p, q]) => q - p > 0.12));
+  // does a log course centred at y run into this opening? A log split around
+  // an opening ends inside its casing; the first one whose centre clears the
+  // opening runs across behind the header (or under the sill).
+  const crosses = (o, y) => o.kind === 'door' ? y < o.y1 : y > o.y0 - 0.02 && y < o.y1 + 0.02;
+  const openSpans = (side, spans, y) => CABIN_OPENINGS[side].reduce(
+    (s, o) => crosses(o, y) ? cut(s, o.at - o.w / 2 - 0.02, o.at + o.w / 2 + 0.02) : s, spans);
 
   // ---- gable walls (front, back): logs along X ----
   const y0 = FOOT_H + LOG_R - 0.02;
-  const doorL = CABIN_DOOR.cx - CABIN_DOOR.w / 2, doorR = CABIN_DOOR.cx + CABIN_DOOR.w / 2;
   for (let k = 0; ; k++) {
     const y = y0 + k * LOG_STEP, top = y + LOG_R;
     // below the eaves the ends run past the corners (but stay under the
@@ -2532,118 +2565,126 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
       ? Math.min(HW + LOG_OFF + LOG_EXT, HW + (H - top) / slope - 0.03)
       : HW * (PEAK_Y - top) / (PEAK_Y - H) - 0.04;
     if (reach < 0.2) break;
-    for (const [w, zs] of [[W.front, 1], [W.back, -1]]) {
-      let spans = [[-reach, reach]];
-      // a log split around an opening ends inside its casing; the first one
-      // whose centre clears the opening runs across behind the header
-      if (zs > 0 && y < CABIN_DOOR.h) spans = cut(spans, doorL - 0.02, doorR + 0.02);
-      if (zs < 0 && y > CABIN_WIN.y0 - 0.02 && y < CABIN_WIN.y1 + 0.02) spans = cut(spans, -CABIN_WIN.w / 2 - 0.02, CABIN_WIN.w / 2 + 0.02);
-      for (const [a, b] of spans) w.logs.log('x', LOG_R, b - a, pickTone(LOG_TONES), (a + b) / 2, y, zs * (HD + LOG_OFF));
+    for (const [side, zs] of [['front', 1], ['back', -1]]) {
+      const kit = top <= H ? W[side].logs : W[side].gable;
+      for (const [a, b] of openSpans(side, [[-reach, reach]], y)) {
+        kit.log('x', LOG_R, b - a, pickTone(LOG_TONES), (a + b) / 2, y, zs * (HD + LOG_OFF));
+      }
     }
   }
 
   // ---- eave walls (left, right): logs along Z, half a course higher ----
   const underEave = H - LOG_FACE * slope - 0.03;     // eave underside above the logs' outer face
+  const run = HD + LOG_OFF + LOG_EXT;
   let lastTop = 0;
   for (let k = 0; ; k++) {
     const y = y0 + LOG_STEP / 2 + k * LOG_STEP;
     if (y + LOG_R > underEave) break;
-    for (const [w, xs] of [[W.left, -1], [W.right, 1]]) {
-      w.logs.log('z', LOG_R, 2 * (HD + LOG_OFF + LOG_EXT), pickTone(LOG_TONES), xs * (HW + LOG_OFF), y, 0);
+    for (const [side, xs] of [['left', -1], ['right', 1]]) {
+      for (const [a, b] of openSpans(side, [[-run, run]], y)) {
+        W[side].logs.log('z', LOG_R, b - a, pickTone(LOG_TONES), xs * (HW + LOG_OFF), y, (a + b) / 2);
+      }
     }
     lastTop = y + LOG_R;
   }
-  for (const [w, xs] of [[W.left, -1], [W.right, 1]]) {
+  for (const side of ['left', 'right']) {
     // sill timber under the first course, top plate up to the eave
     const sillH = y0 + LOG_STEP / 2 - LOG_R - FOOT_H + 0.05;
-    w.logs.add(grainUV(rbox(LOG_FACE - 0.05, sillH, ROOM.d + 0.1, 0.03, 1), 'z'), TRIM,
-      xs * (HW + 0.04 + (LOG_FACE - 0.05) / 2), FOOT_H + sillH / 2 - 0.02, 0);
+    put(W[side].logs, side, grainUV(wbox(side, ROOM.d + 0.1, sillH, LOG_FACE - 0.05), 'z'), TRIM,
+      0, FOOT_H + sillH / 2 - 0.02, 0.04 + (LOG_FACE - 0.05) / 2);
     const plateH = underEave - lastTop + 0.06;
-    w.logs.add(grainUV(rbox(LOG_FACE - 0.05, plateH, ROOM.d + 0.1, 0.03, 1), 'z'), TRIM,
-      xs * (HW + 0.04 + (LOG_FACE - 0.05) / 2), lastTop - 0.06 + plateH / 2, 0);
+    put(W[side].logs, side, grainUV(wbox(side, ROOM.d + 0.1, plateH, LOG_FACE - 0.05), 'z'), TRIM,
+      0, lastTop - 0.06 + plateH / 2, 0.04 + (LOG_FACE - 0.05) / 2);
   }
 
-  // ---- door and window casings (cover the cut log ends) ----
-  const depth = LOG_FACE + 0.06;
-  {
-    const zc = HD - 0.02 + depth / 2, jambH = CABIN_DOOR.h + 0.14;
-    for (const x of [doorL - 0.07, doorR + 0.07]) {
-      W.front.logs.add(grainUV(rbox(0.14, jambH, depth, 0.03, 1), 'y'), TRIM, x, jambH / 2, zc);
-    }
-    W.front.logs.add(grainUV(rbox(CABIN_DOOR.w + 0.44, 0.2, depth + 0.05, 0.04, 1), 'x'), TRIM,
-      CABIN_DOOR.cx, CABIN_DOOR.h + 0.11, zc + 0.02);
-  }
-  {
-    const zc = -(HD - 0.02 + depth / 2), wy = (CABIN_WIN.y0 + CABIN_WIN.y1) / 2, jambH = CABIN_WIN.y1 - CABIN_WIN.y0 + 0.24;
-    for (const xs of [-1, 1]) {
-      W.back.logs.add(grainUV(rbox(0.14, jambH, depth, 0.03, 1), 'y'), TRIM, xs * (CABIN_WIN.w / 2 + 0.07), wy, zc);
-    }
-    W.back.logs.add(grainUV(rbox(CABIN_WIN.w + 0.44, 0.2, depth + 0.05, 0.04, 1), 'x'), TRIM, 0, CABIN_WIN.y1 + 0.12, zc - 0.02);
-    // sill, sloped out a touch beyond the logs
-    W.back.logs.add(grainUV(rbox(CABIN_WIN.w + 0.56, 0.1, depth + 0.16, 0.035, 1), 'x'), TRIM, 0, CABIN_WIN.y0 - 0.07, zc - 0.08);
-    // board-and-batten shutters, painted the roof's green
-    const SHUT = 0x3e6a44;
-    for (const xs of [-1, 1]) {
-      const sx = xs * (CABIN_WIN.w / 2 + 0.16 + 0.4), sz = -(HD + LOG_FACE + 0.03);
-      for (let b = 0; b < 3; b++) {
-        W.back.logs.add(grainUV(rbox(0.25, 2.1, 0.05, 0.015, 1), 'y'), SHUT, sx + (b - 1) * 0.262, wy, sz);
+  // ---- door and window casings (they cover the cut log ends) ----
+  const depth = LOG_FACE + 0.06, oc = depth / 2 - 0.02;
+  const leaf = new THREE.SphereGeometry(1, 9, 7), bloom = new THREE.SphereGeometry(1, 8, 6);
+  for (const side of SIDES) {
+    const kit = W[side].logs, ax = AX[side];
+    for (const o of CABIN_OPENINGS[side]) {
+      const L = o.at - o.w / 2, R = o.at + o.w / 2;
+      if (o.kind === 'door') {
+        const jambH = o.y1 + 0.14;
+        for (const a of [L - 0.07, R + 0.07]) put(kit, side, grainUV(wbox(side, 0.14, jambH, depth), 'y'), TRIM, a, jambH / 2, oc);
+        put(kit, side, grainUV(wbox(side, o.w + 0.44, 0.2, depth + 0.05, 0.04), ax), TRIM, o.at, o.y1 + 0.11, oc + 0.02);
+        continue;
       }
-      for (const by of [-0.7, 0.7]) {
-        W.back.logs.add(grainUV(rbox(0.74, 0.11, 0.05, 0.02, 1), 'x'), SHUT, sx, wy + by, sz - 0.04);
+      const wy = (o.y0 + o.y1) / 2, jambH = o.y1 - o.y0 + 0.24;
+      for (const a of [L - 0.07, R + 0.07]) put(kit, side, grainUV(wbox(side, 0.14, jambH, depth), 'y'), TRIM, a, wy, oc);
+      put(kit, side, grainUV(wbox(side, o.w + 0.44, 0.2, depth + 0.05, 0.04), ax), TRIM, o.at, o.y1 + 0.12, oc + 0.02);
+      // sill, sloped out a touch beyond the logs
+      put(kit, side, grainUV(wbox(side, o.w + 0.56, 0.1, depth + 0.16, 0.035), ax), TRIM, o.at, o.y0 - 0.07, oc + 0.08);
+      if (o.shutters) {
+        // board-and-batten shutters, painted the roof's green
+        const SHUT = 0x3e6a44, sw = Math.min(0.76, o.w / 2 - 0.04), nb = sw > 0.55 ? 3 : 2, bw = sw / nb;
+        const sh = o.y1 - o.y0 + 0.1, out = LOG_FACE + 0.03;
+        const bdx = sw - 0.12, bdy = sh * 2 / 3, brace = Math.hypot(bdx, bdy) + 0.06;
+        for (const xs of [-1, 1]) {
+          const sa = o.at + xs * (o.w / 2 + 0.16 + sw / 2);
+          for (let b = 0; b < nb; b++) {
+            put(kit, side, grainUV(wbox(side, bw - 0.01, sh, 0.05, 0.015), 'y'), SHUT, sa + (b - (nb - 1) / 2) * bw, wy, out);
+          }
+          for (const by of [-sh / 3, sh / 3]) put(kit, side, grainUV(wbox(side, sw - 0.02, 0.11, 0.05, 0.02), ax), SHUT, sa, wy + by, out + 0.04);
+          put(kit, side, grainUV(wbox(side, 0.07, brace, 0.04, 0.015), 'y'), SHUT, sa, wy, out + 0.045, xs * -Math.atan2(bdx, bdy));
+        }
       }
-      W.back.logs.add(grainUV(rbox(0.07, 1.62, 0.04, 0.015, 1), 'y'), SHUT, sx, wy, sz - 0.045, 0, 0, xs * -0.42);
-    }
-    // flower box under the sill, with a mound of blooms
-    const boxZ = -(HD + LOG_FACE + 0.15), boxY = CABIN_WIN.y0 - 0.42;
-    W.back.logs.add(grainUV(rbox(CABIN_WIN.w + 0.1, 0.26, 0.28, 0.04, 1), 'x'), 0x6b4428, 0, boxY, boxZ);
-    const leaf = new THREE.SphereGeometry(1, 9, 7), bloom = new THREE.SphereGeometry(1, 8, 6);
-    for (let i = 0; i < 15; i++) {
-      const x = -CABIN_WIN.w / 2 + 0.18 + (i / 14) * (CABIN_WIN.w - 0.36);
-      W.back.stones.add(leaf, [0x1f4416, 0x2a521c, 0x1a3a12][i % 3], x, boxY + 0.15, boxZ + (i % 2 ? 0.04 : -0.04), 0, 0, 0, 0.13, 0.09, 0.12);
-    }
-    for (let i = 0; i < 18; i++) {
-      const x = -CABIN_WIN.w / 2 + 0.2 + Math.random() * (CABIN_WIN.w - 0.4);
-      W.back.stones.add(bloom, [0xc8140f, 0xe8a000, 0x8a1fae, 0xe8400c, 0xd0185a][i % 5], x, boxY + 0.21 + Math.random() * 0.06,
-        boxZ + (Math.random() - 0.5) * 0.15, 0, 0, 0, 0.065 + Math.random() * 0.03);
+      if (o.flowers) {
+        // flower box under the sill, with a mound of blooms
+        const out = LOG_FACE + 0.15, boxY = o.y0 - 0.42;
+        put(kit, side, grainUV(wbox(side, o.w + 0.1, 0.26, 0.28, 0.04), ax), 0x6b4428, o.at, boxY, out);
+        const nLeaf = Math.round(o.w * 4.4), nBloom = Math.round(o.w * 5.3);
+        for (let i = 0; i < nLeaf; i++) {
+          const a = L + 0.18 + (i / (nLeaf - 1)) * (o.w - 0.36);
+          const [x, y, z] = toWorld(side, a, boxY + 0.15, out + (i % 2 ? 0.04 : -0.04));
+          W[side].stones.add(leaf, [0x1f4416, 0x2a521c, 0x1a3a12][i % 3], x, y, z, 0, 0, 0, 0.13, 0.09, 0.12);
+        }
+        for (let i = 0; i < nBloom; i++) {
+          const [x, y, z] = toWorld(side, L + 0.2 + Math.random() * (o.w - 0.4), boxY + 0.21 + Math.random() * 0.06,
+            out + (Math.random() - 0.5) * 0.15);
+          W[side].stones.add(bloom, [0xc8140f, 0xe8a000, 0x8a1fae, 0xe8400c, 0xd0185a][i % 5], x, y, z, 0, 0, 0, 0.065 + Math.random() * 0.03);
+        }
+      }
     }
   }
 
-  // ---- fieldstone footing ----
+  // ---- fieldstone footing (open at the doors) ----
   const footD = LOG_FACE + 0.06;
-  const layStones = (w, axis, from, to, outward, skip) => {
-    // a dark mortar bed behind the stones (open at the door)
-    for (const [a, b] of skip ? cut([[from, to]], skip[0], skip[1]) : [[from, to]]) {
-      w.stones.add(rbox(axis === 'x' ? b - a : footD * 0.7, FOOT_H, axis === 'x' ? footD * 0.7 : b - a, 0.03, 1),
-        0x2a2622, axis === 'x' ? (a + b) / 2 : outward * (HW + 0.04 + footD * 0.33), FOOT_H / 2,
-        axis === 'x' ? outward * (HD + 0.04 + footD * 0.33) : (a + b) / 2);
+  const layStones = (side, from, to) => {
+    const kit = W[side].stones, skips = CABIN_OPENINGS[side].filter(o => o.kind === 'door')
+      .map(o => [o.at - o.w / 2 - 0.12, o.at + o.w / 2 + 0.12]);
+    const open = mid => skips.some(([a, b]) => mid > a && mid < b);
+    // a dark mortar bed behind the stones
+    for (const [a, b] of skips.reduce((s, [a, b]) => cut(s, a, b), [[from, to]])) {
+      put(kit, side, wbox(side, b - a, FOOT_H, footD * 0.7), 0x2a2622, (a + b) / 2, FOOT_H / 2, 0.04 + footD * 0.33);
     }
     for (const [ry, rh] of [[0, 0.16], [0.145, 0.155]]) {
       for (let p = from + (ry ? 0.2 : 0); p < to - 0.08;) {
         const len = Math.min(0.3 + Math.random() * 0.3, to - p);
         const mid = p + len / 2;
         p += len;
-        if (skip && mid > skip[0] && mid < skip[1]) continue;
+        if (open(mid)) continue;
         const d = footD + (Math.random() - 0.5) * 0.05, h = rh + (Math.random() - 0.5) * 0.025;
-        const geo = rbox(axis === 'x' ? len - 0.035 : d, h, axis === 'x' ? d : len - 0.035, 0.045, 1);
         const off = d / 2 + 0.04 + Math.random() * 0.015;   // clear of the wall plane (its depth offset lets touching parts bleed through)
-        w.stones.add(geo, pickTone(STONE_TONES),
-          axis === 'x' ? mid : outward * (HW + off), ry + h / 2,
-          axis === 'x' ? outward * (HD + off) : mid);
+        put(kit, side, wbox(side, len - 0.035, h, d, 0.045), pickTone(STONE_TONES), mid, ry + h / 2, off);
       }
     }
   };
-  const footSpan = HW + footD;
-  layStones(W.front, 'x', -footSpan, footSpan, 1, [doorL - 0.12, doorR + 0.12]);
-  layStones(W.back, 'x', -footSpan, footSpan, -1);
-  layStones(W.left, 'z', -HD, HD, -1);
-  layStones(W.right, 'z', -HD, HD, 1);
-  // a flat stone step at the door
-  W.front.stones.add(rbox(CABIN_DOOR.w + 0.55, 0.12, footD + 0.28, 0.04, 2), 0x5f5952, CABIN_DOOR.cx, 0.06, HD + (footD + 0.28) / 2);
+  layStones('front', -(HW + footD), HW + footD);
+  layStones('back', -(HW + footD), HW + footD);
+  layStones('left', -HD, HD);
+  layStones('right', -HD, HD);
+  // a flat stone step at each door
+  for (const side of SIDES) {
+    for (const o of CABIN_OPENINGS[side]) {
+      if (o.kind === 'door') put(W[side].stones, side, wbox(side, o.w + 0.55, 0.12, footD + 0.28, 0.04), 0x5f5952, o.at, 0.06, (footD + 0.28) / 2);
+    }
+  }
 
   // ---- a little gabled canopy over the front door ----
   {
-    const cx = CABIN_DOOR.cx, z0 = HD + LOG_FACE - 0.02, depthC = 0.85;
-    const half = 0.85, drop = 0.36, yRidge = CABIN_DOOR.h + 0.85;
+    const cx = CABIN_DOOR.at, z0 = HD + LOG_FACE - 0.02, depthC = 0.85;
+    const half = 0.85, drop = 0.36, yRidge = CABIN_DOOR.y1 + 0.85;
     const run = Math.hypot(half, drop);
     const shingles = cabinKit(), snowKit = cabinKit();
     const m = new THREE.Matrix4(), c = new THREE.Vector3();
@@ -2669,7 +2710,7 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
         shingles.addMatrix(geo, 0xf0f0f0, m);
       }
       // bracket from the logs up under the eave
-      W.front.logs.add(grainUV(rbox(0.07, 0.7, 0.07, 0.02, 1), 'y'), TRIM, cx + sx * (half - 0.25), CABIN_DOOR.h + 0.26, z0 + 0.3, Math.PI / 4);
+      W.front.logs.add(grainUV(rbox(0.07, 0.7, 0.07, 0.02, 1), 'y'), TRIM, cx + sx * (half - 0.25), CABIN_DOOR.y1 + 0.26, z0 + 0.3, Math.PI / 4);
       // snow over the shingles
       c.set(cx, yRidge, z0 + depthC / 2).addScaledVector(d, run / 2).addScaledVector(n, 0.13);
       m.makeBasis(d, n, zz).setPosition(c);
@@ -2686,23 +2727,24 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
   }
 
   // ---- inside trim: baseboard and ceiling trim along each wall (pushed off
-  // the wall plane so they don't z-fight it) ----
-  for (const [w, axis, sgn] of [[W.back, 'x', -1], [W.front, 'x', 1], [W.left, 'z', -1], [W.right, 'z', 1]]) {
-    const kit = cabinKit(), len = axis === 'x' ? ROOM.w : ROOM.d, wallAt = axis === 'x' ? HD : HW;
+  // the wall plane so they don't z-fight it; the baseboard stops at doors) ----
+  for (const side of SIDES) {
+    const kit = cabinKit(), len = AX[side] === 'x' ? ROOM.w : ROOM.d;
+    const doors = CABIN_OPENINGS[side].filter(o => o.kind === 'door');
     for (const [h, y, d] of [[0.18, 0.09, 0.05], [0.12, ROOM.h - 0.06, 0.08]]) {
-      const at = sgn * (wallAt - d / 2 - 0.035);
-      kit.add(grainUV(rbox(axis === 'x' ? len : d, h, axis === 'x' ? d : len, 0.015, 1), axis), 0x4a3020,
-        axis === 'x' ? 0 : at, y, axis === 'x' ? at : 0);
+      const spans = y > 1 ? [[-len / 2, len / 2]] : doors.reduce((s, o) => cut(s, o.at - o.w / 2 - 0.14, o.at + o.w / 2 + 0.14), [[-len / 2, len / 2]]);
+      for (const [a, b] of spans) put(kit, side, grainUV(wbox(side, b - a, h, d, 0.015), AX[side]), 0x4a3020, (a + b) / 2, y, -(d / 2 + 0.035));
     }
     const m = kit.build(cabinTimberMat, { cast: false });
     root.add(m);
-    trackLike(m, w.ref);
+    trackLike(m, W[side].ref);
   }
 
-  // ---- three log beams across the ceiling (hide with it in X-ray view) ----
+  // ---- log beams across the ceiling (hide with it in X-ray view); one
+  // sits over the wall between the back and front rooms ----
   {
     const kit = cabinKit();
-    for (const z of [-2.7, 0, 2.7]) kit.log('x', 0.15, ROOM.w - 0.02, pickTone(LOG_TONES), 0, ROOM.h - 0.19, z);
+    for (const z of [-4.4, -1, 2.3, 5.2]) kit.log('x', 0.15, ROOM.w - 0.02, pickTone(LOG_TONES), 0, ROOM.h - 0.19, z);
     const beams = kit.build(cabinTimberMat, { cast: false });
     root.add(beams);
     trackLike(beams, wallData.find(w => w.normal.y < -0.9));   // the ceiling
@@ -2713,6 +2755,138 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
       root.add(m);
       trackLike(m, w.ref);
     }
+    const gable = w.gable.build(cabinTimberMat);
+    if (gable) {
+      root.add(gable);
+      trackLike(gable, w.ref);
+      roofParts.push(gable);
+    }
+  }
+}
+
+// ==========================================================
+// INTERIOR WALLS — partitions between the rooms, faced like the insides of
+// the outer walls, with cased doorways. In X-ray view each wall swaps for a
+// low cut-away stub (a dollhouse section) so the rooms behind it stay in
+// view from outside; first person and the closed view get full height.
+// Hang projects on the OUTER walls: anything on a partition above the stub
+// would float in X-ray view.
+// ==========================================================
+const PARTITION_T = 0.2, CUT_H = 1.05;
+const INNER_DOOR = { w: 1.2, h: 2.45 };
+// axis 'x' walls run along X at z = at; axis 'z' walls run along Z at x = at.
+// `doors` are doorway centres along the wall.
+const PARTITIONS = [
+  { axis: 'x', at: -1,   from: -ROOM.w / 2, to: ROOM.w / 2, doors: [-1.3, 1.3] },   // back rooms | front rooms
+  { axis: 'z', at: 0,    from: -ROOM.d / 2, to: -1,         doors: [] },           // office | game room
+  { axis: 'z', at: -2.5, from: -1,          to: ROOM.d / 2, doors: [0.6] },        // bedroom | kitchen
+];
+const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
+{
+  const T = PARTITION_T, H = ROOM.h, DW = INNER_DOOR.w, DH = INNER_DOOR.h;
+  const TRIM = 0x4a3020, CASE = 0x5d3b22, CAP = 0x3a2618, DOOR = [0x7a4426, 0x6f3e22, 0x804a2a];
+  const full = cabinKit(), fullTrim = cabinKit(), cut = cabinKit(), cutTrim = cabinKit();
+  const spansOf = p => p.doors.reduce((spans, d) => spans.flatMap(([a, b]) =>
+    (d + DW / 2 <= a || d - DW / 2 >= b) ? [[a, b]] : [[a, d - DW / 2], [d + DW / 2, b]].filter(([s, e]) => e - s > 0.05)),
+    [[p.from, p.to]]);
+  // a wall slab from a to b along the wall, y0..y1 high, with metre UVs so
+  // its log bands line up with the outer walls'
+  const slab = (kit, p, a, b, y0, y1) => {
+    const alongX = p.axis === 'x', cu = (a + b) / 2, cy = (y0 + y1) / 2;
+    const geo = alongX ? new THREE.BoxGeometry(b - a, y1 - y0, T) : new THREE.BoxGeometry(T, y1 - y0, b - a);
+    const P = geo.attributes.position, U = geo.attributes.uv;
+    for (let i = 0; i < P.count; i++) {
+      U.setXY(i, ((alongX ? P.getX(i) : P.getZ(i)) + cu) / WALL_TEX_W, (P.getY(i) + cy) / WALL_TEX_H);
+    }
+    kit.add(geo, 0xffffff, alongX ? cu : p.at, cy, alongX ? p.at : cu);
+  };
+  // a board along the wall (len × h × depth), `off` out from the wall's centre line
+  const board = (kit, p, len, h, depth, color, u, y, off, r = 0.015) => {
+    const alongX = p.axis === 'x';
+    const geo = grainUV(alongX ? rbox(len, h, depth, r, 1) : rbox(depth, h, len, r, 1), len >= h ? p.axis : 'y');
+    kit.add(geo, color, alongX ? u : p.at + off, y, alongX ? p.at + off : u);
+  };
+  for (const p of PARTITIONS) {
+    const spans = spansOf(p);
+    for (const [a, b] of spans) {
+      slab(full, p, a, b, 0, H);
+      slab(cut, p, a, b, 0, CUT_H);
+      for (const s of [-1, 1]) {
+        for (const kit of [fullTrim, cutTrim]) board(kit, p, b - a, 0.16, 0.04, TRIM, (a + b) / 2, 0.08, s * (T / 2 + 0.02));   // baseboards
+      }
+      board(cutTrim, p, b - a, 0.05, T + 0.06, CAP, (a + b) / 2, CUT_H + 0.025, 0, 0.02);   // cap on the cut
+    }
+    for (const s of [-1, 1]) board(fullTrim, p, p.to - p.from, 0.1, 0.05, TRIM, (p.from + p.to) / 2, H - 0.06, s * (T / 2 + 0.025));   // ceiling trim
+    for (const d of p.doors) {
+      slab(full, p, d - DW / 2, d + DW / 2, DH, H);   // header
+      // linings inside the opening, and casings on both faces
+      for (const e of [-1, 1]) {
+        const u = d + e * (DW / 2 - 0.015);
+        const lining = p.axis === 'x' ? rbox(0.03, DH, T + 0.02, 0.01, 1) : rbox(T + 0.02, DH, 0.03, 0.01, 1);
+        full.add(grainUV(lining, 'y'), CASE, p.axis === 'x' ? u : p.at, DH / 2, p.axis === 'x' ? p.at : u);
+        const stub = p.axis === 'x' ? rbox(0.03, CUT_H, T + 0.02, 0.01, 1) : rbox(T + 0.02, CUT_H, 0.03, 0.01, 1);
+        cutTrim.add(grainUV(stub, 'y'), CASE, p.axis === 'x' ? u : p.at, CUT_H / 2, p.axis === 'x' ? p.at : u);
+        for (const s of [-1, 1]) {
+          const off = s * (T / 2 + 0.02);
+          board(fullTrim, p, 0.1, DH + 0.08, 0.04, CASE, d + e * (DW / 2 + 0.05), (DH + 0.08) / 2, off);
+        }
+      }
+      for (const s of [-1, 1]) board(fullTrim, p, DW + 0.3, 0.12, 0.045, CASE, d, DH + 0.1, s * (T / 2 + 0.022));
+      full.add(grainUV(p.axis === 'x' ? rbox(DW, 0.03, T + 0.02, 0.01, 1) : rbox(T + 0.02, 0.03, DW, 0.01, 1), p.axis), CASE,
+        p.axis === 'x' ? d : p.at, DH - 0.015, p.axis === 'x' ? p.at : d);
+    }
+  }
+  // plank doors, swung open flat against the wall beside their doorways
+  // (their open side faces the room each one belongs to)
+  const leaf = (p, d, side, hinge) => {
+    const u0 = d + hinge * (DW / 2 + 0.06), off = side * (T / 2 + 0.07);
+    for (let i = 0; i < 5; i++) {
+      const u = u0 + hinge * (0.12 + i * 0.22);
+      board(fullTrim, p, 0.21, DH - 0.12, 0.05, DOOR[i % 3], u, (DH - 0.12) / 2 + 0.03, off, 0.012);
+    }
+    for (const y of [0.5, DH - 0.6]) board(fullTrim, p, 1.05, 0.12, 0.035, 0x5d3420, u0 + hinge * 0.56, y, off + side * 0.04, 0.012);
+  };
+  leaf(PARTITIONS[0], -1.3, -1, -1);   // office door, inside the office
+  leaf(PARTITIONS[0], 1.3, -1, 1);     // game room door, inside the game room
+  leaf(PARTITIONS[2], 0.6, -1, 1);     // bedroom door, inside the bedroom
+  for (const [kit, mat, list] of [[full, wallMat, partitionFull], [fullTrim, cabinTimberMat, partitionFull],
+                                  [cut, wallMat, partitionCut], [cutTrim, cabinTimberMat, partitionCut]]) {
+    const m = kit.build(mat);
+    m.userData.noBake = true;   // toggled in X-ray view, so never merged with static meshes
+    root.add(m);
+    list.push(m);
+  }
+}
+
+// window frames — inside casing, a sill (stool) with an apron under it, and
+// a painted sash with glazing bars set into the log wall. They hide with
+// their wall in X-ray view.
+{
+  const CASE = 0x6b4428, SASH = 0xb8ae96;
+  for (const side of ['back', 'front', 'left', 'right']) {
+    const kit = cabinKit(), ax = WALL_AXIS[side];
+    const put = (geo, color, along, y, out) => kit.add(geo, color, ...wallPoint(side, along, y, out));
+    for (const o of CABIN_OPENINGS[side]) {
+      if (o.kind !== 'window') continue;
+      const L = o.at - o.w / 2, R = o.at + o.w / 2, h = o.y1 - o.y0, wy = (o.y0 + o.y1) / 2;
+      // casing on the room side
+      for (const a of [L - 0.06, R + 0.06]) put(grainUV(wallBox(side, 0.12, h + 0.12, 0.05, 0.015), 'y'), CASE, a, wy + 0.06, -0.03);
+      put(grainUV(wallBox(side, o.w + 0.36, 0.13, 0.055, 0.02), ax), CASE, o.at, o.y1 + 0.065, -0.032);
+      put(grainUV(wallBox(side, o.w + 0.42, 0.06, 0.26, 0.02), ax), CASE, o.at, o.y0 - 0.03, -0.1);     // stool
+      put(grainUV(wallBox(side, o.w + 0.24, 0.11, 0.04, 0.015), ax), CASE, o.at, o.y0 - 0.12, -0.025);  // apron
+      // sash, halfway into the wall
+      const out = LOG_FACE * 0.45;
+      for (const a of [L + 0.035, R - 0.035]) put(grainUV(wallBox(side, 0.07, h, 0.06, 0.012), 'y'), SASH, a, wy, out);
+      for (const y of [o.y0 + 0.035, o.y1 - 0.035]) put(grainUV(wallBox(side, o.w, 0.07, 0.06, 0.012), ax), SASH, o.at, y, out);
+      // glazing bars: panes about 0.75 wide, split once across the middle
+      const cols = Math.max(2, Math.round(o.w / 0.8));
+      for (let i = 1; i < cols; i++) put(wallBox(side, 0.035, h - 0.07, 0.045, 0.01), SASH, L + (o.w * i) / cols, wy, out);
+      put(wallBox(side, o.w - 0.07, 0.035, 0.045, 0.01), SASH, o.at, wy, out);
+    }
+    const m = kit.build(cabinTimberMat, { cast: false });
+    if (!m) continue;
+    root.add(m);
+    trackLike(m, wallRef(side));
   }
 }
 
@@ -2739,21 +2913,26 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
 }
 
 // ==========================================================
-// BACK PORCH — wooden deck behind the cabin (back wall, -Z side) under its
-// own small shingled roof, carried on two log posts
+// BACK PORCH — wooden deck along the back of the cabin (-Z side) under its
+// own shingled roof, carried on four log posts
 // ==========================================================
 {
-  const porchW = 6.0;
+  const porchW = ROOM.w + 1.0;
   const porchD = 2.6;                        // depth out from back wall
   const porchCenterZ = -ROOM.d / 2 - porchD / 2;
   const porchFarZ = -ROOM.d / 2 - porchD;     // outer edge of porch
   const DECK = [0x8a5f3c, 0x83593a, 0x916644], BEAM = 0x5d3b22;
   const kit = cabinKit();
 
-  // DECK — boards along X with hairline gaps, on rim joists (top at y = 0.12)
+  // DECK — rows of planks along X with hairline gaps and staggered butt
+  // joints, on rim joists (top at y = 0.12)
   const boards = 9, bw = porchD / boards;
   for (let i = 0; i < boards; i++) {
-    kit.add(grainUV(rbox(porchW, 0.07, bw - 0.02, 0.018, 1), 'x'), DECK[i % 3], 0, 0.085, -ROOM.d / 2 - bw / 2 - i * bw);
+    for (let x = -porchW / 2 - (i % 3) * 0.9; x < porchW / 2 - 0.05;) {
+      const end = Math.min(x + 2.6 + Math.random() * 1.4, porchW / 2), a = Math.max(x, -porchW / 2);
+      kit.add(grainUV(rbox(end - a - 0.012, 0.07, bw - 0.02, 0.018, 1), 'x'), pickTone(DECK), (a + end) / 2, 0.085, -ROOM.d / 2 - bw / 2 - i * bw);
+      x = end;
+    }
   }
   kit.add(grainUV(rbox(porchW + 0.04, 0.12, 0.1, 0.025, 1), 'x'), BEAM, 0, 0.06, porchFarZ + 0.05);
   for (const xs of [-1, 1]) {
@@ -2764,16 +2943,20 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
     kit.add(grainUV(rbox(2.4, 0.07, 0.32, 0.02, 1), 'x'), DECK[i], 0, 0.045 - i * 0.04, porchFarZ - 0.16 - i * 0.32);
   }
 
-  // 2 LOG POSTS at the outer corners, a log beam across them, knee braces
+  // LOG POSTS along the outer edge, a log beam across them, knee braces
   const colHeight = 3.2;
   const colX = porchW / 2 - 0.3;
   const postZ = porchFarZ + 0.25;
   const beamY = 0.12 + colHeight + 0.13;
-  for (const xs of [-1, 1]) {
-    kit.add(logGeo(0.13, colHeight), pickTone(LOG_TONES), xs * colX, 0.12 + colHeight / 2, postZ);
-    kit.add(rbox(0.36, 0.1, 0.36, 0.035, 1), 0x5f5952, xs * colX, 0.17, postZ);          // stone pad
-    // brace from the post up to the beam, toward the middle of the porch
-    kit.add(grainUV(rbox(0.08, 0.82, 0.08, 0.02, 1), 'y'), BEAM, xs * (colX - 0.29), beamY - 0.42, postZ, 0, 0, xs * Math.PI / 4);
+  for (const px of [-colX, -colX / 3, colX / 3, colX]) {
+    kit.add(logGeo(0.13, colHeight), pickTone(LOG_TONES), px, 0.12 + colHeight / 2, postZ);
+    kit.add(rbox(0.36, 0.1, 0.36, 0.035, 1), 0x5f5952, px, 0.17, postZ);          // stone pad
+    // braces from the post up to the beam (both ways from the middle posts)
+    for (const xs of [-1, 1]) {
+      if (Math.abs(px + xs * 0.29) < colX) {
+        kit.add(grainUV(rbox(0.08, 0.82, 0.08, 0.02, 1), 'y'), BEAM, px + xs * 0.29, beamY - 0.42, postZ, 0, 0, -xs * Math.PI / 4);
+      }
+    }
   }
   kit.log('x', 0.14, porchW + 0.5, pickTone(LOG_TONES), 0, beamY, postZ);
 
@@ -2839,8 +3022,11 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
     // fascia along the low edge
     c.set(0, yEdge, zEdge).addScaledVector(n, -0.06);
     deckKit.add(grainUV(rbox(width + 0.04, 0.22, 0.07, 0.025, 1), 'x'), 0x4a3020, 0, c.y, c.z);
-    root.add(deckKit.build(cabinTimberMat));
-    root.add(roofKit.build(shingleMat));
+    const backRef = wallRef('back');
+    for (const m of [deckKit.build(cabinTimberMat), roofKit.build(shingleMat)]) {
+      root.add(m);
+      trackLike(m, backRef);
+    }
     // snow over the shingles
     const snowKit = cabinKit();
     c.set(0, yWall, zWall).addScaledVector(d, run / 2).addScaledVector(n, 0.16);
@@ -2848,6 +3034,7 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
     snowKit.addMatrix(rbox(run + 0.02, 0.06, width + 0.02, 0.03, 1), 0xffffff, m);
     const snow = snowKit.build(cabinSnowMat, { cast: false, receive: false });
     root.add(snow);
+    trackLike(snow, backRef);
     snowCaps.push(snow);
   }
 
@@ -2892,9 +3079,9 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
       arm.position.set(sx, seatH + 0.24, 0.02);
       bench.add(arm);
     }
-    // on the deck, clear of the window's flower box, facing out toward the
-    // field/ocean
-    bench.position.set(0, 0.12, -(ROOM.d / 2 + LOG_FACE + seatD / 2 + 0.45));
+    // on the deck under the office window, clear of its flower box, facing
+    // out toward the field/ocean
+    bench.position.set(CABIN_OPENINGS.back[0].at, 0.12, -(ROOM.d / 2 + LOG_FACE + seatD / 2 + 0.45));
     bench.rotation.y = Math.PI;
     root.add(bench);
   }
@@ -4177,23 +4364,23 @@ function injectHaze(shader, range, ceiling) {
 // stays leafy. The whole forest is three meshes, and the wind sway, the leaf
 // flutter and the snow all happen in the vertex shader (FX uniforms).
 // Procedurally scatter many trees in a broad ring around the building. The
-// room footprint is roughly x: ±5, z: ±5 — we steer trees away from there
+// room footprint is ±ROOM.w/2, ±ROOM.d/2 — we steer trees away from there
 // and away from the direct view-out-the-window so they don't crowd the ocean.
 const treePositions = [];
 function safeFromRoom(x, z) {
-  return Math.abs(x) > 7 || Math.abs(z) > 7; // outside building + a margin
+  return Math.abs(x) > ROOM.w / 2 + 2.5 || Math.abs(z) > ROOM.d / 2 + 2.5; // outside building + a margin
 }
 function safeFromWindowFOV(x, z) {
-  // back of building (z<-5) — keep a corridor clear so the ocean is visible
-  return !(z < -5 && Math.abs(x) < 5);
+  // behind the building — keep a corridor clear so the ocean is visible
+  return !(z < -ROOM.d / 2 && Math.abs(x) < ROOM.w / 2 + 1);
 }
 // keep trees + rocks out of the campsite and truck footprints so they don't
 // pop through tents, chairs, or the truck body
 function safeFromCampsiteAndTruck(x, z) {
   // campsite: roughly x = -7..2, z = -20..-12 (campfire, tent, chairs)
   if (x > -7.5 && x < 2.5 && z > -20.5 && z < -12) return false;
-  // truck: parked alongside the cabin, roughly x = 6..11, z = 1..8
-  if (x > 6 && x < 11 && z > 1 && z < 8) return false;
+  // truck: parked alongside the cabin, roughly x = 8..13, z = 2..9
+  if (x > 8.1 && x < 13.1 && z > 2 && z < 9) return false;
   return true;
 }
 // keep trees + rocks from spawning on top of the manually-placed yard
@@ -4736,40 +4923,6 @@ let starsPoints;
   root.add(starsPoints);
 }
 
-// window frame
-{
-  const winW = 3.4, winH = 2.0;
-  const frameMat = matStandard(COL.beigePlastic, 0.7);
-  const t = 0.06;
-  const winGroup = new THREE.Group();
-  // outer frame — z = -ROOM.d/2 + 0.13 so the frame's depth (0.18) sits
-  // entirely on the room-side of the wall plane (back wall is at z=-ROOM.d/2)
-  const top = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.2, 0.12, 0.18), frameMat);
-  top.position.set(0, 2.6 + winH / 2 + 0.04, -ROOM.d / 2 + 0.13);
-  winGroup.add(top);
-  const bot = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.2, 0.12, 0.18), frameMat);
-  bot.position.set(0, 2.6 - winH / 2 - 0.04, -ROOM.d / 2 + 0.13);
-  winGroup.add(bot);
-  const lft = new THREE.Mesh(new THREE.BoxGeometry(0.12, winH, 0.18), frameMat);
-  lft.position.set(-winW / 2 - 0.04, 2.6, -ROOM.d / 2 + 0.13);
-  winGroup.add(lft);
-  const rgt = new THREE.Mesh(new THREE.BoxGeometry(0.12, winH, 0.18), frameMat);
-  rgt.position.set(winW / 2 + 0.04, 2.6, -ROOM.d / 2 + 0.13);
-  winGroup.add(rgt);
-  // crossbars (slim) — sit just inside the frame so they don't touch the wall
-  const horiz = new THREE.Mesh(new THREE.BoxGeometry(winW, 0.05, 0.08), frameMat);
-  horiz.position.set(0, 2.6, -ROOM.d / 2 + 0.18);
-  winGroup.add(horiz);
-  const vert = new THREE.Mesh(new THREE.BoxGeometry(0.05, winH, 0.08), frameMat);
-  vert.position.set(0, 2.6, -ROOM.d / 2 + 0.18);
-  winGroup.add(vert);
-  // sill (sticks further into the room)
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.5, 0.08, 0.28), frameMat);
-  sill.position.set(0, 2.6 - winH / 2 - 0.13, -ROOM.d / 2 + 0.20);
-  winGroup.add(sill);
-  root.add(winGroup);
-}
-
 // ==========================================================
 // RUG
 // ==========================================================
@@ -4778,23 +4931,26 @@ let starsPoints;
   // kept under the furniture contact shadows at y=0.012), and a cream fringe
   // along the two short ends
   const mat = new THREE.MeshStandardMaterial({ map: rugTexture(), roughness: 0.95 });
+  const rugGroup = new THREE.Group();
   const rug = new THREE.Mesh(rbox(4.6, 0.01, 3.4, 0.005, 1), mat);
-  rug.position.set(0.2, 0.005, 0.5);
+  rug.position.y = 0.005;
   rug.receiveShadow = true;
-  root.add(rug);
+  rugGroup.add(rug);
   const fringeMat = matStandard(COL.rugCream, 0.95);
   const strand = capsule(0.005, 0.06, 1, 4);
   for (const sx of [-1, 1]) {
     for (let i = 0; i < 40; i++) {
-      const fz = 0.5 - 1.6 + i * (3.2 / 39);
-      if (sx < 0 && fz > 1.45) continue;      // tucked under the bed
       const f = new THREE.Mesh(strand, fringeMat);
       f.rotation.z = Math.PI / 2;
       f.rotation.y = (Math.random() - 0.5) * 0.25;
-      f.position.set(0.2 + sx * 2.34, 0.005, fz);
-      root.add(f);
+      f.position.set(sx * 2.34, 0.005, -1.6 + i * (3.2 / 39));
+      rugGroup.add(f);
     }
   }
+  // living room, in front of the fireplace, its long side along the hearth
+  rugGroup.position.set(3.85, 0, 3.0);
+  rugGroup.rotation.y = Math.PI / 2;
+  root.add(rugGroup);
 }
 
 // ==========================================================
@@ -4843,6 +4999,7 @@ const deskGroup = new THREE.Group();
   knob.position.set(1.2, 0.85, -2.782);
   deskGroup.add(knob);
 }
+deskGroup.position.set(-3.5, 0, -2.5);   // in the office, under the back window
 root.add(deskGroup);
 
 // ==========================================================
@@ -4899,7 +5056,7 @@ root.add(deskGroup);
   for (const sx of [-1, 1]) {
     rod(new THREE.Vector3(sx * 0.3, 0.47, -0.36), new THREE.Vector3(sx * 0.3, 1.5, -0.48), 0.021, 0.018);
   }
-  chair.position.set(0, 0, -2.5);
+  chair.position.set(-3.5, 0, -5.0);
   chair.rotation.y = Math.PI;
   deskChairObj = chair;
   root.add(chair);
@@ -4945,7 +5102,7 @@ root.add(deskGroup);
   chair.add(back);
   // outside the cabin, in front of the front wall, to the left of the door
   // (door is at x=1.6). Back of the chair toward the wall, sitter looks outward.
-  chair.position.set(-1.5, 0, ROOM.d / 2 + 0.6);
+  chair.position.set(1.8, 0, ROOM.d / 2 + 0.6);
   chair.rotation.y = 0; // back panel toward -Z (the front wall behind it)
   sideChairObj = chair;
   root.add(chair);
@@ -5017,7 +5174,7 @@ root.add(deskGroup);
   }
   // place on the porch slab to the right of the chair (chair at x=-1.5).
   // chair seat is 0.75 wide → right edge ≈ -1.13. pot at x=-0.7 leaves a gap.
-  pot.position.set(-0.7, 0, ROOM.d / 2 + 0.55);
+  pot.position.set(2.6, 0, ROOM.d / 2 + 0.55);
   root.add(pot);
 }
 
@@ -5712,7 +5869,7 @@ let campfireWetness = 0;
 
   // park alongside the cabin's right side, oriented along Z so it looks
   // pulled up to the property
-  truck.position.set(8.5, 0, 4.5);
+  truck.position.set(10.6, 0, 5.4);
   truck.rotation.y = -0.35;
   root.add(truck);
 }
@@ -5936,7 +6093,7 @@ let programmerTorso = null; // exposed so the FP system can register the click t
   requestAnimationFrame(() => programmer.userData.animParts.forEach(p => bakeStaticMeshes(p)));
 
   // group origin at floor; place him at chair seat centre, facing the desk
-  programmer.position.set(0, 0, -2.5);
+  programmer.position.set(-3.5, 0, -5.0);
   programmer.rotation.y = Math.PI; // faces -Z toward the back wall / desk
 }
 root.add(programmer);
@@ -6019,7 +6176,7 @@ const laptopAnim = laptopScreenTexture();
   laptopGroup.add(screenTarget);
   screenLight.target = screenTarget;
 
-  laptopGroup.position.set(-0.6, 1.09, -3.5);
+  laptopGroup.position.set(-4.1, 1.09, -6.0);
   laptopGroup.rotation.y = 0.18;
   // make screen group interactive
   makeInteractive(screen, 'laptop', 'Laptop · Hokku');
@@ -6128,8 +6285,8 @@ const tvAnim = tvScreenTexture();
 
   // close to the right wall but pulled inward enough that the TV body
   // doesn't share an X plane with the wall (which caused depth bleeding)
-  stand.position.set(3.6, 0, -2.6);
-  stand.rotation.y = -Math.PI / 2;
+  stand.position.set(3.5, 0, -6.45);   // game room, against the back wall
+  stand.rotation.y = 0;
   tvObject = stand;
   root.add(stand);
 }
@@ -6226,8 +6383,8 @@ const tvAnim = tvScreenTexture();
   // floor placement just in front of the TV stand on the right wall —
   // pulled inward and forward so the console + cartridge box no longer
   // touch the TV cabinet behind it
-  grp.position.set(2.7, 0, -1.4);   // on the floor (it used to hover 6 cm up)
-  grp.rotation.y = -Math.PI / 2 + 0.15;
+  grp.position.set(3.4, 0, -5.45);   // on the floor in front of the TV
+  grp.rotation.y = 0.15;
   root.add(grp);
 }
 
@@ -6394,7 +6551,7 @@ const tvAnim = tvScreenTexture();
     shelf.add(bear);
   }
 
-  shelf.position.set(-ROOM.w / 2 + 0.3, 0, -1.5);
+  shelf.position.set(-ROOM.w / 2 + 0.3, 0, -4.6);
   shelf.rotation.y = Math.PI / 2;
   root.add(shelf);
 }
@@ -6423,7 +6580,7 @@ const tvAnim = tvScreenTexture();
   // (skip for simplicity)
   makeInteractive(body, 'camera', 'Camera · Photography');
   // perched on top of bookshelf
-  cam.position.set(-4.05, 2.72, -2.0);
+  cam.position.set(-6.55, 2.72, -5.1);
   cam.rotation.y = Math.PI / 2 - 0.5;
   root.add(cam);
 }
@@ -6442,7 +6599,7 @@ const tvAnim = tvScreenTexture();
   screen.position.y = 0.0075;
   ph.add(screen);
   makeInteractive(screen, 'phone', 'Phone · CompressLite');
-  ph.position.set(0.85, 1.094, -3.15);
+  ph.position.set(-2.65, 1.094, -5.65);
   ph.rotation.y = -0.4;
   root.add(ph);
 }
@@ -6481,7 +6638,7 @@ const tvAnim = tvScreenTexture();
   penTip.position.set(0.22, 0.032, -0.18);
   nb.add(penTip);
   makeInteractive(cover, 'notebook', 'Notebook · Opin.Ink');
-  nb.position.set(-1.5, 1.11, -3.2);   // back cover resting on the desk top
+  nb.position.set(-5.0, 1.11, -5.7);   // back cover resting on the desk top
   nb.rotation.y = 0.25;
   root.add(nb);
 }
@@ -6533,7 +6690,7 @@ const tvAnim = tvScreenTexture();
   lever.rotation.z = Math.PI / 2;
   lever.position.set(0, 0.027, -0.25); cb.add(lever);
   makeInteractive(board, 'clipboard', 'Clipboard · Resource Mgmt');
-  cb.position.set(1.65, 1.094, -3.6);
+  cb.position.set(-1.85, 1.094, -6.1);
   cb.rotation.y = -0.15;
   root.add(cb);
 }
@@ -6678,8 +6835,8 @@ const tvAnim = tvScreenTexture();
 
   makeInteractive(screen, 'klast', 'Arcade Cabinet · Klast');
   // tucked into the SW corner, angled to face the middle of the room
-  cab.position.set(-3.82, 0, 3.82);
-  cab.rotation.y = Math.PI * 0.75;
+  cab.position.set(6.25, 0, -6.25);   // game room, back-right corner
+  cab.rotation.y = -Math.PI / 4;
   root.add(cab);
 }
 
@@ -6720,7 +6877,7 @@ const lavaBlobs = [];
   const L = new THREE.PointLight(0xff5060, 0.3, 1.6, 2);
   L.position.y = 0.4; ll.add(L);
   makeInteractive(glass, 'lavaLamp', 'Lava Lamp · Particle Physics');
-  ll.position.set(-1.55, 1.094, -3.6);
+  ll.position.set(-5.05, 1.094, -6.1);
   root.add(ll);
 }
 
@@ -6765,7 +6922,7 @@ const lavaBlobs = [];
   cap.position.y = 0.4; af.add(cap);
   makeInteractive(glass, 'antFarm', 'Ant Farm · ACO');
   // sitting on top of bookshelf, away from camera
-  af.position.set(-4.05, 2.66, -1.0);
+  af.position.set(-6.55, 2.66, -4.1);
   af.rotation.y = Math.PI / 2 - 0.2;
   root.add(af);
 }
@@ -6846,7 +7003,7 @@ const monitorAnim = monitorScreenTexture();
   // back-corner leg was clipping into the bed (which extends X: -3.2..-2.0,
   // Z: 1.5..3.5). Moved left + forward so the whole table footprint clears
   // the bed.
-  mon.position.set(-3.7, 0, 0.6);
+  mon.position.set(-6.2, 0, -2.4);
   mon.rotation.y = Math.PI / 2 - 0.1;
   root.add(mon);
 }
@@ -6895,7 +7052,7 @@ function pictureFrame(w, h, border, depth, mat) {
   makeInteractive(surf, 'whiteboard', 'Whiteboard · Research');
   // pushed 0.14 off the wall so the frame's back face doesn't z-fight with
   // the left wall when the camera is zoomed far out
-  wb.position.set(-ROOM.w / 2 + 0.14, 3.4, 1.2);
+  wb.position.set(-ROOM.w / 2 + 0.14, 3.3, -2.4);
   wb.rotation.y = Math.PI / 2;
   root.add(wb);
 }
@@ -6929,8 +7086,8 @@ function pictureFrame(w, h, border, depth, mat) {
   makeInteractive(screen, 'shatterwing', 'Framed Game Art · Shatterwing');
 
   // Clear the camera and ant farm on the shelf, beside the research whiteboard.
-  display.position.set(-ROOM.w / 2 + 0.14, 3.78, -1.5);
-  display.rotation.y = Math.PI / 2;
+  display.position.set(3.5, 3.45, -ROOM.d / 2 + 0.14);   // game room, above the TV
+  display.rotation.y = 0;
   root.add(display);
 }
 
@@ -6948,7 +7105,7 @@ function pictureFrame(w, h, border, depth, mat) {
   // sit it well to the right of the window opening (window right edge ~ x=1.7).
   // pushed further off the wall (0.14 instead of 0.08) so the frame's back
   // face doesn't z-fight with the back wall when the camera is zoomed way out
-  grp.position.set(3.25, 3.0, -ROOM.d / 2 + 0.14);
+  grp.position.set(-0.99, 3.0, -ROOM.d / 2 + 0.14);   // office back wall, right of the window
   root.add(grp);
 }
 
@@ -6967,7 +7124,9 @@ function pictureFrame(w, h, border, depth, mat) {
   tryUpgradeImageTexture('./images/rastertide.jpg', artMat);
   makeInteractive(art, 'rasterTide', 'Framed Print · Raster Tide');
   // Mirror the Dream Weaver poster across the back-wall window.
-  grp.position.set(-3.18, 3.35, -ROOM.d / 2 + 0.14);
+  // office, on the left wall above the bookshelf
+  grp.position.set(-ROOM.w / 2 + 0.14, 3.75, -4.6);
+  grp.rotation.y = Math.PI / 2;
   root.add(grp);
 }
 
@@ -6984,8 +7143,8 @@ function pictureFrame(w, h, border, depth, mat) {
   makeInteractive(art, 'blueprint', 'Blueprint · Dudas Eng.');
   // pushed 0.14 off the wall so the frame's back face doesn't z-fight with
   // the right wall when the camera is zoomed far out
-  grp.position.set(ROOM.w / 2 - 0.14, 3.6, -2.6);
-  grp.rotation.y = -Math.PI / 2;
+  grp.position.set(-6.06, 3.3, -ROOM.d / 2 + 0.14);   // office back wall, left of the window
+  grp.rotation.y = 0;
   root.add(grp);
 }
 
@@ -7002,7 +7161,7 @@ function pictureFrame(w, h, border, depth, mat) {
   makeInteractive(record, 'vinyl', 'Vinyl · Color Wave');
   grp.rotation.x = Math.PI / 2 - 0.1;
   // moved to LEFT of the window so it isn't under the Dream Weaver poster
-  grp.position.set(-2.5, 1.4, -3.65);
+  grp.position.set(-6.05, 1.4, -6.2);
   root.add(grp);
   // standing display easel: two splayed front legs leaning on a back leg,
   // with a lipped ledge the record rests on (its lower edge sits at y≈1.12)
@@ -7026,7 +7185,7 @@ function pictureFrame(w, h, border, depth, mat) {
   ledgeLip.rotation.z = Math.PI / 2;
   ledgeLip.position.set(0, 1.127, 0.065);
   easel.add(ledgeLip);
-  easel.position.set(-2.5, 0, -3.65);
+  easel.position.set(-6.05, 0, -6.2);
   root.add(easel);
 }
 
@@ -7070,7 +7229,7 @@ function pictureFrame(w, h, border, depth, mat) {
   makeInteractive(body, 'neutralhq', 'Briefcase · NeutralHQ');
   // back-left corner of the cabin floor, slightly turned so the latch
   // face is visible from the typical camera angle
-  briefcase.position.set(-3.7, 0, -3.7);
+  briefcase.position.set(-0.75, 0, -6.35);
   briefcase.rotation.y = -0.6;
   root.add(briefcase);
 }
@@ -7135,7 +7294,7 @@ const propTickers = [];
   grp.userData.noBake = true;   // spins + animates its parts — keep out of static batching
 
   makeInteractive(core, 'orbital', 'Orbital Model · Hydrogen');
-  grp.position.set(0.28, 1.099, -2.95);   // base resting on the desk top
+  grp.position.set(-3.22, 1.099, -5.45);   // base resting on the desk top
   root.add(grp);
 }
 
@@ -7165,7 +7324,7 @@ const propTickers = [];
   makeInteractive(outer, 'cipher', 'Cipher Wheel · Naive Cryptography');
   // nudged forward + slightly left, away from the laptop on the right
   // and the notebook on the left (laptop edge ≈ x=-1.075, notebook ≈ x=-1.3)
-  grp.position.set(-1.15, 1.1, -2.85);
+  grp.position.set(-4.65, 1.1, -5.35);
   grp.rotation.y = 0.3;
   root.add(grp);
 }
@@ -7238,7 +7397,7 @@ const propTickers = [];
   grp.userData.noBake = true;   // node materials pulse every frame — keep separate
 
   makeInteractive(base, 'rigid', 'Dependency Graph · rigid');
-  grp.position.set(1.3, 1.099, -2.95);   // base resting on the desk top
+  grp.position.set(-2.2, 1.099, -5.45);   // base resting on the desk top
   root.add(grp);
 }
 
@@ -7269,7 +7428,7 @@ const propTickers = [];
     leaf.castShadow = true;
     pl.add(leaf);
   }
-  pl.position.set(-3.3, 0, 3.0);
+  pl.position.set(6.45, 0, 6.4);   // living room, front-right corner
   root.add(pl);
 }
 
@@ -7315,7 +7474,7 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
   lampLight.position.set(0.35, 0.45, 0);
   lp.add(lampLight);
   // tucked behind the lava lamp (they used to stand inside each other)
-  lp.position.set(-1.66, 1.094, -3.88);
+  lp.position.set(-5.16, 1.094, -6.38);
   lp.rotation.y = 0.15;
   root.add(lp);
 }
@@ -7345,7 +7504,7 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
     s.scale.set(1, 1.6, 1);
     mug.add(s);
   }
-  mug.position.set(0.6, 1.094, -3.7);
+  mug.position.set(-2.9, 1.094, -6.2);
   root.add(mug);
 }
 
@@ -7383,8 +7542,8 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
   pillow.position.set(-0.55, 0.47, -0.36); pillow.rotation.set(-0.22, 0.08, 0); bed.add(pillow);
   const pillow2 = new THREE.Mesh(pillowGeo, matStandard(0xeae0d5, 0.9));
   pillow2.position.set(0.15, 0.47, -0.36); pillow2.rotation.set(-0.22, -0.06, 0); bed.add(pillow2);
-  bed.position.set(-2.6, 0, 2.5);
-  bed.rotation.y = Math.PI / 2;
+  bed.position.set(-5.95, 0, 4.4);   // bedroom, head against the left wall under the window
+  bed.rotation.y = 0;
   root.add(bed);
 }
 
@@ -7870,7 +8029,7 @@ const WEATHER_PRESETS = {
 // yMax = PEAK_Y so rain/snow gets caught all the way up to the roof peak,
 // not just to wall-top — otherwise you briefly see drops between the walls
 // and the gables before they're recycled.
-const SHELTER_BOX = { xMin: -5, xMax: 5, zMin: -7.5, zMax: 5, yMax: 8.2 };
+const SHELTER_BOX = { xMin: -ROOM.w / 2 - 0.5, xMax: ROOM.w / 2 + 0.5, zMin: -ROOM.d / 2 - 3, zMax: ROOM.d / 2 + 0.5, yMax: PEAK_Y + 0.2 };
 function inShelter(x, y, z) {
   return y < SHELTER_BOX.yMax
       && x > SHELTER_BOX.xMin && x < SHELTER_BOX.xMax
@@ -8532,7 +8691,7 @@ function refreshSfxUi() {
 let indoorFactor = 0;
 function updateIndoorFactor() {
   const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
-  // generous cabin interior box. The cabin walls are at ±4.5 / 0..ROOM.h,
+  // generous cabin interior box. The cabin walls are at ±ROOM.w/2, ±ROOM.d/2,
   // but X-ray mode + a typical orbit angle puts the camera within a wider
   // region while you're "looking inside" — count those as inside too. The
   // smooth 0.06 lerp toward target irons over any boundary jitter.
@@ -8541,8 +8700,8 @@ function updateIndoorFactor() {
   // and you'd hear the fireplace from the yard. The generous box is only for
   // orbit / X-ray viewing angles.
   const inside = (typeof FP !== 'undefined' && FP.state === 'active')
-    ? (cx > -4.4 && cx < 4.4 && cz > -4.4 && cz < 4.4)
-    : (cx > -5.5 && cx < 5.5 && cz > -5.5 && cz < 5.5 && cy > -0.2 && cy < ROOM.h + 1.5);
+    ? inCabin(cx, cz, 0.1)
+    : (inCabin(cx, cz, -1) && cy > -0.2 && cy < ROOM.h + 1.5);
   const target = inside ? 1 : 0;
   indoorFactor += (target - indoorFactor) * easeK(0.06);
   if (Math.abs(target - indoorFactor) < 0.001) indoorFactor = target;
@@ -8849,13 +9008,14 @@ for (const s of infoIcons) {
 // door. Chimney rises directly above the firebox.
 // ==========================================================
 const FIRE_X = ROOM.w / 2 - 0.55 / 2 - 0.06; // mass center X — flush against right wall
-const FIRE_Z = 2.0;                           // along right wall, toward the door
+const FIRE_Z = 3.0;                           // along the right wall, in the living room
 const smokeParticles = [];
 const flames = [];
 let fireLight = null;
 // interior fireplace pieces hide together with the right wall in X-ray view,
 // so the brick mass doesn't block the camera when peeking in from outside
 const fireplaceInteriorParts = [];
+let chimneyStack = null;   // the stack above the roof (it lifts off with the roof in X-ray view)
 {
   const fireboxMat = matStandard(0x141008, 0.95);
 
@@ -8886,7 +9046,7 @@ const fireplaceInteriorParts = [];
     // cap slab and the dark flue
     kit.add(rbox(stackW + 0.26, 0.12, stackW + 0.26, 0.04, 2), 0x5f5952, FIRE_X, top + 0.06, FIRE_Z);
     kit.add(rbox(0.34, 0.05, 0.34, 0.015, 1), 0x141008, FIRE_X, top + 0.13, FIRE_Z);
-    const stack = kit.build(cabinStoneMat);
+    const stack = chimneyStack = kit.build(cabinStoneMat);
     root.add(stack);
     fireplaceInteriorParts.push(stack);   // hides with the right wall in X-ray view, like the hearth
   }
@@ -9043,7 +9203,7 @@ let doorPivot = null;   // hinge group: swings open in first-person mode
 
   // FRONT WALL is at z = +ROOM.d/2 = +4.5, behind the programmer (programmer
   // faces -Z, so +Z is at his back). Door X = 1.6 matches buildFrontWall().
-  doorGroup.position.set(1.6, 1.20, ROOM.d / 2 + 0.01);
+  doorGroup.position.set(CABIN_DOOR.at, 1.20, ROOM.d / 2 + 0.01);
   root.add(doorGroup);
 
   // Clickable. The click handler branches on the 'door' key.
@@ -9087,7 +9247,7 @@ let porchPointLight = null;
   grp.add(porchPointLight);
 
   // on the log face, to the right of the door casing
-  grp.position.set(2.6, 2.4, ROOM.d / 2 + LOG_FACE + 0.02);
+  grp.position.set(CABIN_DOOR.at + 1.0, 2.4, ROOM.d / 2 + LOG_FACE + 0.02);
   root.add(grp);
 }
 
@@ -9100,6 +9260,8 @@ let porchPointLight = null;
 let seeThrough = true;
 const _tmpWallVec = new THREE.Vector3();
 function updateSeeThrough() {
+  for (const m of partitionFull) m.visible = !seeThrough;
+  for (const m of partitionCut) m.visible = seeThrough;
   if (!seeThrough) {
     for (const w of wallData) w.mesh.visible = true;
     for (const p of fireplaceInteriorParts) p.visible = true;
@@ -9119,6 +9281,12 @@ function updateSeeThrough() {
   // hide the interior brick mass + hearth + flames when the right wall is
   // hidden, otherwise the fireplace blocks the view from outside
   for (const p of fireplaceInteriorParts) p.visible = rightWallVisible;
+  // looking down from above the walls: lift the roof, gables and chimney
+  // off so every room shows, like a dollhouse
+  if (camera.position.y > ROOM.h + 0.3) {
+    for (const m of roofParts) m.visible = false;
+    if (chimneyStack) chimneyStack.visible = false;
+  }
 }
 function setSeeThrough(on) {
   seeThrough = on;
@@ -9305,17 +9473,17 @@ const FP_FOV = 62;              // wider, more immersive first-person field of v
 const fpFov = () => FP_FOV + Math.max(0, Math.min(1, (1.25 - camera.aspect) / (1.25 - 0.46))) * 14;
 const STAND_EYE = 1.95;         // standing eye height (tall — still clears the ~2.05 doorway)
 const SEAT_EYE  = 1.55;         // seated eye height — high enough to look over the desk
-const SEAT_POS  = new THREE.Vector3(0, 0, -2.3);          // seat spot (clear of the desk collider so you can walk out after standing)
-const DOOR_POS  = new THREE.Vector3(1.6, 0, ROOM.d / 2);  // front door (x,z)
-const LAPTOP_LOOK = new THREE.Vector3(-0.55, 1.4, -3.85); // seated focal point
-const WINDOW_LOOK = new THREE.Vector3(0, 2.5, -28);       // standing: out the window
+const SEAT_POS  = new THREE.Vector3(-3.5, 0, -4.8);          // seat spot (clear of the desk collider so you can walk out after standing)
+const DOOR_POS  = new THREE.Vector3(CABIN_DOOR.at, 0, ROOM.d / 2);  // front door (x,z)
+const LAPTOP_LOOK = new THREE.Vector3(-4.05, 1.4, -6.35); // seated focal point
+const WINDOW_LOOK = new THREE.Vector3(-3.5, 2.5, -28);       // standing: out the window
 const DOOR_OPEN_ANGLE = 1.55;   // radians the door swings inward
 // outdoor play area + hard cliff boundary (z can't pass the cliff lip)
 const FP_BOUNDS = { xMin: -16, xMax: 16, zMin: CLIFF_EDGE_Z + 3, zMax: 18 };
 const fpVignette = document.getElementById('fp-vignette');
 
 // ---- interactables: TV, camp chairs, dogs ----
-const TV_POS = new THREE.Vector3(3.6, 0, -2.6);              // CRT TV (Painted Crowns) on the right wall
+const TV_POS = new THREE.Vector3(3.5, 0, -6.45);             // CRT TV (Painted Crowns) in the game room
 const CAMPFIRE_POS = new THREE.Vector3(-1.2, 0.4, -16);      // sitters in camp chairs face the fire
 const CAMP_SEAT_EYE = 1.35;
 // every chair you can sit in: the desk chair (back of the cabin), the side
@@ -9323,8 +9491,8 @@ const CAMP_SEAT_EYE = 1.35;
 // eye = seated eye height; look = the point you face; ground=true samples the
 // outdoor terrain height under the seat.
 const SIT_SPOTS = [
-  { x: 0,    z: -2.3,  eye: SEAT_EYE,      look: LAPTOP_LOOK,                       ground: false, indoor: true,  range: 1.4, label: 'E — sit at desk',     obj: deskChairObj },
-  { x: -1.5, z: 5.55,  eye: 1.35,          look: new THREE.Vector3(-1.5, 1.25, 24), ground: true,  indoor: false, range: 2.0, label: 'E — sit down',       obj: sideChairObj },
+  { x: -3.5, z: -4.8,  eye: SEAT_EYE,      look: LAPTOP_LOOK,                       ground: false, indoor: true,  range: 1.4, label: 'E — sit at desk',     obj: deskChairObj },
+  { x: 1.8,  z: ROOM.d / 2 + 1.05, eye: 1.35, look: new THREE.Vector3(1.8, 1.25, 28), ground: true,  indoor: false, range: 2.0, label: 'E — sit down',       obj: sideChairObj },
   { x: -1.2, z: -18.2, eye: CAMP_SEAT_EYE, look: CAMPFIRE_POS,                      ground: true,  indoor: false, range: 1.9, label: 'E — sit by the fire', obj: campChairObjs[0] },
   { x:  0.6, z: -15.2, eye: CAMP_SEAT_EYE, look: CAMPFIRE_POS,                      ground: true,  indoor: false, range: 1.9, label: 'E — sit by the fire', obj: campChairObjs[1] },
   { x: -2.7, z: -14.9, eye: CAMP_SEAT_EYE, look: CAMPFIRE_POS,                      ground: true,  indoor: false, range: 1.9, label: 'E — sit by the fire', obj: campChairObjs[2] },
@@ -9446,8 +9614,8 @@ function fpLookQuat(eye, target) {
 
 // the closed front door blocks its doorway; opening it (E) lets you pass
 function fpDoorBlocks(x, z) {
-  const r = FP.radius;
-  return x + r > 1.14 && x - r < 2.06 && z + r > 4.30 && z - r < 4.75;
+  const r = FP.radius, HD = ROOM.d / 2;
+  return x + r > CABIN_DOOR.at - CABIN_DOOR.w / 2 && x - r < CABIN_DOOR.at + CABIN_DOOR.w / 2 && z + r > HD - 0.2 && z - r < HD + 0.25;
 }
 
 const BOAT_SPEED = 3.6, BOAT_EYE = 1.5;   // rowing speed + eye height above the water
@@ -9470,7 +9638,7 @@ function fpResolve(nx, nz, cx, cz) {
   // plateau
   nx = Math.max(FP_BOUNDS.xMin, Math.min(FP_BOUNDS.xMax, nx));
   nz = Math.min(FP_BOUNDS.zMax, nz);
-  const insideCabin = Math.abs(nx) < 4.4 && nz > -4.4 && nz < 4.4;
+  const insideCabin = inCabin(nx, nz, 0.1);
   return { x: nx, z: nz, y: insideCabin ? 0 : Math.max(-0.05, terrainHeight(nx, nz)) };
 }
 function boardBoat() {
@@ -9527,7 +9695,7 @@ function fpPickTarget() {
   };
   // are we actually inside the cabin? (TV, dogs and the desk chair can only be
   // used from inside — no reaching through the walls from the yard)
-  const inside = Math.abs(cx) < 4.4 && cz > -4.4 && cz < 4.4;
+  const inside = inCabin(cx, cz, 0.1);
   consider({ kind: 'door', x: DOOR_POS.x, z: DOOR_POS.z, range: 2.4 });
   if (inside) consider({ kind: 'tv', x: TV_POS.x, z: TV_POS.z, range: 2.4 });
   for (const s of SIT_SPOTS) {
@@ -9666,48 +9834,47 @@ function buildFPColliders() {
   const list = FP.colliders;
   list.length = 0;
   const W = ROOM.w, H = ROOM.h, D = ROOM.d;
+  const HW = W / 2, HD = D / 2;
   const T = 0.35; // wall thickness
-
-  // back wall (full)
-  list.push(new THREE.Box3(
-    new THREE.Vector3(-W/2 - T, 0, -D/2 - T),
-    new THREE.Vector3( W/2 + T, H, -D/2)));
-  // front wall — pierced by the doorway at x = doorCx with width doorW
-  const doorCx = 1.6, doorW = 0.92;
-  list.push(new THREE.Box3(
-    new THREE.Vector3(-W/2 - T, 0,  D/2),
-    new THREE.Vector3( doorCx - doorW/2, H, D/2 + T)));
-  list.push(new THREE.Box3(
-    new THREE.Vector3( doorCx + doorW/2, 0,  D/2),
-    new THREE.Vector3( W/2 + T, H, D/2 + T)));
-  // left wall
-  list.push(new THREE.Box3(
-    new THREE.Vector3(-W/2 - T, 0, -D/2),
-    new THREE.Vector3(-W/2,     H,  D/2 + T)));
-  // right wall
-  list.push(new THREE.Box3(
-    new THREE.Vector3( W/2,     0, -D/2),
-    new THREE.Vector3( W/2 + T, H,  D/2 + T)));
+  const box = (x0, z0, x1, z1, y1 = H) => list.push(new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, y1, z1)));
+  // [from, to] minus the openings [at - w/2, at + w/2]
+  const open = (spans, at, w) => spans.flatMap(([a, b]) =>
+    (at + w / 2 <= a || at - w / 2 >= b) ? [[a, b]] : [[a, at - w / 2], [at + w / 2, b]].filter(([p, q]) => q - p > 0.01));
+  // outer walls, open only at doors (the windows start above the floor)
+  const wallSpans = (side, from, to) => CABIN_OPENINGS[side].filter(o => o.kind === 'door').reduce((s, o) => open(s, o.at, o.w), [[from, to]]);
+  for (const [a, b] of wallSpans('back', -HW - T, HW + T)) box(a, -HD - T, b, -HD);
+  for (const [a, b] of wallSpans('front', -HW - T, HW + T)) box(a, HD, b, HD + T);
+  for (const [a, b] of wallSpans('left', -HD, HD)) box(-HW - T, a, -HW, b);
+  for (const [a, b] of wallSpans('right', -HD, HD)) box(HW, a, HW + T, b);
+  // interior walls, open at their doorways
+  for (const p of PARTITIONS) {
+    for (const [a, b] of p.doors.reduce((s, d) => open(s, d, INNER_DOOR.w), [[p.from, p.to]])) {
+      if (p.axis === 'x') box(a, p.at - PARTITION_T / 2, b, p.at + PARTITION_T / 2);
+      else box(p.at - PARTITION_T / 2, a, p.at + PARTITION_T / 2, b);
+    }
+  }
 
   // FURNITURE — only items tall enough to actually block the player at
   // eye height. Collision is XZ-only, so the chair (seat at y=0.55) and
   // the bed (mattress at y=0.55) shouldn't be in this list — and the chair
   // sits right where the player spawns, so including it would freeze them.
-  // desk
-  list.push(new THREE.Box3(new THREE.Vector3(-1.8, 0, -4.1), new THREE.Vector3( 1.8, 1.1, -2.75)));
-  // bookshelf (left wall, z=-2.4..-0.6)
-  list.push(new THREE.Box3(new THREE.Vector3(-W/2, 0, -2.4), new THREE.Vector3(-W/2 + 0.55, 2.6, -0.6)));
-  // tv stand (right wall, back area)
-  list.push(new THREE.Box3(new THREE.Vector3( 3.15, 0, -3.4), new THREE.Vector3( W/2, 1.4, -1.8)));
+  // desk (office, under the back window)
+  list.push(new THREE.Box3(new THREE.Vector3(-5.3, 0, -6.6), new THREE.Vector3(-1.7, 1.1, -5.25)));
+  // bookshelf (office, left wall)
+  list.push(new THREE.Box3(new THREE.Vector3(-W/2, 0, -5.5), new THREE.Vector3(-W/2 + 0.55, 2.6, -3.7)));
+  // tv stand (game room, back wall)
+  list.push(new THREE.Box3(new THREE.Vector3( 2.75, 0, -D/2), new THREE.Vector3( 4.25, 1.4, -5.9)));
   // fireplace mass (right wall, near FIRE_X/FIRE_Z)
   list.push(new THREE.Box3(
     new THREE.Vector3( FIRE_X - 0.85, 0, FIRE_Z - 0.28),
     new THREE.Vector3( W/2,            H, FIRE_Z + 0.28)));
-  // arcade cabinet (SW corner, rotated 45° — box covers its full sweep,
-  // including the control deck that juts toward the room)
+  // arcade cabinet (game room corner, rotated 45° — box covers its full
+  // sweep, including the control deck that juts toward the room)
   list.push(new THREE.Box3(
-    new THREE.Vector3(-4.35, 0, 3.15),
-    new THREE.Vector3(-3.15, 2.05, 4.35)));
+    new THREE.Vector3(5.65, 0, -6.85),
+    new THREE.Vector3(6.85, 2.05, -5.65)));
+  // everything else registers its own footprint
+  for (const b of furnitureColliders) list.push(b);
 }
 
 function fpCollides(x, z) {
@@ -9735,7 +9902,7 @@ function enterFirstPerson() {
   // x = 0 in the back wall (z = -ROOM.d/2); the desk sits just under it, so
   // we stand a little in front of the desk (clear of its collider) and gaze
   // slightly upward, far out to the horizon so sea + sky fill the frame.
-  const toPos = new THREE.Vector3(0, STAND_EYE, -2.3);
+  const toPos = new THREE.Vector3(SEAT_POS.x, STAND_EYE, SEAT_POS.z);
   const toQuat = fpLookQuat(toPos, WINDOW_LOOK); // camera-correct (no 180° flip)
 
   // gentle curved (arc) approach: lift a control point above the straight
@@ -10168,10 +10335,10 @@ sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(QUALITY.shadowMapSize, QUALITY.shadowMapSize);
 sunLight.shadow.camera.near = 1;
 sunLight.shadow.camera.far = 30;
-sunLight.shadow.camera.left = -8;
-sunLight.shadow.camera.right = 8;
-sunLight.shadow.camera.top = 8;
-sunLight.shadow.camera.bottom = -8;
+sunLight.shadow.camera.left = -11;
+sunLight.shadow.camera.right = 11;
+sunLight.shadow.camera.top = 11;
+sunLight.shadow.camera.bottom = -11;
 sunLight.shadow.bias = -0.0003;
 scene.add(sunLight);
 scene.add(sunLight.target);
@@ -10181,8 +10348,8 @@ fillLight.position.set(6, 4, 6);
 scene.add(fillLight);
 
 // warm fixed lamp inside (separate small light at desk)
-const interiorWarm = new THREE.PointLight(0xffd29c, 0.0, 10, 2);
-interiorWarm.position.set(0, 4.5, 0);
+const interiorWarm = new THREE.PointLight(0xffd29c, 0.0, 15, 2);
+interiorWarm.position.set(0, 4.6, 0);
 scene.add(interiorWarm);
 
 // ==========================================================
@@ -11111,11 +11278,11 @@ const fxCount = (desktop, phone) => (QUALITY.mobile ? phone : desktop);
 // up), with wind, snow and first-person pushing injected into the vertex
 // shader.
 function grassBlocked(x, z) {
-  if (Math.abs(x) < 4.75 && z > -4.75 && z < 4.75) return true;      // cabin
-  if (Math.abs(x) < 3.3 && z > -8.0 && z <= -4.5) return true;       // back porch + steps
+  if (inCabin(x, z, -0.25)) return true;                              // cabin
+  if (Math.abs(x) < ROOM.w / 2 + 0.8 && z > -ROOM.d / 2 - 3.5 && z <= -ROOM.d / 2) return true;   // back porch + steps
   if ((x + 1.2) ** 2 + (z + 16) ** 2 < 1.4 ** 2) return true;         // fire ring
   if ((x + 5.3) ** 2 + (z + 17) ** 2 < 1.9 ** 2) return true;         // tent
-  const tx = x - 8.5, tz = z - 4.5, c = Math.cos(0.35), s = Math.sin(0.35);
+  const tx = x - 10.6, tz = z - 5.4, c = Math.cos(0.35), s = Math.sin(0.35);
   if (Math.abs(tx * c + tz * s) < 1.2 && Math.abs(-tx * s + tz * c) < 2.45) return true;   // truck
   if (x > -5.8 && x < -1.6 && z < -27.8) return true;                // stair deck
   return z < CLIFF_EDGE_Z + 0.9;                                     // cliff lip
@@ -11348,7 +11515,7 @@ function makeDrift(n, min, size, drift, tint, sizeRange) {
   } });
 }
 const pollen = makeDrift(fxCount(240, 100), [-26, 0.2, -27], [52, 4.6, 48], 0.35, 0xfff1cc, [0.035, 0.07]);
-const roomDust = makeDrift(fxCount(90, 40), [-4.3, 0.3, -4.3], [8.6, 4.4, 8.6], 0.04, 0xffe2b8, [0.02, 0.035]);
+const roomDust = makeDrift(fxCount(200, 90), [-ROOM.w / 2 + 0.2, 0.3, -ROOM.d / 2 + 0.2], [ROOM.w - 0.4, 4.4, ROOM.d - 0.4], 0.04, 0xffe2b8, [0.02, 0.035]);
 
 // ---- LEAVES — now and then one tumbles out of a broadleaf crown and drifts
 // downwind, turning over as it falls ----
@@ -11576,25 +11743,26 @@ const contactShadows = (() => {
     group.add(m);
   };
   // interior
-  add(0, -3.38, 4.1, 1.95);                 // desk
-  add(0, -2.5, 1.25, 1.25);                 // desk chair
-  add(-2.6, 2.5, 1.75, 2.6);                // bed
-  add(-4.12, -1.5, 0.95, 2.45);             // bookshelf
-  add(3.55, -2.6, 1.45, 2.15);              // TV stand
-  add(-3.62, 0.6, 1.3, 1.5);                // monitor table
-  add(-3.76, 3.76, 1.2, 1.2, Math.PI / 4);  // arcade cabinet
-  add(2.5, -1.6, 1.5, 1.15, 0.15);          // console + cases
-  add(-3.3, 3.0, 0.85, 0.85);               // plant
-  add(-3.68, -3.68, 0.85, 0.6, -0.6);       // briefcase
+  add(-3.5, -5.88, 4.1, 1.95);              // desk
+  add(-3.5, -5.0, 1.25, 1.25);              // desk chair
+  add(-5.95, 4.4, 2.6, 1.75);               // bed
+  add(-6.62, -4.6, 0.95, 2.45);             // bookshelf
+  add(3.5, -6.4, 2.15, 1.45);               // TV stand
+  add(-6.12, -2.4, 1.3, 1.5);               // monitor table
+  add(6.19, -6.19, 1.2, 1.2, Math.PI / 4);  // arcade cabinet
+  add(3.25, -5.3, 1.5, 1.15, 0.15);         // console + cases
+  add(6.45, 6.4, 0.85, 0.85);               // plant
+  add(-0.73, -6.33, 0.85, 0.6, -0.6);       // briefcase
+  for (const [x, z, w, d, rot] of furnitureShadows) add(x, z, w, d, rot);
   add(FIRE_X - 0.55, FIRE_Z, 1.05, 2.45);   // hearth
   // exterior — a soft skirt around the cabin, the porch, truck, tent, camp
   // (one shared darkness so the exterior decals merge into a single mesh)
-  add(0, 0, 11.6, 11.6, 0, -0.03, 0.36);
-  add(0, -6.1, 7.2, 3.4, 0, -0.03, 0.36);
-  add(8.5, 4.5, 2.9, 5.4, -0.35, -0.03, 0.36);
+  add(0, 0, ROOM.w + 2.6, ROOM.d + 2.6, 0, -0.03, 0.36);
+  add(0, -ROOM.d / 2 - 1.6, ROOM.w + 2.2, 3.4, 0, -0.03, 0.36);
+  add(10.6, 5.4, 2.9, 5.4, -0.35, -0.03, 0.36);
   add(-5.3, -17, 2.7, 3.4, -0.45, -0.03, 0.36);
   add(-1.2, -16, 2.3, 2.3, 0, -0.03, 0.36);
-  add(-1.15, 5.15, 1.9, 1.15, 0, -0.03, 0.36);
+  add(2.2, ROOM.d / 2 + 0.65, 1.9, 1.15, 0, -0.03, 0.36);
   scene.add(group);
   return group;   // merged with the rest of the static batching below
 })();
@@ -11624,7 +11792,7 @@ function updateFX(t) {
   const set = (pts, k) => { pts.material.uniforms.uIntensity.value = k; pts.visible = k > 0.01; };
   set(fireplaceSparks, flames.length && flames[0].visible ? 1 : 0);   // hidden with the right wall in X-ray
   set(campfireSparks, dryness);
-  set(chimneySmoke, 1);
+  set(chimneySmoke, chimneyStack && !chimneyStack.visible ? 0 : 1);   // no smoke from a lifted-off chimney
   set(campfireSmokeFx, campfireWetness);
   set(fireflies, fair ? night * (w === 'clear' ? 1 : 0.6) : 0);
   set(pollen, fair ? (1 - night) * 0.55 : 0);
@@ -11726,7 +11894,7 @@ function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
   const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
   const uv = withUv ? new Float32Array(vCount * 2) : null;
   const col = colorMode ? new Float32Array(vCount * 3) : null;
-  const idx = new Uint16Array(iCount);
+  const idx = vCount > 65535 ? new Uint32Array(iCount) : new Uint16Array(iCount);
   const mtx = new THREE.Matrix4(), nmat = new THREE.Matrix3(), v = new THREE.Vector3();
   let vo = 0, io = 0;
   for (const m of meshes) {
@@ -12051,11 +12219,11 @@ const guide = (() => {
   const centerOf = obj => new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
   // hand-picked close-ups (camera spots inside the room with a clear line of sight)
   const CLOSEUPS = {
-    laptop: [-1.75, 2.25, -1.85], rigid: [2.55, 1.95, -1.45], orbital: [1.45, 1.8, -1.55],
-    klast: [-1.55, 2.15, 1.45], shatterwing: [-0.95, 3.35, -0.45], tv: [0.85, 2.1, -1.95],
-    bookCharlie: [-1.35, 1.85, -0.55], bookCognitive: [-1.35, 1.85, -0.55], bookWheel: [-1.35, 2.2, -0.65],
-    whiteboard: [-0.95, 3.0, 1.95], monitor: [-1.3, 1.95, 1.05], lavaLamp: [-0.35, 2.1, -1.7],
-    poster: [1.55, 2.6, -0.65], rasterTide: [-1.45, 2.85, -0.7], blueprint: [1.0, 3.05, -1.55],
+    laptop: [-5.25, 2.25, -4.35], rigid: [-0.95, 1.95, -3.95], orbital: [-2.05, 1.8, -4.05],
+    klast: [4.05, 2.15, -4.05], shatterwing: [3.0, 3.0, -3.5], tv: [3.0, 2.1, -3.7],
+    bookCharlie: [-3.85, 1.85, -3.65], bookCognitive: [-3.85, 1.85, -3.65], bookWheel: [-3.85, 2.2, -3.75],
+    whiteboard: [-3.45, 2.9, -1.65], monitor: [-3.8, 1.95, -1.95], lavaLamp: [-3.85, 2.1, -4.2],
+    poster: [-2.4, 2.6, -3.3], rasterTide: [-3.2, 3.25, -4.1], blueprint: [-5.0, 2.75, -3.5],
   };
   function closeup(key) {
     const mesh = findMesh(key);
@@ -12064,13 +12232,14 @@ const guide = (() => {
     let pos;
     if (CLOSEUPS[key]) pos = new THREE.Vector3(...CLOSEUPS[key]);
     else {
-      // otherwise: back off toward the middle of the room, a little above
-      const dir = new THREE.Vector3(-target.x, 0, -target.z);
+      // otherwise: back off toward the middle of its room, a little above
+      const r = roomRectAt(target.x, target.z) || { x0: -ROOM.w / 2, x1: ROOM.w / 2, z0: -ROOM.d / 2, z1: ROOM.d / 2 };
+      const dir = new THREE.Vector3((r.x0 + r.x1) / 2 - target.x, 0, (r.z0 + r.z1) / 2 - target.z);
       if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
       pos = target.clone().addScaledVector(dir.normalize(), 2.7);
       pos.y = target.y + 0.8;
-      pos.x = THREE.MathUtils.clamp(pos.x, -3.9, 3.9);
-      pos.z = THREE.MathUtils.clamp(pos.z, -3.9, 3.9);
+      pos.x = THREE.MathUtils.clamp(pos.x, r.x0 + 0.6, r.x1 - 0.6);
+      pos.z = THREE.MathUtils.clamp(pos.z, r.z0 + 0.6, r.z1 - 0.6);
     }
     return { mesh, target, pos };
   }
@@ -12377,7 +12546,9 @@ const guide = (() => {
 const post = (() => {
   if (!POST_FX || !renderer.capabilities.isWebGL2) return null;
   const size = new THREE.Vector2(-1, -1), want = new THREE.Vector2();
-  const sceneRT = new THREE.WebGLMultisampleRenderTarget(1, 1, { format: THREE.RGBAFormat });
+  // stencilBuffer gets a 24-bit depth buffer (three's default is 16-bit, too coarse
+  // to keep the cabin floor apart from the ground 5 cm under it from the home view)
+  const sceneRT = new THREE.WebGLMultisampleRenderTarget(1, 1, { format: THREE.RGBAFormat, stencilBuffer: true });
   sceneRT.samples = 4;
   sceneRT.texture.encoding = THREE.sRGBEncoding;   // materials write display-ready color, as on screen
   const LEVELS = QUALITY.mobile ? 3 : 4;            // 1/4, 1/8, 1/16 (, 1/32) of the screen
