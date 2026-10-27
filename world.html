@@ -1401,51 +1401,44 @@ function woodTexture(baseColor, plankColor, plankCount = 8) {
   return tex;
 }
 
-function wallPlankTexture() {
-  // vertical plank wood for cabin walls — each plank a slightly different
-  // shade of brown with grain streaks and the occasional knot
+function logWallTexture() {
+  // the inside faces of the cabin's logs: horizontal rounded bands, each a
+  // slightly different honey brown with grain and the odd knot, and pale
+  // chinking between them. The walls carry UVs in metres (see wallUV).
   const c = document.createElement('canvas'); c.width = c.height = 512;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#7e5230'; ctx.fillRect(0, 0, 512, 512);
-  const plankCount = 8;
-  const plankW = 512 / plankCount;
-  for (let i = 0; i < plankCount; i++) {
-    const x = i * plankW;
-    const v = Math.random() * 36 - 18;
-    const r = Math.max(60, Math.min(180, 0x7e + v));
-    const g = Math.max(40, Math.min(150, 0x52 + v));
-    const b = Math.max(20, Math.min(110, 0x30 + v));
-    ctx.fillStyle = `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
-    ctx.fillRect(x, 0, plankW, 512);
-    // dark seam at left edge of plank
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, 0, 1.5, 512);
-    // subtle highlight at right edge
-    ctx.fillStyle = 'rgba(255,210,160,0.06)'; ctx.fillRect(x + plankW - 1, 0, 1, 512);
-  }
-  // wood grain — subtle horizontal streaks within each plank
-  for (let i = 0; i < 1500; i++) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 512;
-    const len = 30 + Math.random() * 90;
-    ctx.fillStyle = `rgba(0,0,0,${0.04 + Math.random() * 0.07})`;
-    ctx.fillRect(x, y, len, 1);
-  }
-  // knots
-  for (let i = 0; i < 22; i++) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 512;
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.beginPath();
-    ctx.ellipse(x, y, 4 + Math.random() * 4, 1.8 + Math.random() * 1.2,
-      Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+  const bands = 8, bh = 512 / bands;
+  const rgb = (k, [r, g, b]) => `rgb(${Math.min(255, r * k) | 0}, ${Math.min(255, g * k) | 0}, ${Math.min(255, b * k) | 0})`;
+  for (let i = 0; i < bands; i++) {
+    const y = i * bh, v = Math.random() * 16 - 8;
+    const base = [150 + v, 98 + v * 0.8, 56 + v * 0.6];
+    // rounded log: lit across its middle, falling off toward the seams
+    const grad = ctx.createLinearGradient(0, y, 0, y + bh);
+    grad.addColorStop(0, rgb(0.6, base));
+    grad.addColorStop(0.2, rgb(0.92, base));
+    grad.addColorStop(0.5, rgb(1.06, base));
+    grad.addColorStop(0.82, rgb(0.86, base));
+    grad.addColorStop(1, rgb(0.58, base));
+    ctx.fillStyle = grad; ctx.fillRect(0, y, 512, bh);
+    // grain along the log
+    for (let k = 0; k < 70; k++) {
+      ctx.fillStyle = `rgba(70, 38, 16, ${0.05 + Math.random() * 0.1})`;
+      ctx.fillRect(Math.random() * 512, y + 5 + Math.random() * (bh - 10), 30 + Math.random() * 180, 0.8 + Math.random() * 1.4);
+    }
+    if (Math.random() < 0.7) {
+      ctx.fillStyle = 'rgba(70, 38, 16, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(Math.random() * 512, y + bh * (0.35 + Math.random() * 0.3), 5 + Math.random() * 4, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // chinking — the pale mortar line between two logs
+    ctx.fillStyle = 'rgba(206, 188, 160, 0.95)';
+    ctx.fillRect(0, y, 512, 3.5);
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = MAX_ANISO;
   return tex;
 }
 
@@ -2069,9 +2062,13 @@ function trackWall(m) {
 }
 // ---- ceiling ----
 {
-  // double-sided so it doubles as a roof when viewed from above (zoomed out)
+  // pale wood planks; double-sided so it doubles as a roof when viewed from
+  // above (zoomed out)
+  const tex = woodTexture(0xc49a6a, 0x9a7048, 14);
+  tex.repeat.set(2, 2);
+  tex.anisotropy = MAX_ANISO;
   const mat = new THREE.MeshStandardMaterial({
-    color: COL.ceiling, roughness: 0.95, side: THREE.DoubleSide
+    map: tex, roughness: 0.92, side: THREE.DoubleSide
   });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat);
   m.rotation.x = Math.PI / 2;
@@ -2086,8 +2083,15 @@ function trackWall(m) {
 
 // CABIN WALLS — vertical wood-plank texture, double-sided so the cabin
 // reads from outside too. polygonOffset keeps coplanar trim from Z-fighting.
-const wallTex = wallPlankTexture();
-wallTex.repeat.set(2.4, 1.6);
+const wallTex = logWallTexture();
+// wall UVs in metres (one texture repeat = 4 m × 8 log courses) so the log
+// bands run straight across every panel, whatever its size
+const WALL_TEX_W = 4.0, WALL_TEX_H = 8 * 0.31;
+function wallUV(geo, ox, oy) {
+  const P = geo.attributes.position, U = geo.attributes.uv;
+  for (let i = 0; i < P.count; i++) U.setXY(i, (P.getX(i) + ox) / WALL_TEX_W, (P.getY(i) + oy) / WALL_TEX_H);
+  return geo;
+}
 const wallMat = new THREE.MeshStandardMaterial({
   map: wallTex, roughness: 0.92, side: THREE.DoubleSide,
   polygonOffset: true, polygonOffsetFactor: 1.0, polygonOffsetUnits: 1.0
@@ -2103,7 +2107,7 @@ function buildBackWall() {
   const top = H - (winY + winH / 2);
   const bottom = winY - winH / 2;
   const panel = (w, h, x, y) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
+    const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(w, h), x, y), wallMat);
     m.position.set(x, y, -ROOM.d / 2);
     m.castShadow = true;
     m.receiveShadow = true;
@@ -2127,7 +2131,7 @@ function buildFrontWall() {
   const doorLeft = doorCx - doorW / 2;
   const doorRight = doorCx + doorW / 2;
   const panel = (w, h, x, y) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
+    const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(w, h), -x, y), wallMat);
     m.position.set(x, y, ROOM.d / 2);
     m.rotation.y = Math.PI; // texture/normal face into the room (-Z)
     m.castShadow = true;
@@ -2147,7 +2151,7 @@ root.add(buildFrontWall());
 
 // ---- left wall ----
 {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.d, ROOM.h), wallMat);
+  const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(ROOM.d, ROOM.h), 0, ROOM.h / 2), wallMat);
   m.rotation.y = Math.PI / 2;
   m.position.set(-ROOM.w / 2, ROOM.h / 2, 0);
   m.castShadow = true;
@@ -2157,7 +2161,7 @@ root.add(buildFrontWall());
 }
 // ---- right wall ----
 {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.d, ROOM.h), wallMat);
+  const m = new THREE.Mesh(wallUV(new THREE.PlaneGeometry(ROOM.d, ROOM.h), 0, ROOM.h / 2), wallMat);
   m.rotation.y = -Math.PI / 2;
   m.position.set(ROOM.w / 2, ROOM.h / 2, 0);
   m.castShadow = true;
@@ -2166,32 +2170,147 @@ root.add(buildFrontWall());
   root.add(m);
 }
 
-// ---- baseboards (4 sides) — pushed off the wall plane to avoid Z-fighting
-{
-  const bbMat = matStandard(COL.baseboard, 0.7);
-  const bbH = 0.18;
-  const back = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, bbH, 0.05), bbMat);
-  back.position.set(0, bbH / 2, -ROOM.d / 2 + 0.06); root.add(back);
-  const front = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, bbH, 0.05), bbMat);
-  front.position.set(0, bbH / 2, ROOM.d / 2 - 0.06); root.add(front);
-  const left = new THREE.Mesh(new THREE.BoxGeometry(0.05, bbH, ROOM.d), bbMat);
-  left.position.set(-ROOM.w / 2 + 0.06, bbH / 2, 0); root.add(left);
-  const right = new THREE.Mesh(new THREE.BoxGeometry(0.05, bbH, ROOM.d), bbMat);
-  right.position.set(ROOM.w / 2 - 0.06, bbH / 2, 0); root.add(right);
+// ==========================================================
+// LOG CABIN KIT — shared pieces for the cabin's exterior. Parts are laid out
+// as temporary meshes and merged into one mesh per surface (a wall, a roof
+// side, the porch) with their colours baked into vertex colours, so the
+// whole log shell costs a handful of draw calls. Timber shares one texture:
+// bark streaks on the left half, end grain on the right.
+// ==========================================================
+function logAtlasTexture() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  // bark — streaks run along v, which the pieces map to their length
+  g.fillStyle = '#e2d8ca'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 110; i++) {
+    const l = 140 + Math.random() * 90;
+    g.fillStyle = `rgba(${l | 0},${(l * 0.86) | 0},${(l * 0.72) | 0},${0.35 + Math.random() * 0.35})`;
+    g.fillRect(Math.random() * 256, 0, 0.8 + Math.random() * 3.2, 256);
+  }
+  // end grain — pale wood, growth rings, a darker bark rim
+  g.fillStyle = '#f3e2c4'; g.fillRect(256, 0, 256, 256);
+  for (let r = 116; r > 6; r -= 6 + Math.random() * 6) {
+    g.strokeStyle = `rgba(160,112,62,${0.22 + Math.random() * 0.22})`;
+    g.lineWidth = 1.2 + Math.random() * 1.6;
+    g.beginPath(); g.arc(384 + (Math.random() - 0.5) * 3, 128 + (Math.random() - 0.5) * 3, r, 0, Math.PI * 2); g.stroke();
+  }
+  g.strokeStyle = '#6b4a2e'; g.lineWidth = 16;
+  g.beginPath(); g.arc(384, 128, 120, 0, Math.PI * 2); g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = MAX_ANISO;
+  return tex;
+}
+const logAtlas = logAtlasTexture();
+// one material for every merged timber surface (colour comes per vertex)
+const cabinTimberMat = new THREE.MeshStandardMaterial({ map: logAtlas, vertexColors: true, roughness: 0.86 });
+// roof shingles: one course of ten tiles per texture repeat (see the roof)
+const courseTex = (() => {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 512;
+  const g = c.getContext('2d');
+  const tiles = 10, th = 512 / tiles;
+  for (let i = 0; i < tiles; i++) {
+    const v = Math.random() * 28 - 14;
+    g.fillStyle = `rgb(${(70 + v) | 0}, ${(108 + v) | 0}, ${(64 + v * 0.8) | 0})`;
+    g.fillRect(0, i * th, 64, th);
+    // the covered top of each tile darker, the exposed butt edge lighter
+    const grad = g.createLinearGradient(0, 0, 64, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0.28)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.92, 'rgba(255,255,255,0.07)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.25)');
+    g.fillStyle = grad; g.fillRect(0, i * th, 64, th);
+    g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(0, i * th, 64, 2.5);   // seam
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = MAX_ANISO;
+  return tex;
+})();
+const shingleMat = new THREE.MeshStandardMaterial({ map: courseTex, vertexColors: true, roughness: 0.8 });
+// snow layers on the porch roof and door canopy (faded in with snowCaps)
+const cabinSnowMat = new THREE.MeshLambertMaterial({
+  color: 0xfdfdff, transparent: true, opacity: 0, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+});
+// fieldstone, flowers and painted bits: plain vertex colours
+const cabinStoneMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93 });
+
+// UVs into the atlas. Cylinders: sides take bark (around × length), caps
+// take end grain. Boxes and other timber: grain along `axis` (its long side).
+function logUV(geo, radial, heightSeg = 1) {
+  const U = geo.attributes.uv, side = (radial + 1) * (heightSeg + 1);
+  for (let i = 0; i < U.count; i++) U.setX(i, i < side ? U.getX(i) * 0.5 : 0.5 + U.getX(i) * 0.5);
+  return geo;
+}
+function grainUV(geo, axis) {
+  geo.computeBoundingBox();
+  const P = geo.attributes.position, U = geo.attributes.uv, b = geo.boundingBox;
+  const [o1, o2] = { x: ['y', 'z'], y: ['x', 'z'], z: ['x', 'y'] }[axis];
+  const span = (b.max[o1] - b.min[o1]) + (b.max[o2] - b.min[o2]) || 1, len = (b.max[axis] - b.min[axis]) || 1;
+  const p = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) {
+    p.fromBufferAttribute(P, i);
+    U.setXY(i, 0.5 * ((p[o1] - b.min[o1]) + (p[o2] - b.min[o2])) / span, (p[axis] - b.min[axis]) / len);
+  }
+  return geo;
+}
+// a horizontal log: radius r, length len, lying along `axis` ('x' or 'z')
+const _logGeos = new Map();
+function logGeo(r, len, radial = 12) {
+  const key = r.toFixed(3) + '|' + len.toFixed(3) + '|' + radial;
+  let g = _logGeos.get(key);
+  if (!g) _logGeos.set(key, g = logUV(new THREE.CylinderGeometry(r, r, len, radial, 1), radial));
+  return g;
 }
 
-// ---- crown molding (4 sides) — pushed off the wall plane
-{
-  const mat = matStandard(0xe8d5b0, 0.9);
-  const h = 0.12;
-  const back = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, h, 0.08), mat);
-  back.position.set(0, ROOM.h - h / 2, -ROOM.d / 2 + 0.08); root.add(back);
-  const front = new THREE.Mesh(new THREE.BoxGeometry(ROOM.w, h, 0.08), mat);
-  front.position.set(0, ROOM.h - h / 2, ROOM.d / 2 - 0.08); root.add(front);
-  const left = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, ROOM.d), mat);
-  left.position.set(-ROOM.w / 2 + 0.08, ROOM.h - h / 2, 0); root.add(left);
-  const right = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, ROOM.d), mat);
-  right.position.set(ROOM.w / 2 - 0.08, ROOM.h - h / 2, 0); root.add(right);
+const _kitTones = new Map();
+function cabinKit() {
+  const parts = [];
+  const tone = color => {
+    let m = _kitTones.get(color);
+    if (!m) _kitTones.set(color, m = new THREE.MeshBasicMaterial({ color }));
+    return m;
+  };
+  return {
+    // place `geo` with an Euler rotation (XYZ) and optional scale
+    add(geo, color, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) {
+      const m = new THREE.Mesh(geo, tone(color));
+      m.position.set(x, y, z);
+      m.rotation.set(rx, ry, rz);
+      m.scale.set(sx, sy, sz);
+      m.updateMatrixWorld(true);
+      parts.push(m);
+      return m;
+    },
+    // place `geo` with a full transform
+    addMatrix(geo, color, matrix) {
+      const m = new THREE.Mesh(geo, tone(color));
+      m.matrixAutoUpdate = false;
+      m.matrix.copy(matrix);
+      m.matrixWorld.copy(matrix);
+      parts.push(m);
+      return m;
+    },
+    // a horizontal log along 'x' or 'z' centred at (x, y, z)
+    log(axis, r, len, color, x, y, z) {
+      return axis === 'x' ? this.add(logGeo(r, len), color, x, y, z, 0, 0, Math.PI / 2)
+                          : this.add(logGeo(r, len), color, x, y, z, Math.PI / 2, 0, 0);
+    },
+    build(material, { cast = true, receive = true } = {}) {
+      if (!parts.length) return null;
+      const mesh = new THREE.Mesh(mergeMeshGeometry(parts, new THREE.Matrix4(), true, 'material'), material);
+      mesh.castShadow = cast;
+      mesh.receiveShadow = receive;
+      return mesh;
+    },
+  };
+}
+// a merged surface that hides with the wall/roof entry `ref` in X-ray view
+function trackLike(mesh, ref) {
+  if (mesh) wallData.push({ mesh, normal: ref.normal.clone(), center: ref.center.clone() });
+  return mesh;
 }
 
 // ==========================================================
@@ -2203,35 +2322,19 @@ const PEAK_Y = 8.0;
 {
   const pitchSlope = (PEAK_Y - ROOM.h) / (ROOM.w / 2); // rise/run = 3/4.5
   const pitchAngle = Math.atan(pitchSlope);            // ≈ 33.7°
-  const slopeLen = Math.sqrt((ROOM.w / 2) ** 2 + (PEAK_Y - ROOM.h) ** 2);
+  // the roof overhangs the log walls (which stand ~0.37 proud of the wall
+  // planes): 0.95 past the eave walls, 0.9 past the gables
+  const EAVE_RUN = 0.95, GABLE_OVER = 0.9;
+  const roofRun = (ROOM.w / 2 + EAVE_RUN) * Math.sqrt(1 + pitchSlope * pitchSlope);  // ridge → eave edge
+  const roofLen = ROOM.d + 2 * GABLE_OVER;
 
-  // shingle texture (green with dark grout lines)
-  const shingleCanvas = document.createElement('canvas');
-  shingleCanvas.width = shingleCanvas.height = 256;
-  const sctx = shingleCanvas.getContext('2d');
-  sctx.fillStyle = '#4a7044'; sctx.fillRect(0, 0, 256, 256);
-  for (let r = 0; r < 16; r++) {
-    for (let c = 0; c < 8; c++) {
-      const x = c * 32 + (r % 2) * 16;
-      const y = r * 16;
-      const v = Math.random() * 30 - 15;
-      sctx.fillStyle = `rgb(${Math.floor(74+v)}, ${Math.floor(112+v)}, ${Math.floor(68+v)})`;
-      sctx.fillRect(x, y, 32, 16);
-      sctx.strokeStyle = 'rgba(0,0,0,0.35)'; sctx.lineWidth = 1;
-      sctx.strokeRect(x, y, 32, 16);
-    }
-  }
-  const shingleTex = new THREE.CanvasTexture(shingleCanvas);
-  shingleTex.wrapS = shingleTex.wrapT = THREE.RepeatWrapping;
-  shingleTex.encoding = THREE.sRGBEncoding;
-  shingleTex.repeat.set(6, slopeLen / 0.6);
+  // roof boards — the underside seen below the eaves (the shingles sit on top)
   const roofMat = new THREE.MeshStandardMaterial({
-    map: shingleTex, roughness: 0.85, side: THREE.DoubleSide,
+    color: 0x6b4a30, roughness: 0.9, side: THREE.DoubleSide,
     // pull the roof slightly forward in depth so it always wins the seam
     // against the gable triangles' sloped edges (same line in 3D space) and
-    // against the chimney's brick courses where they pierce the slope —
-    // otherwise far-zoom depth precision shows white hairline gaps along
-    // the eave/rake lines
+    // against the chimney where it pierces the slope — otherwise far-zoom
+    // depth precision shows white hairline gaps along the eave/rake lines
     polygonOffset: true, polygonOffsetFactor: -1.0, polygonOffsetUnits: -1.0
   });
 
@@ -2249,6 +2352,59 @@ const PEAK_Y = 8.0;
     side: THREE.BackSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   });
+  // ---- shingle courses, fascia, rakes and ridge cap ----
+  // The panels above are the roof's underside; on top of each sits a run of
+  // stepped shingle courses (one strip per course; the tiles, their shades
+  // and seams come from the course texture, offset per course so seams
+  // stagger), with fascia boards along the eaves and rake boards up the
+  // gable edges. Each side merges into two meshes that hide with its panel
+  // in X-ray view.
+  const TILE_W = 0.5, COURSE_LEN = 0.58, COURSE_T = 0.055, COURSE_STEP = 0.42, COURSE_TILT = 0.1;
+  const FASCIA = 0x4a3020;
+  const _b = new THREE.Matrix4(), _d = new THREE.Vector3(), _n = new THREE.Vector3(), _zz = new THREE.Vector3();
+  const _x2 = new THREE.Vector3(), _y2 = new THREE.Vector3(), _c = new THREE.Vector3();
+  function dressRoofSide(s, ref) {
+    // basis: d down the slope, n out of the roof, z along the ridge
+    _d.set(s, -pitchSlope, 0).normalize();
+    _n.set(s * pitchSlope, 1, 0).normalize();
+    _zz.crossVectors(_d, _n);
+    const shingles = cabinKit(), trim = cabinKit();
+    // courses from the eave up to the ridge; each tilted so its butt edge
+    // stands proud of the course below
+    _x2.copy(_d).multiplyScalar(Math.cos(COURSE_TILT)).addScaledVector(_n, Math.sin(COURSE_TILT));
+    _y2.copy(_n).multiplyScalar(Math.cos(COURSE_TILT)).addScaledVector(_d, -Math.sin(COURSE_TILT));
+    for (let c = 0, t = roofRun - COURSE_LEN / 2; t > -COURSE_LEN * 0.2; c++, t -= COURSE_STEP) {
+      const geo = rbox(COURSE_LEN, COURSE_T, roofLen, 0.02, 1);
+      const U = geo.attributes.uv, off = Math.random();
+      for (let i = 0; i < U.count; i++) U.setY(i, U.getY(i) * roofLen / (10 * TILE_W) + off);
+      _c.set(0, PEAK_Y, 0).addScaledVector(_d, t).addScaledVector(_n, COURSE_T / 2 + 0.035);
+      _b.makeBasis(_x2, _y2, _zz).setPosition(_c);
+      const shade = [0xffffff, 0xf0f0f0, 0xe4e8e2, 0xf8f4ec][c % 4];
+      shingles.addMatrix(geo, shade, _b);
+    }
+    // fascia under the eave edge
+    const eave = new THREE.Vector3(0, PEAK_Y, 0).addScaledVector(_d, roofRun);
+    trim.add(grainUV(rbox(0.07, 0.26, roofLen + 0.04, 0.025, 1), 'z'), FASCIA,
+      eave.x - s * 0.04, eave.y - 0.1, 0);
+    // rake boards down both gable edges
+    const rake = grainUV(rbox(roofRun + 0.04, 0.24, 0.07, 0.025, 1), 'x');
+    for (const zs of [-1, 1]) {
+      _c.set(0, PEAK_Y, zs * (roofLen / 2 - 0.035)).addScaledVector(_d, roofRun / 2).addScaledVector(_n, -0.06);
+      _b.makeBasis(_d, _n, _zz).setPosition(_c);
+      trim.addMatrix(rake, FASCIA, _b);
+    }
+    if (s < 0) {
+      // ridge cap (rides with the left side)
+      const cap = rbox(0.4, 0.13, roofLen + 0.08, 0.06, 2);
+      const U = cap.attributes.uv;
+      for (let i = 0; i < U.count; i++) U.setY(i, U.getY(i) * roofLen / (10 * TILE_W));
+      shingles.add(cap, 0xb4c4b0, 0, PEAK_Y + 0.13, 0);
+    }
+    for (const m of [shingles.build(shingleMat), trim.build(cabinTimberMat)]) {
+      root.add(m);
+      trackLike(m, ref);
+    }
+  }
   // LEFT roof panel — slope from -X eave (-4.5, ROOM.h) up to ridge (0, PEAK_Y)
   // rotation.order = 'ZXY' so the pitch tilt (around world Z = ridge) is
   // applied BEFORE the X rotation that lays the plane on its side; with the
@@ -2257,52 +2413,50 @@ const PEAK_Y = 8.0;
   // tilting it.
   {
     const left = new THREE.Mesh(
-      new THREE.PlaneGeometry(slopeLen, ROOM.d + 0.6), roofMat
+      new THREE.PlaneGeometry(roofRun, roofLen), roofMat
     );
-    left.position.set(-ROOM.w / 4, (PEAK_Y + ROOM.h) / 2, 0);
+    left.position.set(-(ROOM.w / 2 + EAVE_RUN) / 2, PEAK_Y - pitchSlope * (ROOM.w / 2 + EAVE_RUN) / 2, 0);
     left.rotation.order = 'ZXY';
     left.rotation.z = +pitchAngle;
     left.rotation.x = Math.PI / 2;
     left.castShadow = true; left.receiveShadow = true;
     trackWall(left);
     root.add(left);
+    const ref = wallData[wallData.length - 1];
     // matching snow layer — also tracked by X-ray so it hides together
     // with its underlying roof panel (otherwise snow stays floating
     // when the roof is removed for the cutaway interior view)
     const snow = new THREE.Mesh(left.geometry, roofSnowMat);
-    snow.position.copy(left.position);
+    // lifted to lie over the shingle courses
+    snow.position.copy(left.position).addScaledVector(new THREE.Vector3(-1 * pitchSlope, 1, 0).normalize(), 0.14);
     snow.rotation.copy(left.rotation);
     trackWall(snow);
     root.add(snow);
     snowCaps.push(snow);
+    dressRoofSide(-1, ref);
   }
   // RIGHT roof panel — slope from +X eave (+4.5, ROOM.h) up to ridge
   {
     const right = new THREE.Mesh(
-      new THREE.PlaneGeometry(slopeLen, ROOM.d + 0.6), roofMat
+      new THREE.PlaneGeometry(roofRun, roofLen), roofMat
     );
-    right.position.set(+ROOM.w / 4, (PEAK_Y + ROOM.h) / 2, 0);
+    right.position.set(+(ROOM.w / 2 + EAVE_RUN) / 2, PEAK_Y - pitchSlope * (ROOM.w / 2 + EAVE_RUN) / 2, 0);
     right.rotation.order = 'ZXY';
     right.rotation.z = -pitchAngle;
     right.rotation.x = Math.PI / 2;
     right.castShadow = true; right.receiveShadow = true;
     trackWall(right);
     root.add(right);
+    const ref = wallData[wallData.length - 1];
     const snow = new THREE.Mesh(right.geometry, roofSnowMat);
-    snow.position.copy(right.position);
+    // lifted to lie over the shingle courses
+    snow.position.copy(right.position).addScaledVector(new THREE.Vector3(1 * pitchSlope, 1, 0).normalize(), 0.14);
     snow.rotation.copy(right.rotation);
     trackWall(snow);
     root.add(snow);
     snowCaps.push(snow);
+    dressRoofSide(1, ref);
   }
-
-  // ridge cap — short board running along the apex
-  const ridge = new THREE.Mesh(
-    new THREE.BoxGeometry(0.32, 0.12, ROOM.d + 0.7),
-    new THREE.MeshStandardMaterial({ color: 0x35563a, roughness: 0.85 })
-  );
-  ridge.position.set(0, PEAK_Y + 0.04, 0);
-  root.add(ridge);
 
   // GABLE END triangles (FRONT and BACK walls, above cabin walls)
   const gableShape = new THREE.Shape();
@@ -2311,18 +2465,9 @@ const PEAK_Y = 8.0;
   gableShape.lineTo(0, PEAK_Y - ROOM.h);
   gableShape.closePath();
   const gableGeo = new THREE.ShapeGeometry(gableShape);
-  // ShapeGeometry sets UVs to raw XY coordinates, so wallTex.repeat tiles the
-  // plank texture far too densely across the triangle (it averages to a flat
-  // tan). Remap UVs to 0..1 across the gable so the cabin walls and gables
-  // share the same plank scale.
-  {
-    const uvs = gableGeo.attributes.uv;
-    const gW = ROOM.w, gH = PEAK_Y - ROOM.h;
-    for (let i = 0; i < uvs.count; i++) {
-      uvs.setXY(i, (uvs.getX(i) + gW / 2) / gW, uvs.getY(i) / gH);
-    }
-    uvs.needsUpdate = true;
-  }
+  // same metre-based UVs as the walls below (ShapeGeometry's UVs are the
+  // shape's raw XY coordinates, measured from the top of the wall)
+  wallUV(gableGeo, 0, ROOM.h);
   // BACK gable (-Z): default +Z normal = +Z world = INWARD for back wall ✓
   {
     const back = new THREE.Mesh(gableGeo, wallMat);
@@ -2343,144 +2488,413 @@ const PEAK_Y = 8.0;
 }
 
 // ==========================================================
-// BACK PORCH — wooden deck behind the cabin (back wall, -Z side)
-// with 2 columns and its own small green awning roof
+// LOG WALLS — round logs laid over the outside of the wall planes (which
+// stay as the interior walls). The gable walls' courses sit half a log
+// lower than the side walls', so at each corner the logs cross and run
+// past each other like notched logs; the gables carry on up under the roof.
+// Every wall's logs, trim and footing merge into two meshes that hide with
+// that wall in X-ray view.
+// ==========================================================
+const LOG_R = 0.17;                  // log radius
+const LOG_STEP = 0.31;               // course height (a little under 2r so logs nest)
+const LOG_OFF = LOG_R + 0.025;       // wall plane → log axis
+const LOG_FACE = LOG_OFF + LOG_R;    // wall plane → outer face of the logs
+const LOG_EXT = 0.3;                 // how far the log ends run past a corner
+const FOOT_H = 0.3;                  // fieldstone footing height
+const CABIN_DOOR = { cx: 1.6, w: 0.92, h: 2.45 };   // as cut in buildFrontWall()
+const CABIN_WIN = { w: 3.4, y0: 1.6, y1: 3.6 };     // as cut in buildBackWall()
+const LOG_TONES = [0x9a6235, 0x8f5a31, 0xa36a3a, 0x86532d, 0x99643a, 0xa06838];
+const STONE_TONES = [0x4d4842, 0x423d37, 0x57504a, 0x3a3631, 0x52483e, 0x5f5850, 0x47403a];
+const pickTone = list => list[(Math.random() * list.length) | 0];
+{
+  const HW = ROOM.w / 2, HD = ROOM.d / 2, H = ROOM.h;
+  const slope = (PEAK_Y - H) / HW;
+  const TRIM = 0x5d3b22;
+  const wall = (normal, center) => ({ logs: cabinKit(), stones: cabinKit(), ref: { normal, center } });
+  const W = {
+    front: wall(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, H / 2, HD)),
+    back:  wall(new THREE.Vector3(0, 0, 1),  new THREE.Vector3(0, H / 2, -HD)),
+    left:  wall(new THREE.Vector3(1, 0, 0),  new THREE.Vector3(-HW, H / 2, 0)),
+    right: wall(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(HW, H / 2, 0)),
+  };
+  // spans of [a, b] minus the opening [o0, o1]
+  const cut = (spans, o0, o1) => spans.flatMap(([a, b]) =>
+    (o1 <= a || o0 >= b) ? [[a, b]] : [[a, o0], [o1, b]].filter(([p, q]) => q - p > 0.12));
+
+  // ---- gable walls (front, back): logs along X ----
+  const y0 = FOOT_H + LOG_R - 0.02;
+  const doorL = CABIN_DOOR.cx - CABIN_DOOR.w / 2, doorR = CABIN_DOOR.cx + CABIN_DOOR.w / 2;
+  for (let k = 0; ; k++) {
+    const y = y0 + k * LOG_STEP, top = y + LOG_R;
+    // below the eaves the ends run past the corners (but stay under the
+    // eave overhang); in the gable each log stops where the roof comes down
+    const reach = top <= H
+      ? Math.min(HW + LOG_OFF + LOG_EXT, HW + (H - top) / slope - 0.03)
+      : HW * (PEAK_Y - top) / (PEAK_Y - H) - 0.04;
+    if (reach < 0.2) break;
+    for (const [w, zs] of [[W.front, 1], [W.back, -1]]) {
+      let spans = [[-reach, reach]];
+      // a log split around an opening ends inside its casing; the first one
+      // whose centre clears the opening runs across behind the header
+      if (zs > 0 && y < CABIN_DOOR.h) spans = cut(spans, doorL - 0.02, doorR + 0.02);
+      if (zs < 0 && y > CABIN_WIN.y0 - 0.02 && y < CABIN_WIN.y1 + 0.02) spans = cut(spans, -CABIN_WIN.w / 2 - 0.02, CABIN_WIN.w / 2 + 0.02);
+      for (const [a, b] of spans) w.logs.log('x', LOG_R, b - a, pickTone(LOG_TONES), (a + b) / 2, y, zs * (HD + LOG_OFF));
+    }
+  }
+
+  // ---- eave walls (left, right): logs along Z, half a course higher ----
+  const underEave = H - LOG_FACE * slope - 0.03;     // eave underside above the logs' outer face
+  let lastTop = 0;
+  for (let k = 0; ; k++) {
+    const y = y0 + LOG_STEP / 2 + k * LOG_STEP;
+    if (y + LOG_R > underEave) break;
+    for (const [w, xs] of [[W.left, -1], [W.right, 1]]) {
+      w.logs.log('z', LOG_R, 2 * (HD + LOG_OFF + LOG_EXT), pickTone(LOG_TONES), xs * (HW + LOG_OFF), y, 0);
+    }
+    lastTop = y + LOG_R;
+  }
+  for (const [w, xs] of [[W.left, -1], [W.right, 1]]) {
+    // sill timber under the first course, top plate up to the eave
+    const sillH = y0 + LOG_STEP / 2 - LOG_R - FOOT_H + 0.05;
+    w.logs.add(grainUV(rbox(LOG_FACE - 0.05, sillH, ROOM.d + 0.1, 0.03, 1), 'z'), TRIM,
+      xs * (HW + 0.04 + (LOG_FACE - 0.05) / 2), FOOT_H + sillH / 2 - 0.02, 0);
+    const plateH = underEave - lastTop + 0.06;
+    w.logs.add(grainUV(rbox(LOG_FACE - 0.05, plateH, ROOM.d + 0.1, 0.03, 1), 'z'), TRIM,
+      xs * (HW + 0.04 + (LOG_FACE - 0.05) / 2), lastTop - 0.06 + plateH / 2, 0);
+  }
+
+  // ---- door and window casings (cover the cut log ends) ----
+  const depth = LOG_FACE + 0.06;
+  {
+    const zc = HD - 0.02 + depth / 2, jambH = CABIN_DOOR.h + 0.14;
+    for (const x of [doorL - 0.07, doorR + 0.07]) {
+      W.front.logs.add(grainUV(rbox(0.14, jambH, depth, 0.03, 1), 'y'), TRIM, x, jambH / 2, zc);
+    }
+    W.front.logs.add(grainUV(rbox(CABIN_DOOR.w + 0.44, 0.2, depth + 0.05, 0.04, 1), 'x'), TRIM,
+      CABIN_DOOR.cx, CABIN_DOOR.h + 0.11, zc + 0.02);
+  }
+  {
+    const zc = -(HD - 0.02 + depth / 2), wy = (CABIN_WIN.y0 + CABIN_WIN.y1) / 2, jambH = CABIN_WIN.y1 - CABIN_WIN.y0 + 0.24;
+    for (const xs of [-1, 1]) {
+      W.back.logs.add(grainUV(rbox(0.14, jambH, depth, 0.03, 1), 'y'), TRIM, xs * (CABIN_WIN.w / 2 + 0.07), wy, zc);
+    }
+    W.back.logs.add(grainUV(rbox(CABIN_WIN.w + 0.44, 0.2, depth + 0.05, 0.04, 1), 'x'), TRIM, 0, CABIN_WIN.y1 + 0.12, zc - 0.02);
+    // sill, sloped out a touch beyond the logs
+    W.back.logs.add(grainUV(rbox(CABIN_WIN.w + 0.56, 0.1, depth + 0.16, 0.035, 1), 'x'), TRIM, 0, CABIN_WIN.y0 - 0.07, zc - 0.08);
+    // board-and-batten shutters, painted the roof's green
+    const SHUT = 0x3e6a44;
+    for (const xs of [-1, 1]) {
+      const sx = xs * (CABIN_WIN.w / 2 + 0.16 + 0.4), sz = -(HD + LOG_FACE + 0.03);
+      for (let b = 0; b < 3; b++) {
+        W.back.logs.add(grainUV(rbox(0.25, 2.1, 0.05, 0.015, 1), 'y'), SHUT, sx + (b - 1) * 0.262, wy, sz);
+      }
+      for (const by of [-0.7, 0.7]) {
+        W.back.logs.add(grainUV(rbox(0.74, 0.11, 0.05, 0.02, 1), 'x'), SHUT, sx, wy + by, sz - 0.04);
+      }
+      W.back.logs.add(grainUV(rbox(0.07, 1.62, 0.04, 0.015, 1), 'y'), SHUT, sx, wy, sz - 0.045, 0, 0, xs * -0.42);
+    }
+    // flower box under the sill, with a mound of blooms
+    const boxZ = -(HD + LOG_FACE + 0.15), boxY = CABIN_WIN.y0 - 0.42;
+    W.back.logs.add(grainUV(rbox(CABIN_WIN.w + 0.1, 0.26, 0.28, 0.04, 1), 'x'), 0x6b4428, 0, boxY, boxZ);
+    const leaf = new THREE.SphereGeometry(1, 9, 7), bloom = new THREE.SphereGeometry(1, 8, 6);
+    for (let i = 0; i < 15; i++) {
+      const x = -CABIN_WIN.w / 2 + 0.18 + (i / 14) * (CABIN_WIN.w - 0.36);
+      W.back.stones.add(leaf, [0x1f4416, 0x2a521c, 0x1a3a12][i % 3], x, boxY + 0.15, boxZ + (i % 2 ? 0.04 : -0.04), 0, 0, 0, 0.13, 0.09, 0.12);
+    }
+    for (let i = 0; i < 18; i++) {
+      const x = -CABIN_WIN.w / 2 + 0.2 + Math.random() * (CABIN_WIN.w - 0.4);
+      W.back.stones.add(bloom, [0xc8140f, 0xe8a000, 0x8a1fae, 0xe8400c, 0xd0185a][i % 5], x, boxY + 0.21 + Math.random() * 0.06,
+        boxZ + (Math.random() - 0.5) * 0.15, 0, 0, 0, 0.065 + Math.random() * 0.03);
+    }
+  }
+
+  // ---- fieldstone footing ----
+  const footD = LOG_FACE + 0.06;
+  const layStones = (w, axis, from, to, outward, skip) => {
+    // a dark mortar bed behind the stones (open at the door)
+    for (const [a, b] of skip ? cut([[from, to]], skip[0], skip[1]) : [[from, to]]) {
+      w.stones.add(rbox(axis === 'x' ? b - a : footD * 0.7, FOOT_H, axis === 'x' ? footD * 0.7 : b - a, 0.03, 1),
+        0x2a2622, axis === 'x' ? (a + b) / 2 : outward * (HW + 0.04 + footD * 0.33), FOOT_H / 2,
+        axis === 'x' ? outward * (HD + 0.04 + footD * 0.33) : (a + b) / 2);
+    }
+    for (const [ry, rh] of [[0, 0.16], [0.145, 0.155]]) {
+      for (let p = from + (ry ? 0.2 : 0); p < to - 0.08;) {
+        const len = Math.min(0.3 + Math.random() * 0.3, to - p);
+        const mid = p + len / 2;
+        p += len;
+        if (skip && mid > skip[0] && mid < skip[1]) continue;
+        const d = footD + (Math.random() - 0.5) * 0.05, h = rh + (Math.random() - 0.5) * 0.025;
+        const geo = rbox(axis === 'x' ? len - 0.035 : d, h, axis === 'x' ? d : len - 0.035, 0.045, 1);
+        const off = d / 2 + 0.04 + Math.random() * 0.015;   // clear of the wall plane (its depth offset lets touching parts bleed through)
+        w.stones.add(geo, pickTone(STONE_TONES),
+          axis === 'x' ? mid : outward * (HW + off), ry + h / 2,
+          axis === 'x' ? outward * (HD + off) : mid);
+      }
+    }
+  };
+  const footSpan = HW + footD;
+  layStones(W.front, 'x', -footSpan, footSpan, 1, [doorL - 0.12, doorR + 0.12]);
+  layStones(W.back, 'x', -footSpan, footSpan, -1);
+  layStones(W.left, 'z', -HD, HD, -1);
+  layStones(W.right, 'z', -HD, HD, 1);
+  // a flat stone step at the door
+  W.front.stones.add(rbox(CABIN_DOOR.w + 0.55, 0.12, footD + 0.28, 0.04, 2), 0x5f5952, CABIN_DOOR.cx, 0.06, HD + (footD + 0.28) / 2);
+
+  // ---- a little gabled canopy over the front door ----
+  {
+    const cx = CABIN_DOOR.cx, z0 = HD + LOG_FACE - 0.02, depthC = 0.85;
+    const half = 0.85, drop = 0.36, yRidge = CABIN_DOOR.h + 0.85;
+    const run = Math.hypot(half, drop);
+    const shingles = cabinKit(), snowKit = cabinKit();
+    const m = new THREE.Matrix4(), c = new THREE.Vector3();
+    const d = new THREE.Vector3(), n = new THREE.Vector3(), zz = new THREE.Vector3();
+    const x2 = new THREE.Vector3(), y2 = new THREE.Vector3();
+    for (const sx of [-1, 1]) {
+      d.set(sx * half, -drop, 0).normalize();          // down this side
+      n.set(sx * drop, half, 0).normalize();           // up out of the roof
+      zz.crossVectors(d, n);
+      // roof boards
+      c.set(cx, yRidge, z0 + depthC / 2).addScaledVector(d, run / 2).addScaledVector(n, -0.03);
+      m.makeBasis(d, n, zz).setPosition(c);
+      W.front.logs.addMatrix(grainUV(rbox(run + 0.04, 0.05, depthC, 0.015, 1), 'x'), 0x6b4a30, m);
+      // two shingle courses, butt edges proud like the main roof
+      x2.copy(d).multiplyScalar(Math.cos(0.1)).addScaledVector(n, Math.sin(0.1));
+      y2.copy(n).multiplyScalar(Math.cos(0.1)).addScaledVector(d, -Math.sin(0.1));
+      for (const t of [run - 0.27, run - 0.64]) {
+        const geo = rbox(0.56, 0.05, depthC + 0.06, 0.02, 1);
+        const U = geo.attributes.uv, off = Math.random();
+        for (let i = 0; i < U.count; i++) U.setY(i, U.getY(i) * (depthC + 0.06) / 5 + off);
+        c.set(cx, yRidge, z0 + depthC / 2).addScaledVector(d, t).addScaledVector(n, 0.05);
+        m.makeBasis(x2, y2, zz).setPosition(c);
+        shingles.addMatrix(geo, 0xf0f0f0, m);
+      }
+      // bracket from the logs up under the eave
+      W.front.logs.add(grainUV(rbox(0.07, 0.7, 0.07, 0.02, 1), 'y'), TRIM, cx + sx * (half - 0.25), CABIN_DOOR.h + 0.26, z0 + 0.3, Math.PI / 4);
+      // snow over the shingles
+      c.set(cx, yRidge, z0 + depthC / 2).addScaledVector(d, run / 2).addScaledVector(n, 0.13);
+      m.makeBasis(d, n, zz).setPosition(c);
+      snowKit.addMatrix(rbox(run, 0.05, depthC + 0.1, 0.02, 1), 0xffffff, m);
+    }
+    shingles.add(rbox(0.16, 0.07, depthC + 0.1, 0.03, 1), 0xb4c4b0, cx, yRidge + 0.07, z0 + depthC / 2);   // ridge cap
+    const mesh = shingles.build(shingleMat);
+    root.add(mesh);
+    trackLike(mesh, W.front.ref);
+    const snow = snowKit.build(cabinSnowMat, { cast: false, receive: false });
+    root.add(snow);
+    trackLike(snow, W.front.ref);
+    snowCaps.push(snow);
+  }
+
+  // ---- inside trim: baseboard and ceiling trim along each wall (pushed off
+  // the wall plane so they don't z-fight it) ----
+  for (const [w, axis, sgn] of [[W.back, 'x', -1], [W.front, 'x', 1], [W.left, 'z', -1], [W.right, 'z', 1]]) {
+    const kit = cabinKit(), len = axis === 'x' ? ROOM.w : ROOM.d, wallAt = axis === 'x' ? HD : HW;
+    for (const [h, y, d] of [[0.18, 0.09, 0.05], [0.12, ROOM.h - 0.06, 0.08]]) {
+      const at = sgn * (wallAt - d / 2 - 0.035);
+      kit.add(grainUV(rbox(axis === 'x' ? len : d, h, axis === 'x' ? d : len, 0.015, 1), axis), 0x4a3020,
+        axis === 'x' ? 0 : at, y, axis === 'x' ? at : 0);
+    }
+    const m = kit.build(cabinTimberMat, { cast: false });
+    root.add(m);
+    trackLike(m, w.ref);
+  }
+
+  // ---- three log beams across the ceiling (hide with it in X-ray view) ----
+  {
+    const kit = cabinKit();
+    for (const z of [-2.7, 0, 2.7]) kit.log('x', 0.15, ROOM.w - 0.02, pickTone(LOG_TONES), 0, ROOM.h - 0.19, z);
+    const beams = kit.build(cabinTimberMat, { cast: false });
+    root.add(beams);
+    trackLike(beams, wallData.find(w => w.normal.y < -0.9));   // the ceiling
+  }
+
+  for (const w of Object.values(W)) {
+    for (const m of [w.logs.build(cabinTimberMat), w.stones.build(cabinStoneMat, { cast: false })]) {
+      root.add(m);
+      trackLike(m, w.ref);
+    }
+  }
+}
+
+// ==========================================================
+// WOODPILE — split logs stacked against the left wall
 // ==========================================================
 {
-  const deckMat = matStandard(0x6b4226, 0.88);
-  const colMat = matStandard(0xc8b08a, 0.85);
-  const railMat = matStandard(0x6b4226, 0.85);
+  const kit = cabinKit();
+  const x = -(ROOM.w / 2 + LOG_FACE + 0.48), z0 = -1.5, z1 = 1.3;
+  for (const z of [z0 - 0.08, z1 + 0.08]) {
+    kit.add(grainUV(rbox(0.12, 1.25, 0.12, 0.03, 1), 'y'), 0x5d3b22, x, 0.625, z);   // end posts
+  }
+  for (const xo of [-0.24, 0.24]) {
+    kit.add(grainUV(rbox(0.1, 0.08, z1 - z0 + 0.3, 0.025, 1), 'z'), 0x5d3b22, x + xo, 0.04, (z0 + z1) / 2);  // rails
+  }
+  for (let row = 0; row < 5; row++) {
+    const y = 0.19 + row * 0.2, shift = row % 2 ? 0.1 : 0;
+    for (let z = z0 + 0.1 + shift; z < z1 - 0.05; z += 0.21) {
+      const r = 0.085 + Math.random() * 0.025;
+      kit.log('x', r, 0.62 + Math.random() * 0.1, pickTone(LOG_TONES), x + (Math.random() - 0.5) * 0.08, y, z);
+    }
+  }
+  root.add(kit.build(cabinTimberMat));
+}
 
+// ==========================================================
+// BACK PORCH — wooden deck behind the cabin (back wall, -Z side) under its
+// own small shingled roof, carried on two log posts
+// ==========================================================
+{
   const porchW = 6.0;
   const porchD = 2.6;                        // depth out from back wall
   const porchCenterZ = -ROOM.d / 2 - porchD / 2;
   const porchFarZ = -ROOM.d / 2 - porchD;     // outer edge of porch
+  const DECK = [0x8a5f3c, 0x83593a, 0x916644], BEAM = 0x5d3b22;
+  const kit = cabinKit();
 
-  // DECK
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(porchW, 0.12, porchD), deckMat);
-  deck.position.set(0, 0.06, porchCenterZ);
-  deck.castShadow = true; deck.receiveShadow = true;
-  root.add(deck);
-
+  // DECK — boards along X with hairline gaps, on rim joists (top at y = 0.12)
+  const boards = 9, bw = porchD / boards;
+  for (let i = 0; i < boards; i++) {
+    kit.add(grainUV(rbox(porchW, 0.07, bw - 0.02, 0.018, 1), 'x'), DECK[i % 3], 0, 0.085, -ROOM.d / 2 - bw / 2 - i * bw);
+  }
+  kit.add(grainUV(rbox(porchW + 0.04, 0.12, 0.1, 0.025, 1), 'x'), BEAM, 0, 0.06, porchFarZ + 0.05);
+  for (const xs of [-1, 1]) {
+    kit.add(grainUV(rbox(0.1, 0.12, porchD, 0.025, 1), 'z'), BEAM, xs * (porchW / 2 - 0.05), 0.06, porchCenterZ);
+  }
   // STAIRS down to the ground
   for (let i = 0; i < 2; i++) {
-    const step = new THREE.Mesh(
-      new THREE.BoxGeometry(2.4, 0.08, 0.32), deckMat
-    );
-    step.position.set(0, 0.04 - i * 0.04, porchFarZ - 0.16 - i * 0.32);
-    step.castShadow = true;
-    root.add(step);
+    kit.add(grainUV(rbox(2.4, 0.07, 0.32, 0.02, 1), 'x'), DECK[i], 0, 0.045 - i * 0.04, porchFarZ - 0.16 - i * 0.32);
   }
 
-  // 2 COLUMNS at the outer corners
+  // 2 LOG POSTS at the outer corners, a log beam across them, knee braces
   const colHeight = 3.2;
-  const colY = 0.12 + colHeight / 2;
   const colX = porchW / 2 - 0.3;
-  for (const x of [-colX, colX]) {
-    const col = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.14, colHeight, 14), colMat
-    );
-    col.position.set(x, colY, porchFarZ + 0.25);
-    col.castShadow = true;
-    root.add(col);
-    const base = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.1, 0.4),
-      matStandard(COL.woodDark, 0.88)
-    );
-    base.position.set(x, 0.17, porchFarZ + 0.25);
-    root.add(base);
-    const cap = new THREE.Mesh(
-      new THREE.BoxGeometry(0.32, 0.08, 0.32),
-      matStandard(COL.woodDark, 0.88)
-    );
-    cap.position.set(x, 0.12 + colHeight + 0.04, porchFarZ + 0.25);
-    root.add(cap);
+  const postZ = porchFarZ + 0.25;
+  const beamY = 0.12 + colHeight + 0.13;
+  for (const xs of [-1, 1]) {
+    kit.add(logGeo(0.13, colHeight), pickTone(LOG_TONES), xs * colX, 0.12 + colHeight / 2, postZ);
+    kit.add(rbox(0.36, 0.1, 0.36, 0.035, 1), 0x5f5952, xs * colX, 0.17, postZ);          // stone pad
+    // brace from the post up to the beam, toward the middle of the porch
+    kit.add(grainUV(rbox(0.08, 0.82, 0.08, 0.02, 1), 'y'), BEAM, xs * (colX - 0.29), beamY - 0.42, postZ, 0, 0, xs * Math.PI / 4);
   }
+  kit.log('x', 0.14, porchW + 0.5, pickTone(LOG_TONES), 0, beamY, postZ);
 
-  // SMALL GREEN AWNING — sloped roof for the porch alone (separate from main roof)
-  // attaches to the back wall just below the eave and slopes down to the columns
+  // RAILINGS — top + bottom rail with turned balusters, open at the stairs.
+  // The top rail stays at y ≈ 0.95 (the owl perches on it).
+  const RAIL = 0x6b4226;
+  const rail = (x0, x1, z0, z1) => {
+    const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+    const len = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    kit.add(grainUV(rbox(alongX ? len : 0.09, 0.07, alongX ? 0.09 : len, 0.03, 1), alongX ? 'x' : 'z'), RAIL, cx, 0.95, cz);
+    kit.add(grainUV(rbox(alongX ? len : 0.07, 0.06, alongX ? 0.07 : len, 0.025, 1), alongX ? 'x' : 'z'), RAIL, cx, 0.25, cz);
+    const n = Math.max(1, Math.round(len / 0.2));
+    for (let i = 1; i < n; i++) {
+      const f = i / n;
+      kit.add(baluster, RAIL, x0 + (x1 - x0) * f, 0.6, z0 + (z1 - z0) * f);
+    }
+  };
+  const baluster = grainUV(lathe([[0.02, -0.32], [0.032, -0.28], [0.022, -0.2], [0.022, 0.18], [0.034, 0.24], [0.02, 0.32]], 8), 'y');
+  const gap = 1.25;                                   // stair opening half-width
+  rail(-colX, -gap, postZ, postZ);
+  rail(gap, colX, postZ, postZ);
+  for (const xs of [-1, 1]) {
+    rail(xs * colX, xs * colX, -ROOM.d / 2 - LOG_FACE - 0.05, postZ);
+    kit.add(grainUV(rbox(0.12, 1.05, 0.12, 0.03, 1), 'y'), BEAM, xs * gap, 0.12 + 0.52, postZ);  // newel posts
+  }
+  root.add(kit.build(cabinTimberMat));
+
+  // PORCH ROOF — a shed roof from the log wall (above the window) down over
+  // the beam: plank deck, stepped shingle courses, fascia at the low edge
   {
-    const awningMat = new THREE.MeshStandardMaterial({
-      color: 0x4a7044, roughness: 0.85, side: THREE.DoubleSide
-    });
-    const wallY = ROOM.h - 0.4;                // top edge against back wall
-    const colTopY = 0.12 + colHeight + 0.08;   // bottom edge above columns
-    const dz = porchD;                         // horizontal run
-    const dy = wallY - colTopY;                // vertical drop
-    const len = Math.sqrt(dz * dz + dy * dy);
-    const angle = Math.atan2(dy, dz);          // slope angle from horizontal
-    const awning = new THREE.Mesh(
-      new THREE.PlaneGeometry(porchW + 0.6, len),
-      awningMat
-    );
-    awning.position.set(0, (wallY + colTopY) / 2, -ROOM.d / 2 - dz / 2);
-    // tilt around X so the high edge sits against the cabin wall and the low
-    // edge rests on the column tops (slopes down + outward away from cabin)
-    awning.rotation.x = (Math.PI / 2 - angle);
-    awning.castShadow = true;
-    root.add(awning);
+    const zWall = -(ROOM.d / 2 + LOG_FACE + 0.02), yWall = 4.35;
+    const yBeam = beamY + 0.14 + 0.04;                 // underside resting on the beam
+    const dz = zWall - postZ, dy = yWall - yBeam;
+    const fall = dy / dz;                              // drop per metre outward
+    const zEdge = postZ - 0.5, yEdge = yBeam - 0.5 * fall;
+    const d = new THREE.Vector3(0, yEdge - yWall, zEdge - zWall).normalize();   // down the slope
+    const n = new THREE.Vector3(1, 0, 0).cross(d);                              // up out of the roof
+    const run = Math.hypot(yEdge - yWall, zEdge - zWall);
+    const width = porchW + 0.7;
+    const roofKit = cabinKit(), deckKit = cabinKit();
+    const m = new THREE.Matrix4(), c = new THREE.Vector3(), x2 = new THREE.Vector3(), y2 = new THREE.Vector3();
+    const xAxis = new THREE.Vector3(), zAxis = new THREE.Vector3(1, 0, 0);
+    // roof deck (planks seen from below)
+    c.set(0, yWall, zWall).addScaledVector(d, run / 2).addScaledVector(n, -0.04);
+    xAxis.copy(d);
+    m.makeBasis(xAxis, n, zAxis).setPosition(c);
+    deckKit.addMatrix(grainUV(rbox(run, 0.08, width, 0.025, 1), 'x'), 0x7a5234, m);
+    // shingle courses, eave first
+    x2.copy(d).multiplyScalar(Math.cos(0.1)).addScaledVector(n, Math.sin(0.1));
+    y2.copy(n).multiplyScalar(Math.cos(0.1)).addScaledVector(d, -Math.sin(0.1));
+    const tFirst = run - 0.29, tLast = 0.2;
+    const courses = Math.ceil((tFirst - tLast) / 0.42) + 1;
+    for (let i = 0; i < courses; i++) {
+      const t = tFirst - (tFirst - tLast) * i / (courses - 1);
+      const geo = rbox(0.58, 0.055, width, 0.02, 1);
+      const U = geo.attributes.uv, off = Math.random();
+      for (let k = 0; k < U.count; k++) U.setY(k, U.getY(k) * width / 5 + off);
+      c.set(0, yWall, zWall).addScaledVector(d, t).addScaledVector(n, 0.07);
+      m.makeBasis(x2, y2, zAxis).setPosition(c);
+      roofKit.addMatrix(geo, [0xffffff, 0xf0f0f0, 0xe4e8e2][i % 3], m);
+    }
+    // fascia along the low edge
+    c.set(0, yEdge, zEdge).addScaledVector(n, -0.06);
+    deckKit.add(grainUV(rbox(width + 0.04, 0.22, 0.07, 0.025, 1), 'x'), 0x4a3020, 0, c.y, c.z);
+    root.add(deckKit.build(cabinTimberMat));
+    root.add(roofKit.build(shingleMat));
+    // snow over the shingles
+    const snowKit = cabinKit();
+    c.set(0, yWall, zWall).addScaledVector(d, run / 2).addScaledVector(n, 0.16);
+    m.makeBasis(d, n, zAxis).setPosition(c);
+    snowKit.addMatrix(rbox(run + 0.02, 0.06, width + 0.02, 0.03, 1), 0xffffff, m);
+    const snow = snowKit.build(cabinSnowMat, { cast: false, receive: false });
+    root.add(snow);
+    snowCaps.push(snow);
   }
 
-  // RAILINGS along the porch perimeter (between columns)
-  const backRail = new THREE.Mesh(
-    new THREE.BoxGeometry(porchW - 1.0, 0.08, 0.06), railMat
-  );
-  backRail.position.set(0, 0.95, porchFarZ + 0.25);
-  root.add(backRail);
-  for (const x of [-colX, colX]) {
-    const sideRail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.08, porchD - 0.6), railMat
-    );
-    sideRail.position.set(x, 0.95, porchCenterZ - 0.05);
-    root.add(sideRail);
-  }
-
-  // PORCH BENCH — wooden bench under the awning, back against the cabin
+  // PORCH BENCH — rounded slats on sturdy legs, back against the logs
   {
     const bench = new THREE.Group();
     const woodMat = matStandard(COL.woodDark, 0.85);
-    const slatMat = matStandard(0x6a4528, 0.85);
+    const slatMat = matStandard(0x6a4528, 0.82);
     const benchW = 2.4, seatH = 0.42, seatD = 0.42, backH = 0.55;
-    // seat — three slats running along X for a planked look
+    // seat — three slats running along X
     for (let i = 0; i < 3; i++) {
-      const slat = new THREE.Mesh(
-        new THREE.BoxGeometry(benchW, 0.05, seatD / 3 - 0.01), slatMat);
+      const slat = new THREE.Mesh(rbox(benchW, 0.05, seatD / 3 - 0.015, 0.02, 1), slatMat);
       slat.position.set(0, seatH, (i - 1) * (seatD / 3));
       slat.castShadow = true;
       bench.add(slat);
     }
-    // backrest — two horizontal slats
+    // backrest — two horizontal slats, leaning back a touch
     for (let i = 0; i < 2; i++) {
-      const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(benchW, 0.07, 0.05), slatMat);
-      rail.position.set(0, seatH + 0.18 + i * 0.22, -seatD / 2 + 0.03);
+      const rail = new THREE.Mesh(rbox(benchW, 0.08, 0.045, 0.02, 1), slatMat);
+      rail.position.set(0, seatH + 0.2 + i * 0.22, -seatD / 2 + 0.02 - i * 0.025);
+      rail.rotation.x = -0.12;
       rail.castShadow = true;
       bench.add(rail);
     }
-    // backrest posts
-    for (const sx of [-benchW / 2 + 0.06, benchW / 2 - 0.06]) {
-      const post = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, backH, 0.06), woodMat);
-      post.position.set(sx, seatH + backH / 2, -seatD / 2 + 0.03);
+    // backrest posts and legs
+    for (const sx of [-benchW / 2 + 0.07, benchW / 2 - 0.07]) {
+      const post = new THREE.Mesh(rbox(0.07, backH + 0.04, 0.07, 0.025, 1), woodMat);
+      post.position.set(sx, seatH + backH / 2, -seatD / 2 + 0.01);
+      post.rotation.x = -0.12;
       post.castShadow = true;
       bench.add(post);
+      for (const lz of [-seatD / 2 + 0.06, seatD / 2 - 0.06]) {
+        const leg = new THREE.Mesh(rbox(0.08, seatH, 0.08, 0.025, 1), woodMat);
+        leg.position.set(sx, seatH / 2, lz);
+        leg.castShadow = true;
+        bench.add(leg);
+      }
     }
-    // legs
-    for (const [lx, lz] of [
-      [-benchW / 2 + 0.1, -seatD / 2 + 0.05],
-      [benchW / 2 - 0.1, -seatD / 2 + 0.05],
-      [-benchW / 2 + 0.1, seatD / 2 - 0.05],
-      [benchW / 2 - 0.1, seatD / 2 - 0.05],
-    ]) {
-      const leg = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08, seatH, 0.08), woodMat);
-      leg.position.set(lx, seatH / 2, lz);
-      leg.castShadow = true;
-      bench.add(leg);
+    // armrests
+    for (const sx of [-benchW / 2 + 0.07, benchW / 2 - 0.07]) {
+      const arm = new THREE.Mesh(rbox(0.09, 0.05, seatD + 0.06, 0.02, 1), slatMat);
+      arm.position.set(sx, seatH + 0.24, 0.02);
+      bench.add(arm);
     }
-    // place on the porch deck, back against the cabin's outer back wall,
-    // facing outward (-Z) so a sitter looks toward the field/ocean
-    bench.position.set(0, 0.12, -ROOM.d / 2 - 0.3);
+    // on the deck, clear of the window's flower box, facing out toward the
+    // field/ocean
+    bench.position.set(0, 0.12, -(ROOM.d / 2 + LOG_FACE + seatD / 2 + 0.45));
     bench.rotation.y = Math.PI;
     root.add(bench);
   }
@@ -7601,91 +8015,108 @@ let fireLight = null;
 // so the brick mass doesn't block the camera when peeking in from outside
 const fireplaceInteriorParts = [];
 {
-  const chimneyMat = matStandard(0x8a4a3a, 0.95);
-  const stripeMat = matStandard(0x6a3525, 0.9);
-  const stoneMat = matStandard(0x7a6a5a, 0.95);
-  const mantleMat = matStandard(COL.woodDark, 0.85);
   const fireboxMat = matStandard(0x141008, 0.95);
 
-  // ---------- exterior chimney stack (starts at the cabin ceiling) ----------
-  const stackH = 3.4;
-  const stackY = ROOM.h + stackH / 2; // base flush with cabin top
-  const stack = new THREE.Mesh(new THREE.BoxGeometry(0.65, stackH, 0.65), chimneyMat);
-  stack.position.set(FIRE_X, stackY, FIRE_Z);
-  stack.castShadow = true;
-  root.add(stack);
-
-  // brick courses
-  for (let i = 0; i < 12; i++) {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.67, 0.04, 0.67), stripeMat);
-    stripe.position.set(FIRE_X, ROOM.h + 0.18 + i * 0.28, FIRE_Z);
-    root.add(stripe);
+  // ---------- exterior chimney: a fieldstone stack around a mortar core ----------
+  // (starts just under the roof, by the cabin ceiling, and rises past the ridge)
+  {
+    const kit = cabinKit();
+    const stackW = 0.7, base = ROOM.h - 0.2, stackH = 3.55, top = base + stackH;
+    kit.add(rbox(stackW - 0.08, stackH, stackW - 0.08, 0.03, 1), 0x2a2622, FIRE_X, base + stackH / 2, FIRE_Z);
+    for (let y = base, row = 0; y < top - 0.05; row++) {
+      const h = Math.min(0.17 + Math.random() * 0.07, top - y);
+      // the X faces wrap the corners on even rows, the Z faces on odd ones
+      for (const [axis, sgn] of [['x', -1], ['x', 1], ['z', -1], ['z', 1]]) {
+        const span = stackW + ((axis === 'x') === (row % 2 === 0) ? 0.1 : -0.1);
+        for (let p = -span / 2; p < span / 2 - 0.05;) {
+          const len = Math.min(0.2 + Math.random() * 0.22, span / 2 - p);
+          const mid = p + len / 2;
+          p += len;
+          const d = 0.1 + Math.random() * 0.03, out = stackW / 2 - 0.06 + d / 2;
+          const tilt = (Math.random() - 0.5) * 0.12, dy = (Math.random() - 0.5) * 0.03;
+          kit.add(rbox(axis === 'x' ? d : len - 0.025, h - 0.02, axis === 'x' ? len - 0.025 : d, 0.05, 1), pickTone(STONE_TONES),
+            FIRE_X + (axis === 'x' ? sgn * out : mid), y + h / 2 + dy, FIRE_Z + (axis === 'x' ? mid : sgn * out),
+            axis === 'x' ? tilt : 0, 0, axis === 'x' ? 0 : tilt);
+        }
+      }
+      y += h;
+    }
+    // cap slab and the dark flue
+    kit.add(rbox(stackW + 0.26, 0.12, stackW + 0.26, 0.04, 2), 0x5f5952, FIRE_X, top + 0.06, FIRE_Z);
+    kit.add(rbox(0.34, 0.05, 0.34, 0.015, 1), 0x141008, FIRE_X, top + 0.13, FIRE_Z);
+    const stack = kit.build(cabinStoneMat);
+    root.add(stack);
+    fireplaceInteriorParts.push(stack);   // hides with the right wall in X-ray view, like the hearth
   }
-  // crown / cap
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.12, 0.78), stripeMat);
-  cap.position.set(FIRE_X, stackY + stackH / 2 + 0.06, FIRE_Z);
-  root.add(cap);
-  // dark flue opening
-  const hole = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.02, 0.36), fireboxMat);
-  hole.position.set(FIRE_X, stackY + stackH / 2 + 0.13, FIRE_Z);
-  root.add(hole);
 
   // ---------- interior fireplace ----------
-  // brick mass extends FULL HEIGHT (floor to ceiling) so it visually connects
-  // with the chimney stack above the roof. Mounted on the right wall, so its
-  // length runs along Z and its depth along X.
-  // mass extends a touch past the ceiling so its top face isn't coplanar
-  // with the ceiling plane (which caused z-fighting flicker at y = ROOM.h)
+  // mortar mass extends FULL HEIGHT (floor to ceiling) so it visually connects
+  // with the chimney above the roof, faced with fieldstone on the sides the
+  // room sees. Mounted on the right wall: length along Z, depth along X.
+  // The mass extends a touch past the ceiling so its top face isn't
+  // coplanar with the ceiling plane (which caused z-fighting flicker).
   const fpW = 1.6, fpH = ROOM.h + 0.1, fpD = 0.55;
-  const mass = new THREE.Mesh(new THREE.BoxGeometry(fpD, fpH, fpW), chimneyMat);
+  const mass = new THREE.Mesh(new THREE.BoxGeometry(fpD, fpH, fpW), matStandard(0x2a2622, 0.95));
   mass.position.set(FIRE_X, fpH / 2, FIRE_Z);
   mass.castShadow = true;
   mass.receiveShadow = true;
   root.add(mass);
   fireplaceInteriorParts.push(mass);
-
-  // brick course bands on the visible front (facing -X into the room)
-  for (let i = 0; i < 14; i++) {
-    const band = new THREE.Mesh(new THREE.BoxGeometry(fpD + 0.02, 0.03, fpW + 0.02), stripeMat);
-    band.position.set(FIRE_X, 0.3 + i * 0.32, FIRE_Z);
-    root.add(band);
-    fireplaceInteriorParts.push(band);
-  }
   // mass front face faces into the room in the -X direction
   const massFrontX = FIRE_X - fpD / 2;
-
-  // hearth — stone slab on the floor in front of the firebox
-  const hearth = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.1, fpW + 0.4), stoneMat);
-  hearth.position.set(massFrontX - 0.28, 0.05, FIRE_Z);
-  hearth.castShadow = true;
-  hearth.receiveShadow = true;
-  root.add(hearth);
-  fireplaceInteriorParts.push(hearth);
-  // mantle — wooden beam above the firebox, sticks out from the brick face
-  const mantle = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, fpW + 0.36), mantleMat);
-  mantle.position.set(massFrontX - 0.18, 1.45, FIRE_Z);
-  mantle.castShadow = true;
-  root.add(mantle);
-  fireplaceInteriorParts.push(mantle);
-  // firebox opening — dark panel sitting just in front of the brick face,
-  // reads as a recessed opening when combined with the logs/flames in front
-  const fbW = fpW - 0.5, fbH = 0.9;
-  const firebox = new THREE.Mesh(
-    new THREE.BoxGeometry(0.04, fbH, fbW),
-    fireboxMat
-  );
-  firebox.position.set(massFrontX - 0.025, 0.6, FIRE_Z);
+  const fbW = fpW - 0.5, fbH = 0.9, fbY0 = 0.15;       // firebox opening
+  {
+    const kit = cabinKit();
+    for (let y = 0; y < ROOM.h - 0.04;) {
+      const h = Math.min(0.16 + Math.random() * 0.08, ROOM.h - y);
+      // front face, leaving the firebox opening clear
+      for (let p = -fpW / 2 - 0.04; p < fpW / 2;) {
+        const len = Math.min(0.22 + Math.random() * 0.2, fpW / 2 + 0.04 - p);
+        const mid = p + len / 2;
+        p += len;
+        if (y + h > fbY0 - 0.02 && y < fbY0 + fbH + 0.08 && Math.abs(mid) < fbW / 2 + 0.06) continue;
+        const d = 0.07 + Math.random() * 0.04;
+        kit.add(rbox(d, h - 0.02, len - 0.025, 0.045, 1), pickTone(STONE_TONES), massFrontX - d / 2 + 0.03,
+          y + h / 2 + (Math.random() - 0.5) * 0.025, FIRE_Z + mid, (Math.random() - 0.5) * 0.12);
+      }
+      // the two side faces, seen across the room
+      for (const sz of [-1, 1]) {
+        for (let q = 0; q < fpD - 0.04;) {
+          const len = Math.min(0.2 + Math.random() * 0.15, fpD - q);
+          const mid = q + len / 2;
+          q += len;
+          const d = 0.06 + Math.random() * 0.03;
+          kit.add(rbox(len - 0.02, h - 0.02, d, 0.045, 1), pickTone(STONE_TONES), massFrontX + mid - 0.03,
+            y + h / 2 + (Math.random() - 0.5) * 0.025, FIRE_Z + sz * (fpW / 2 + d / 2 - 0.02), 0, 0, (Math.random() - 0.5) * 0.12);
+        }
+      }
+      y += h;
+    }
+    // a long lintel stone over the opening
+    kit.add(rbox(0.16, 0.2, fbW + 0.34, 0.04, 2), 0x57514a, massFrontX - 0.05, fbY0 + fbH + 0.1, FIRE_Z);
+    // hearth — a rounded stone slab on the floor in front of the firebox
+    kit.add(rbox(0.6, 0.1, fpW + 0.4, 0.04, 2), 0x4f4a44, massFrontX - 0.28, 0.05, FIRE_Z);
+    const face = kit.build(cabinStoneMat, { cast: false });
+    root.add(face);
+    fireplaceInteriorParts.push(face);
+  }
+  // mantle — a rough-hewn beam above the firebox, and the log pile inside it
+  {
+    const kit = cabinKit();
+    kit.add(grainUV(rbox(0.32, 0.16, fpW + 0.36, 0.04, 2), 'z'), 0x5a3a22, massFrontX - 0.18, 1.45, FIRE_Z);
+    for (let i = 0; i < 3; i++) {
+      kit.log('z', 0.055, fbW - 0.12, 0x6a4a30, massFrontX - 0.07 + i * 0.04, 0.21 + (i % 2) * 0.06, FIRE_Z);
+    }
+    const wood = kit.build(cabinTimberMat);
+    root.add(wood);
+    fireplaceInteriorParts.push(wood);
+  }
+  // firebox opening — dark panel just in front of the mortar, recessed
+  // behind the stones so it reads as an opening with the logs/flames in front
+  const firebox = new THREE.Mesh(new THREE.BoxGeometry(0.04, fbH, fbW), fireboxMat);
+  firebox.position.set(massFrontX - 0.025, fbY0 + fbH / 2, FIRE_Z);
   root.add(firebox);
   fireplaceInteriorParts.push(firebox);
-  // small log pile in front of the firebox
-  const logMat = matStandard(0x3a2418, 0.95);
-  for (let i = 0; i < 3; i++) {
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, fbW - 0.12, 8), logMat);
-    log.rotation.x = Math.PI / 2;
-    log.position.set(massFrontX - 0.07 + i * 0.04, 0.21 + (i % 2) * 0.06, FIRE_Z);
-    root.add(log);
-    fireplaceInteriorParts.push(log);
-  }
 
   // FLAMES — animated cones with additive blending for a glow look
   const flameGeo = new THREE.ConeGeometry(0.10, 0.42, 8);
@@ -7723,52 +8154,50 @@ let doorMesh = null;
 let doorPivot = null;   // hinge group: swings open in first-person mode
 {
   const doorGroup = new THREE.Group();
-  const frameMat = matStandard(0x4a2a18, 0.85);
-  const doorMat = matStandard(0x6a3a20, 0.85);
-  const panelMat = matStandard(0x553024, 0.85);
+  const ironMat = matStandard(0x26221e, 0.5, 0.6);
 
-  // The swinging parts (panel + insets + knob) live in a pivot group whose
-  // origin is the door's LEFT edge (x = -0.46), so rotating it about Y makes
-  // the door hinge open like a real door. The casing/frame stays put.
+  // The swinging parts live in a pivot group whose origin is the door's
+  // LEFT edge (x = -0.46), so rotating it about Y makes the door hinge open
+  // like a real door. The casing is part of the front wall's logs.
   doorPivot = new THREE.Group();
   doorPivot.position.set(-0.46, 0, 0);
   doorGroup.add(doorPivot);
   const HX = 0.46; // offset that puts panel parts back into the opening
 
-  // local axes: door panel is in the XY plane (front wall is at z=ROOM.d/2),
-  // its thickness (Z) sits along the door's depth.
-  doorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.92, 2.35, 0.06), doorMat);
-  doorMesh.position.set(HX, 0, 0);
+  // plank door: five boards, two ledges and a Z brace on the outside (+Z)
+  // face, merged into one mesh with its own material so the hover glow
+  // lights the whole door
+  const kit = cabinKit();
+  const tones = [0x7a4426, 0x6f3e22, 0x804a2a];
+  for (let i = 0; i < 5; i++) {
+    kit.add(grainUV(rbox(0.178, 2.35, 0.06, 0.015, 1), 'y'), tones[i % 3], HX - 0.368 + i * 0.184, 0, 0);
+  }
+  for (const y of [-0.78, 0.78]) {
+    kit.add(grainUV(rbox(0.84, 0.13, 0.04, 0.015, 1), 'x'), 0x5d3420, HX, y, 0.045);
+  }
+  kit.add(grainUV(rbox(0.12, 1.7, 0.035, 0.012, 1), 'y'), 0x5d3420, HX, 0, 0.045, 0, 0, -0.56);
+  doorMesh = kit.build(new THREE.MeshStandardMaterial({ map: logAtlas, vertexColors: true, roughness: 0.82 }));
   // door doesn't cast (the surrounding wall already accounts for the cabin's
-  // shadow); a thin door box was casting an oddly-fanned silhouette
+  // shadow); a thin door was casting an oddly-fanned silhouette
   doorMesh.castShadow = false;
   doorPivot.add(doorMesh);
 
-  // raised inset panels — pushed forward so their back face isn't coplanar
-  // with the door panel itself (which would Z-fight)
-  for (let row = 0; row < 2; row++) {
-    for (let col = 0; col < 2; col++) {
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.55, 0.07), panelMat);
-      p.position.set(HX - 0.18 + col * 0.36, -0.5 + row * 0.95, 0.025);
-      doorPivot.add(p);
-    }
+  // strap hinges on the hinge side, ring pull and latch plate on the free edge
+  for (const y of [-0.78, 0.78]) {
+    const strap = new THREE.Mesh(rbox(0.5, 0.06, 0.012, 0.01, 1), ironMat);
+    strap.position.set(0.28, y, 0.073);
+    doorPivot.add(strap);
   }
-
-  // doorknob — on the free (right) edge, so it swings with the panel
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12),
-    matStandard(0xc8a45e, 0.4, 0.7));
-  knob.position.set(HX + 0.34, 0.0, 0.05);
+  const latch = new THREE.Mesh(rbox(0.07, 0.15, 0.012, 0.01, 1), ironMat);
+  latch.position.set(HX + 0.33, 0.04, 0.068);
+  doorPivot.add(latch);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.009, 6, 16), ironMat);
+  ring.position.set(HX + 0.33, -0.05, 0.075);
+  doorPivot.add(ring);
+  // inside knob
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), matStandard(0xc8a45e, 0.4, 0.7));
+  knob.position.set(HX + 0.34, 0.0, -0.05);
   doorPivot.add(knob);
-
-  // frame (door casing) — pushed outward (in front of the wall plane) so it
-  // doesn't intersect the front-wall panels and Z-fight with them. Stays
-  // fixed (does not swing).
-  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.1), frameMat);
-  frameTop.position.set(0, 1.225, 0.07); doorGroup.add(frameTop);
-  const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.6, 0.1), frameMat);
-  frameLeft.position.set(-0.5, 0, 0.07); doorGroup.add(frameLeft);
-  const frameRight = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.6, 0.1), frameMat);
-  frameRight.position.set(0.5, 0, 0.07); doorGroup.add(frameRight);
 
   // FRONT WALL is at z = +ROOM.d/2 = +4.5, behind the programmer (programmer
   // faces -Z, so +Z is at his back). Door X = 1.6 matches buildFrontWall().
@@ -7786,35 +8215,37 @@ let doorPivot = null;   // hinge group: swings open in first-person mode
 let porchPointLight = null;
 {
   const grp = new THREE.Group();
-  const fixMat = matStandard(0x1a1a1a, 0.4, 0.5);
-  // mounting plate
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.04), fixMat);
+  const fixMat = matStandard(0x1e1c1a, 0.45, 0.55);
+  // wall plate and a short arm out to the lantern
+  const plate = new THREE.Mesh(rbox(0.13, 0.22, 0.03, 0.012, 1), fixMat);
   grp.add(plate);
-  // lantern body (open below)
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.18), fixMat);
-  body.position.set(0, -0.06, 0.13);
-  grp.add(body);
-  // glass — emissive
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.14, 8), fixMat);
+  arm.rotation.x = Math.PI / 2;
+  arm.position.set(0, 0.07, 0.07);
+  grp.add(arm);
+  // lantern: domed cap, glowing glass, flared base
+  const cap = new THREE.Mesh(lathe([[0, 0.12], [0.03, 0.115], [0.1, 0.06], [0.115, 0.04], [0.09, 0.03], [0, 0.03]], 12), fixMat);
+  cap.position.set(0, 0.02, 0.15);
+  grp.add(cap);
   const glass = new THREE.Mesh(
-    new THREE.BoxGeometry(0.13, 0.16, 0.13),
+    new THREE.CylinderGeometry(0.07, 0.06, 0.16, 12),
     new THREE.MeshStandardMaterial({
       color: 0xffe0a0, emissive: 0xffd29c, emissiveIntensity: 1.4,
       transparent: true, opacity: 0.88
     })
   );
-  glass.position.set(0, -0.06, 0.13);
+  glass.position.set(0, -0.04, 0.15);
   grp.add(glass);
-  // top cap
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.22), fixMat);
-  cap.position.set(0, 0.07, 0.13);
-  grp.add(cap);
+  const base = new THREE.Mesh(lathe([[0, -0.03], [0.075, -0.03], [0.085, -0.01], [0.06, 0], [0, 0]], 12), fixMat);
+  base.position.set(0, -0.12, 0.15);
+  grp.add(base);
   // light source
   porchPointLight = new THREE.PointLight(0xffd29c, 0.8, 7, 2);
-  porchPointLight.position.set(0, -0.06, 0.18);
+  porchPointLight.position.set(0, -0.06, 0.2);
   grp.add(porchPointLight);
 
-  // outside the front wall, to the right of the door
-  grp.position.set(2.6, 2.4, ROOM.d / 2 + 0.06);
+  // on the log face, to the right of the door casing
+  grp.position.set(2.6, 2.4, ROOM.d / 2 + LOG_FACE + 0.02);
   root.add(grp);
 }
 
