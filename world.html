@@ -336,6 +336,25 @@
   #fp-ui.visible #fp-exit { pointer-events: auto; }
   #fp-exit:hover { color: #fff; border-color: rgba(255, 184, 122, 0.7); background: rgba(60, 30, 14, 0.78); }
 
+  /* first-person TOUCH controls (phones / tablets): a floating thumbstick on
+     the left half walks, dragging anywhere else looks around, and a context
+     button does whatever "E" would (open door, sit, pet, board…) */
+  #fp-touch { position: absolute; inset: 0; display: none; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.fp-touch #fp-touch { display: block; }
+  body.fp-touch #fp-hint { bottom: auto; top: calc(22px + env(safe-area-inset-top)); left: 16px; transform: none; font-size: 10px; letter-spacing: 0.14em; padding: 8px 13px; }
+  body.fp-touch #fp-exit { top: calc(18px + env(safe-area-inset-top)); right: 16px; padding: 11px 18px; z-index: 2; }
+  #fp-stick { position: absolute; width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%; border: 1px solid rgba(255, 220, 180, 0.38); background: radial-gradient(circle, rgba(255, 220, 180, 0.12), rgba(255, 220, 180, 0.03) 70%); opacity: 0.45; transition: opacity 0.2s ease; pointer-events: none; }
+  #fp-stick.active { opacity: 1; transition: none; }
+  #fp-stick-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(255, 232, 205, 0.88); box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4); }
+  .fp-touch-btn { position: absolute; right: 18px; border-radius: 999px; border: 1px solid rgba(255, 200, 140, 0.4); background: rgba(20, 14, 10, 0.72); color: #ffd9a8; font-family: inherit; font-weight: 600; letter-spacing: 0.08em; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45); touch-action: manipulation; }
+  .fp-touch-btn:active { transform: scale(0.96); }
+  #fp-action { bottom: calc(104px + env(safe-area-inset-bottom)); min-height: 58px; padding: 0 24px; font-size: 13px; text-transform: uppercase; color: #1c1612; background: #ffb87a; border-color: #ffd9a8; display: none; max-width: 60vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #fp-action.visible { display: block; animation: fpActionIn 0.18s ease-out; }
+  @keyframes fpActionIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  #fp-light-btn { bottom: calc(30px + env(safe-area-inset-bottom)); width: 58px; height: 58px; padding: 0; display: flex; align-items: center; justify-content: center; }
+  #fp-light-btn svg { width: 24px; height: 24px; }
+  #fp-light-btn.on { color: #1c1612; background: #ffd9a8; }
+
   /* ---------- PAINTED CROWNS TV PORTAL (Infinite Grass game overlay) ---------- */
   #prism-portal { position: fixed; inset: 0; z-index: 200; background: #000; opacity: 0; pointer-events: none; }
   #prism-portal.active { opacity: 1; pointer-events: auto; }
@@ -370,15 +389,15 @@
   }
   @media (max-width: 700px) {
     /* Info popover: full-width above the dock instead of fixed-width centered */
-    #info, #env-control, #music-control, #sfx-control { left: 12px; right: 12px; bottom: 86px; transform: none; width: auto; max-width: none; padding: 12px 14px; }
+    #info, #env-control, #music-control, #sfx-control { left: 12px; right: 12px; bottom: calc(86px + env(safe-area-inset-bottom)); transform: none; width: auto; max-width: none; padding: 12px 14px; }
     #info.visible, #env-control.visible, #music-control.visible, #sfx-control.visible { animation: none; transform: none; }
     #info p { font-size: 11px; }
     #info .stats { margin: 12px 0; padding: 10px 0; }
     #info .stat-num { font-size: 18px; }
-    #discovery-list { left: 12px; right: 12px; bottom: 86px; transform: none; width: auto; max-width: none; }
-    #dock { padding: 6px; gap: 4px; }
-    #copyright { font-size: 9px; bottom: 10px; right: 10px; }
-    #ui-toggle { top: 12px; right: 12px; }
+    #discovery-list { left: 12px; right: 12px; bottom: calc(86px + env(safe-area-inset-bottom)); transform: none; width: auto; max-width: none; }
+    #dock { padding: 6px; gap: 4px; bottom: calc(22px + env(safe-area-inset-bottom)); }
+    #copyright { font-size: 9px; bottom: calc(10px + env(safe-area-inset-bottom)); right: 10px; }
+    #ui-toggle { top: calc(12px + env(safe-area-inset-top)); right: 12px; }
     #onboarding-hint { left: 12px; right: 12px; transform: translateY(-10px); max-width: none; }
     #onboarding-hint.visible { transform: translateY(0); }
     #modal { padding: 14px 18px 22px; }
@@ -434,7 +453,7 @@
     </a>
   </div>
 
-  <div class="hint-line">Drag to look · Scroll to zoom<br>Press <kbd>I</kbd> to step inside · <kbd>H</kbd> to hide UI<br><a href="index.html" style="color:inherit;text-decoration:underline;opacity:.85">↩ Menu</a> · &copy; 2026 David Dudas. All rights reserved.</div>
+  <div class="hint-line"><span id="info-controls">Drag to look · Scroll to zoom<br>Press <kbd>I</kbd> to step inside · <kbd>H</kbd> to hide UI</span><br><a href="index.html" style="color:inherit;text-decoration:underline;opacity:.85">↩ Menu</a> · &copy; 2026 David Dudas. All rights reserved.</div>
 </div>
 
 <div id="env-control" class="ui-panel">
@@ -706,6 +725,14 @@
   <div id="fp-crosshair"></div>
   <div id="fp-hint">WASD move · Shift run · ESC exit</div>
   <button id="fp-exit" type="button" aria-label="Exit first-person">Exit</button>
+  <!-- touch controls (phones / tablets) — shown only while first-person is active -->
+  <div id="fp-touch">
+    <div id="fp-stick"><div id="fp-stick-knob"></div></div>
+    <button id="fp-action" class="fp-touch-btn" type="button"></button>
+    <button id="fp-light-btn" class="fp-touch-btn" type="button" aria-label="Toggle flashlight" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6l1 5-2 3v9a2 2 0 0 1-4 0v-9L8 7z"/><path d="M8 7h8"/></svg>
+    </button>
+  </div>
 </div>
 
 <!-- Painted Crowns TV → Infinite Grass game overlay (CRT zoom-in; exit anytime) -->
@@ -952,15 +979,52 @@ const scene = new THREE.Scene();
 // later, after outsideGroup is defined) handle dimming the ±X horizon
 // independently, giving us "directional" fog without a custom shader.
 scene.fog = new THREE.Fog(0xff7e51, 280, 900);
+// -------- DEVICE QUALITY --------
+// Phones get a lighter pipeline: a smaller shadow map refreshed every other
+// frame, fewer weather particles and a lower starting render scale. The
+// adaptive scaler in the main loop then trims (or restores) resolution on
+// any device from the frame times it actually measures.
+const QUALITY = (() => {
+  const mq = q => !!(window.matchMedia && window.matchMedia(q).matches);
+  const shortSide = Math.min(screen.width || innerWidth, screen.height || innerHeight);
+  const mobile = mq('(pointer: coarse)') && shortSide <= 900;
+  const dpr = window.devicePixelRatio || 1;
+  return {
+    mobile,
+    // primary input is a finger (phones, tablets): first-person mode swaps
+    // pointer-lock + WASD for on-screen thumb controls
+    coarse: mq('(pointer: coarse)'),
+    canHover: mq('(any-hover: hover)'),
+    maxPixelRatio: Math.min(dpr, 2),
+    startPixelRatio: Math.min(dpr, mobile ? 1.5 : 2),
+    minPixelRatio: Math.min(dpr, mobile ? 1 : 0.75),
+    shadowMapSize: mobile ? 1024 : 2048,
+    shadowEvery: mobile ? 2 : 1,      // re-render the sun's shadow map every Nth frame
+    rainCount: mobile ? 700 : 1400,
+    snowCount: mobile ? 550 : 1100,
+    foamSegments: mobile ? 240 : 600,
+    screenFrameMs: mobile ? 50 : 33,  // animated TV / monitor redraw interval
+  };
+})();
+// 1 at 60 fps. Per-frame easing and increments in the main loop are scaled by
+// this so motion runs at the same speed on 30, 60 and 120 Hz screens.
+let FRAME_SCALE = 1;
+const easeK = k => 1 - Math.pow(1 - k, FRAME_SCALE);
+
 // far plane large enough to render the outside scenery (mountains, sun/moon, stars)
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 600);
 camera.position.set(7.5, 4.2, 8.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(QUALITY.startPixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// soft PCF on desktop; plain PCF (fewer texture taps per pixel) on phones
+renderer.shadowMap.type = QUALITY.mobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = QUALITY.shadowEvery === 1;
+renderer.shadowMap.needsUpdate = true;
+// anisotropic filtering keeps ground / floor textures crisp at grazing angles
+const MAX_ANISO = Math.min(QUALITY.mobile ? 4 : 8, renderer.capabilities.getMaxAnisotropy());
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -979,6 +1043,24 @@ controls.maxPolarAngle = Math.PI / 2 - 0.05;
 controls.enablePan = false;
 const HOME_CAM = new THREE.Vector3(7.5, 4.2, 8.5);
 const HOME_TARGET = new THREE.Vector3(0, 1.6, -1.2);
+
+// -------- RESPONSIVE FRAMING --------
+// The home shot is composed for landscape screens. On a portrait phone the
+// same lens only shows a thin vertical slice of the room, so the camera
+// widens its field of view a little and backs off along the same viewing
+// direction until the whole cabin fits. HOME_CAM is updated in place, so
+// every "fly home" / first-person exit lands on the fitted view.
+const HOME_OFFSET = HOME_CAM.clone().sub(HOME_TARGET);
+let ORBIT_FOV = 46;   // the orbit view's field of view, restored on first-person exit
+function fitHomeView(aspect) {
+  const narrow = Math.max(0, Math.min(1, (1.25 - aspect) / (1.25 - 0.46)));  // 0 landscape → 1 tall phone
+  ORBIT_FOV = 46 + narrow * 12;
+  HOME_CAM.copy(HOME_TARGET).addScaledVector(HOME_OFFSET, 1 + narrow * 0.85);
+}
+fitHomeView(camera.aspect);
+camera.fov = ORBIT_FOV;
+camera.position.copy(HOME_CAM);
+camera.updateProjectionMatrix();
 
 // -------- SNOW CAPS REGISTRY (declared early so any later mesh creation
 // can register white snow overlay meshes whose opacity tracks snowAccum) --
@@ -1539,7 +1621,13 @@ function laptopScreenTexture() {
     "console.log('listening · 0.0.0.0:9090')"
   ];
 
+  // the only thing that moves is the cursor blink, so redraw (and re-upload
+  // the texture) only when the blink state flips — twice a second
+  let lastBlink = -1;
   function draw(t) {
+    const blink = Math.floor(t / 500) % 2;
+    if (blink === lastBlink) return;
+    lastBlink = blink;
     ctx.fillStyle = '#0c0a14'; ctx.fillRect(0, 0, 512, 320);
     // chrome
     ctx.fillStyle = '#1a1726'; ctx.fillRect(0, 0, 512, 22);
@@ -1562,7 +1650,7 @@ function laptopScreenTexture() {
       ctx.fillStyle = color; ctx.fillText(line, 36, y);
     }
     // cursor blink
-    if (Math.floor(t / 500) % 2 === 0) {
+    if (blink === 0) {
       ctx.fillStyle = '#ffe0a0'; ctx.fillRect(36 + 10 * 7.2, 44 + 13 * 17 - 11, 7, 13);
     }
     tex.needsUpdate = true;
@@ -1714,6 +1802,7 @@ function trackWall(m) {
 {
   const tex = woodTexture(COL.floor, COL.floorPlank, 12);
   tex.repeat.set(2, 2);
+  tex.anisotropy = MAX_ANISO;   // the floor is mostly seen at a glancing angle
   const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78, metalness: 0.05 });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat);
   m.rotation.x = -Math.PI / 2;
@@ -2216,9 +2305,14 @@ const fieldMat = (() => {
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
   const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(8, 6);
+  // the ground meshes carry world-space UVs (one tile ≈ 6 units, see
+  // makeHillyGround) so the grass stays evenly scaled instead of smearing
+  // into long streaks across the 1200-unit-wide field
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = MAX_ANISO;
   tex.encoding = THREE.sRGBEncoding;
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
+  // vertex colors add broad meadow patches (lighter, darker, sun-dried)
+  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, vertexColors: true });
 })();
 // ==========================================================
 // CLIFF / SHORE LAYOUT — cabin sits on a plateau that drops to the beach
@@ -2239,6 +2333,7 @@ function nearStairs(x, z) {
   // hilly grass with two flatness masks: a circular flat zone around the
   // cabin (so the foundation doesn't dip), and a band along the cliff edge
   // (so the plateau's lip is flat and meets the cliff face cleanly).
+  const GRASS_TILE = 6;   // world units per grass texture tile
   function makeHillyGround(width, depth, posX, posY, posZ, mat,
       { hillH = 1.2, flatR = 11, blendR = 14,
         edgeFlatZ = null, edgeBlend = 5,
@@ -2247,6 +2342,8 @@ function nearStairs(x, z) {
     const segsZ = Math.max(40, Math.floor(depth / 3));
     const geo = new THREE.PlaneGeometry(width, depth, segs, segsZ);
     const pos = geo.attributes.position;
+    const uvs = geo.attributes.uv;
+    const colors = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
       const lx = pos.getX(i), ly = pos.getY(i);
       const wx = posX + lx;
@@ -2275,7 +2372,15 @@ function nearStairs(x, z) {
         }
       }
       pos.setZ(i, z);
+      // world-space UVs: square grass texels everywhere on the field
+      uvs.setXY(i, wx / GRASS_TILE, -wz / GRASS_TILE);
+      // broad, slow color variation so the meadow isn't one flat green
+      const patch = Math.sin(wx * 0.047 + 1.3) * Math.cos(wz * 0.053 - 0.7) + 0.5 * Math.sin((wx - wz) * 0.019 + 2.1);
+      const dry = Math.max(0, Math.sin(wx * 0.021 - wz * 0.034 + 0.4)) * 0.6;
+      const b = 0.98 + patch * 0.08;
+      colors[i * 3] = b + dry * 0.12; colors[i * 3 + 1] = b + dry * 0.06; colors[i * 3 + 2] = b - dry * 0.08;
     }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
@@ -2523,7 +2628,9 @@ const beachMat = (() => {
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(14, 4);
+  // ~7-unit square tiles along the 1200 × 14 strip (it was stretched ~24:1)
+  tex.repeat.set(170, 2);
+  tex.anisotropy = MAX_ANISO;
   tex.encoding = THREE.sRGBEncoding;
   return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96 });
 })();
@@ -2762,7 +2869,7 @@ const foamRibbons = [];
   // foam ribbons match the extended beach so the sine wave runs all the way
   const foamW = 1180;
   const foamD = 2.0;
-  const segs = 600;
+  const segs = QUALITY.foamSegments;   // vertices are re-waved on the CPU every frame
   for (let li = 0; li < layers.length; li++) {
     const cfg = layers[li];
     const geo = new THREE.PlaneGeometry(foamW, foamD, segs, 1);
@@ -3371,6 +3478,15 @@ function safeFromAnimals(x, z) {
   }
   return true;
 }
+// keep the home camera's sightline into the cabin clear — on portrait phones
+// the camera backs off further along it, so a tree there fills the screen
+const HOME_VIEW_ANGLE = Math.atan2(HOME_OFFSET.x, HOME_OFFSET.z);
+function safeFromHomeView(x, z) {
+  if (x * x + z * z > 34 * 34) return true;
+  let d = Math.atan2(x, z) - HOME_VIEW_ANGLE;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  return Math.abs(d) > 0.26;
+}
 let attempts = 0;
 while (treePositions.length < 110 && attempts < 2400) {
   attempts++;
@@ -3385,6 +3501,7 @@ while (treePositions.length < 110 && attempts < 2400) {
   if (!safeFromWindowFOV(x, z)) continue;
   if (!safeFromCampsiteAndTruck(x, z)) continue;
   if (!safeFromAnimals(x, z)) continue;
+  if (!safeFromHomeView(x, z)) continue;
   // also keep them in front of the beach (z > -86)
   // keep them on the plateau (cliff edge is at z = CLIFF_EDGE_Z = -30)
   if (z < CLIFF_EDGE_Z + 2) continue;
@@ -3401,19 +3518,23 @@ while (treePositions.length < 110 && attempts < 2400) {
 }
 // Chunked tree placement — instead of building all 110 trees synchronously
 // (which blocks the first paint), spread them across animation frames.
-// The cabin + critical scene shows up immediately; trees pop in over the
-// next ~0.5–1 s.
-(function placeTreesInChunks(positions, idx) {
+// The cabin + critical scene shows up immediately. The trees are collected
+// in a holding group and merged into a few meshes once the forest is
+// complete (~500 draw calls → ~3), then added to the scene in one go.
+(function placeTreesInChunks(positions, idx, forest) {
   const PER_TICK = 10;
   const end = Math.min(idx + PER_TICK, positions.length);
   for (let i = idx; i < end; i++) {
     const [x, z, s, t] = positions[i];
-    outsideGroup.add(makeTree(x, z, s, t));
+    forest.add(makeTree(x, z, s, t));
   }
   if (end < positions.length) {
-    requestAnimationFrame(() => placeTreesInChunks(positions, end));
+    requestAnimationFrame(() => placeTreesInChunks(positions, end, forest));
+  } else {
+    replaceSnowCaps(bakeStaticMeshes(forest, { allowTransparent: true }));
+    outsideGroup.add(forest);
   }
-})(treePositions, 0);
+})(treePositions, 0, new THREE.Group());
 
 // ----- ROCKS / BOULDERS scattered around the yard -----
 function makeRock(x, z, scale) {
@@ -3451,6 +3572,7 @@ function makeRock(x, z, scale) {
     if (!safeFromWindowFOV(x, z)) continue;
     if (!safeFromCampsiteAndTruck(x, z)) continue;
     if (!safeFromAnimals(x, z)) continue;
+    if (!safeFromHomeView(x, z)) continue;
     // keep them on the plateau (cliff edge is at z = CLIFF_EDGE_Z = -30)
   if (z < CLIFF_EDGE_Z + 2) continue;
     let tooClose = false;
@@ -3470,22 +3592,26 @@ function makeRock(x, z, scale) {
   }
   // Chunked rock placement (same idea as trees) — spread mesh creation
   // across frames so the first paint isn't blocked by 70 icosahedrons.
-  (function placeRocksInChunks(positions, idx) {
+  (function placeRocksInChunks(positions, idx, rocks) {
     const PER_TICK = 12;
     const end = Math.min(idx + PER_TICK, positions.length);
     for (let i = idx; i < end; i++) {
       const [x, z, s] = positions[i];
-      outsideGroup.add(makeRock(x, z, s));
+      rocks.add(makeRock(x, z, s));
     }
     if (end < positions.length) {
-      requestAnimationFrame(() => placeRocksInChunks(positions, end));
+      requestAnimationFrame(() => placeRocksInChunks(positions, end, rocks));
+    } else {
+      bakeStaticMeshes(rocks);   // 70 tinted rocks → one mesh (tints become vertex colors)
+      outsideGroup.add(rocks);
     }
-  })(rockPositions, 0);
+  })(rockPositions, 0, new THREE.Group());
 }
 
 // SUN — large sphere parked beyond the mountains. Mountain peaks (alpha-tested)
 // silhouette the lower portion of the sun.
-const sunMat = new THREE.MeshBasicMaterial({ color: 0xfff0c2 });
+// transparent so heavy cloud cover can fade it (see updateSky)
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xfff0c2, transparent: true });
 const sun = new THREE.Mesh(new THREE.SphereGeometry(11, 32, 24), sunMat);
 sun.position.set(-25, 30, -380);
 root.add(sun);
@@ -3520,7 +3646,7 @@ const moonTex = (() => {
   tex.encoding = THREE.sRGBEncoding;
   return tex;
 })();
-const moonMat = new THREE.MeshBasicMaterial({ map: moonTex });
+const moonMat = new THREE.MeshBasicMaterial({ map: moonTex, transparent: true });
 const moon = new THREE.Mesh(new THREE.SphereGeometry(8, 32, 24), moonMat);
 moon.position.set(-25, 40, -380);
 moon.visible = false;
@@ -3530,6 +3656,72 @@ const moonGlowMat = new THREE.MeshBasicMaterial({
 });
 const moonGlow = new THREE.Mesh(new THREE.SphereGeometry(9, 24, 16), moonGlowMat);
 moon.add(moonGlow);
+
+// SKY DOME — a vertical gradient from the horizon up to a deeper zenith,
+// with soft halos around the sun and moon. It's drawn first, behind
+// everything, and follows the camera so it always reads as infinitely far
+// away. The horizon color is the one the fog and side haze use too, so
+// distant terrain melts into it; overcast weather washes it toward gray
+// (see updateSky). Colors are written as-is, like the old flat background.
+const skyUniforms = {
+  horizonColor: { value: new THREE.Color(0xff7e51) },
+  zenithColor: { value: new THREE.Color(0x4b4f9e) },
+  sunDir: { value: new THREE.Vector3(0, 1, 0) },
+  sunColor: { value: new THREE.Color(0xffd39c) },
+  sunStrength: { value: 0 },
+  moonDir: { value: new THREE.Vector3(0, 1, 0) },
+  moonStrength: { value: 0 },
+};
+const skyDome = new THREE.Mesh(
+  new THREE.SphereGeometry(450, 32, 20),
+  new THREE.ShaderMaterial({
+    uniforms: skyUniforms,
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 horizonColor, zenithColor, sunColor, sunDir, moonDir;
+      uniform float sunStrength, moonStrength;
+      varying vec3 vDir;
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = d.y;
+        vec3 col = mix(horizonColor, zenithColor, pow(smoothstep(0.0, 0.65, h), 0.8));
+        // sun: a wide soft bloom, a tighter core, and a warm band along the
+        // horizon on the sun's side of the sky
+        float s = max(dot(d, sunDir), 0.0);
+        col += sunColor * (pow(s, 5.0) * 0.20 + pow(s, 42.0) * 0.42) * sunStrength;
+        col += sunColor * pow(s, 2.0) * (1.0 - smoothstep(0.0, 0.32, abs(h))) * 0.16 * sunStrength;
+        // moon: a faint cool halo
+        float m = max(dot(d, moonDir), 0.0);
+        col += vec3(0.55, 0.62, 0.82) * (pow(m, 22.0) * 0.16 + pow(m, 140.0) * 0.22) * moonStrength;
+        // a hair of noise so the long gradient never shows banding
+        col += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+    side: THREE.BackSide,
+    depthWrite: false,
+  })
+);
+skyDome.renderOrder = -1000;
+skyDome.frustumCulled = false;
+scene.add(skyDome);
+
+// soft radial sprite shared by the light glows and fireflies
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0.0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.16, 'rgba(255,255,255,0.6)');
+  grd.addColorStop(0.42, 'rgba(255,255,255,0.15)');
+  grd.addColorStop(1.0, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+})();
 
 // STARS — 600 points scattered over a wide hemisphere, only visible at night
 let starsPoints;
@@ -4296,6 +4488,7 @@ const laptopAnim = laptopScreenTexture();
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.54), screenMat);
   screen.position.set(0, 0.3, 0.016);
   hinge.add(screen);
+  laptopAnim.screen = screen;   // lets the main loop skip redraws while it's off-screen
   // logo on lid
   const logo = new THREE.Mesh(new THREE.CircleGeometry(0.04, 24), matEmissive(0x000000, 0xffb87a, 0.5));
   logo.position.set(0, 0.3, -0.02);
@@ -4364,6 +4557,7 @@ const tvAnim = tvScreenTexture();
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 0.78), screenMat);
   screen.position.set(0, 1.4, 0.53);
   stand.add(screen);
+  tvAnim.screen = screen;
   makeInteractive(screen, 'tv', 'CRT TV · Painted Crowns');
   // glow
   const glow = new THREE.PointLight(0xff7e51, 0.6, 3.5, 2);
@@ -5012,6 +5206,7 @@ const monitorAnim = monitorScreenTexture();
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.46),
     new THREE.MeshBasicMaterial({ map: monitorAnim.tex }));
   screen.position.set(0, 1.05, 0.34); mon.add(screen);
+  monitorAnim.screen = screen;
   // glow
   const L = new THREE.PointLight(0x6f6fff, 0.5, 2.2, 2);
   L.position.set(0, 1.05, 0.55); mon.add(L);
@@ -5094,7 +5289,8 @@ const monitorAnim = monitorScreenTexture();
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(width, height), screenMat);
   screen.position.z = 0.036;
   display.add(screen);
-  tryUpgradeImageTexture('./images/shatterwing.png', screenMat);
+  // a 1024px JPEG of the capsule art (the full PNG is 1.5 MB — kept for the project card)
+  tryUpgradeImageTexture('./images/shatterwing-wall.jpg', screenMat);
   makeInteractive(screen, 'shatterwing', 'Framed Game Art · Shatterwing');
 
   // Clear the camera and ant farm on the shelf, beside the research whiteboard.
@@ -5292,6 +5488,7 @@ const propTickers = [];
     grp.rotation.y = t * 0.16;
   };
   propTickers.push(grp.userData.tick);
+  grp.userData.noBake = true;   // spins + animates its parts — keep out of static batching
 
   makeInteractive(core, 'orbital', 'Orbital Model · Hydrogen');
   grp.position.set(0.28, 1.06, -2.95);
@@ -5390,6 +5587,7 @@ const propTickers = [];
     grp.rotation.y = t * 0.14;
   };
   propTickers.push(grp.userData.tick);
+  grp.userData.noBake = true;   // node materials pulse every frame — keep separate
 
   makeInteractive(base, 'rigid', 'Dependency Graph · rigid');
   grp.position.set(1.3, 1.06, -2.95);
@@ -5969,11 +6167,11 @@ let porchOwl = null;
 const weather = { state: 'clear', target: 'clear', blend: 1 };
 // rain/snow keys: 0..2 — drives both opacity and fall speed multiplier
 const WEATHER_PRESETS = {
-  clear:    { cloudCount: 6,  cloudOpacity: 0.55, cloudColor: 0xffffff, rain: 0,   snow: 0,   lightning: 0,    skyMul: 1.00 },
-  overcast: { cloudCount: 18, cloudOpacity: 0.92, cloudColor: 0xc0c0c8, rain: 0,   snow: 0,   lightning: 0,    skyMul: 0.65 },
-  rain:     { cloudCount: 22, cloudOpacity: 0.94, cloudColor: 0xa6a8b0, rain: 0.55,snow: 0,   lightning: 0,    skyMul: 0.62 },
-  storm:    { cloudCount: 26, cloudOpacity: 0.98, cloudColor: 0x5e6068, rain: 1.7, snow: 0,   lightning: 1.0,  skyMul: 0.40 },
-  snow:     { cloudCount: 22, cloudOpacity: 0.92, cloudColor: 0xd6d8de, rain: 0,   snow: 1.0, lightning: 0,    skyMul: 0.78 },
+  clear:    { cloudCount: 6,  cloudOpacity: 0.55, cloudColor: 0xffffff, rain: 0,   snow: 0,   lightning: 0,    skyMul: 1.00, skyGray: 0 },
+  overcast: { cloudCount: 18, cloudOpacity: 0.92, cloudColor: 0xc0c0c8, rain: 0,   snow: 0,   lightning: 0,    skyMul: 0.65, skyGray: 0.55 },
+  rain:     { cloudCount: 22, cloudOpacity: 0.94, cloudColor: 0xa6a8b0, rain: 0.55,snow: 0,   lightning: 0,    skyMul: 0.62, skyGray: 0.7 },
+  storm:    { cloudCount: 26, cloudOpacity: 0.98, cloudColor: 0x5e6068, rain: 1.7, snow: 0,   lightning: 1.0,  skyMul: 0.40, skyGray: 0.88 },
+  snow:     { cloudCount: 22, cloudOpacity: 0.92, cloudColor: 0xd6d8de, rain: 0,   snow: 1.0, lightning: 0,    skyMul: 0.78, skyGray: 0.5 },
 };
 
 // cabin + porch footprint that rain/snow shouldn't fall inside (so it doesn't
@@ -6034,7 +6232,7 @@ const clouds = [];
 // ----- RAIN — N short vertical line segments falling from the sky -----
 let rainSystem = null;
 {
-  const N = 1400;                         // raindrop count
+  const N = QUALITY.rainCount;            // raindrop count (halved on phones)
   const positions = new Float32Array(N * 6); // 2 verts per drop = 6 floats
   const speeds = new Float32Array(N);
   const rangeXZ = 80;                      // horizontal area covered
@@ -6073,7 +6271,7 @@ let rainSystem = null;
 // ----- SNOW — Points-based flakes drifting down -----
 let snowSystem = null;
 {
-  const N = 1100;
+  const N = QUALITY.snowCount;
   const positions = new Float32Array(N * 3);
   const drift = new Float32Array(N);     // per-flake horizontal phase
   const fallV = new Float32Array(N);     // fall speed
@@ -6524,9 +6722,11 @@ ambientAudio.addEventListener('error', () => {
 // preload one Audio element per thunder file. fireLightning() picks a
 // random one each strike. Files that fail to load mark themselves as
 // unavailable so they're skipped in the random pick.
+// Effects only download once ambient sound is switched on (it's off by
+// default) — see warmSfx() — instead of ~2 MB of audio on every page load.
 const thunderClips = THUNDER_FILES.map(src => {
   const a = new Audio();
-  a.preload = 'auto';
+  a.preload = 'none';
   a.src = src;
   a.dataset.available = 'true';
   a.addEventListener('error', () => { a.dataset.available = 'false'; });
@@ -6538,7 +6738,7 @@ const thunderClips = THUNDER_FILES.map(src => {
 // close the camera is to the fireplace AND the indoor factor.
 const fireplaceAudio = new Audio();
 fireplaceAudio.loop = true;
-fireplaceAudio.preload = 'auto';
+fireplaceAudio.preload = 'none';
 fireplaceAudio.src = SFX_FILES.fireplace;
 fireplaceAudio.volume = 0;
 wrapAudioWithGain(fireplaceAudio);
@@ -6548,7 +6748,7 @@ let fireplaceStarted = false;
 
 // one-shot fireworks SFX, played once when the celebration kicks off
 const fireworksAudio = new Audio();
-fireworksAudio.preload = 'auto';
+fireworksAudio.preload = 'none';
 fireworksAudio.src = SFX_FILES.fireworks;
 wrapAudioWithGain(fireworksAudio);
 let fireworksAvailable = true;
@@ -6594,7 +6794,7 @@ function updateIndoorFactor() {
     ? (cx > -4.4 && cx < 4.4 && cz > -4.4 && cz < 4.4)
     : (cx > -5.5 && cx < 5.5 && cz > -5.5 && cz < 5.5 && cy > -0.2 && cy < ROOM.h + 1.5);
   const target = inside ? 1 : 0;
-  indoorFactor += (target - indoorFactor) * 0.06;
+  indoorFactor += (target - indoorFactor) * easeK(0.06);
   if (Math.abs(target - indoorFactor) < 0.001) indoorFactor = target;
 }
 // effective ambient volume = master vol × per-track gain × enabled flag,
@@ -6725,6 +6925,17 @@ function silenceFireplaceImmediately() {
   } catch (e) {/* ignore */}
 }
 
+// fetch the one-shot / looped effects the first time ambient sound is enabled
+let sfxWarmed = false;
+function warmSfx() {
+  if (sfxWarmed) return;
+  sfxWarmed = true;
+  for (const a of [...thunderClips, fireplaceAudio, fireworksAudio]) {
+    a.preload = 'auto';
+    try { a.load(); } catch (e) {/* ignore */}
+  }
+}
+
 // ----- UI handlers -----
 sfxToggleBtn.addEventListener('click', () => {
   sfxEnabled = !sfxEnabled;
@@ -6732,6 +6943,7 @@ sfxToggleBtn.addEventListener('click', () => {
     stopAmbient(() => { currentAmbientKey = null; refreshSfxUi(); });
     silenceFireplaceImmediately();
   } else {
+    warmSfx();
     syncAmbient();
   }
   refreshSfxUi();
@@ -7331,10 +7543,12 @@ const FP = {
   portal: false,         // true while the Painted Crowns TV game overlay is open
   flashlight: false,     // head-mounted flashlight toggle (F)
   inBoat: false,         // rowing the boat on the water
+  analog: { x: 0, y: 0, active: false },   // touch thumbstick (-1..1), see fpTouch
 };
 let _fpLastT = performance.now();
-const ORBIT_FOV = camera.fov;   // 46 — the orbit view's field of view, restored on exit
 const FP_FOV = 62;              // wider, more immersive first-person field of view
+// portrait phones get a wider lens so the view isn't a narrow vertical slit
+const fpFov = () => FP_FOV + Math.max(0, Math.min(1, (1.25 - camera.aspect) / (1.25 - 0.46))) * 14;
 const STAND_EYE = 1.95;         // standing eye height (tall — still clears the ~2.05 doorway)
 const SEAT_EYE  = 1.55;         // seated eye height — high enough to look over the desk
 const SEAT_POS  = new THREE.Vector3(0, 0, -2.3);          // seat spot (clear of the desk collider so you can walk out after standing)
@@ -7523,6 +7737,12 @@ function disembarkBoat() {
 function updateFpHint() {
   const el = document.getElementById('fp-hint');
   if (!el) return;
+  // touch screens: the context button carries the action, the hint just
+  // explains the thumbs
+  if (QUALITY.coarse) {
+    el.textContent = FP.posture === 'sitting' ? 'Drag to look around' : 'Left thumb walks · drag to look';
+    return;
+  }
   if (FP.posture === 'sitting') { el.textContent = 'E — stand up · ESC exit'; return; }
   const t = FP.activeTarget;
   if (!t) { el.textContent = 'WASD move · Shift run · F light · ESC exit'; return; }
@@ -7639,7 +7859,7 @@ function exitPrism() {
   if (FP.state === 'active') {
     const ui = document.getElementById('fp-ui');
     if (ui) ui.classList.add('visible');
-    if (FP.controls) FP.controls.lock();
+    if (FP.controls && !QUALITY.coarse) FP.controls.lock();
   }
 }
 // the in-game "Exit" button posts a message back to the cabin
@@ -7670,9 +7890,13 @@ class SimpleFPControls {
   }
   _mm(e) {
     if (!this.locked) return;
+    this.rotateBy(e.movementX || 0, e.movementY || 0, 0.0022);
+  }
+  // yaw/pitch by a pixel delta — shared by mouse-look and touch drag-to-look
+  rotateBy(dx, dy, k) {
     this.euler.setFromQuaternion(this.cam.quaternion);
-    this.euler.y -= (e.movementX || 0) * 0.0022;
-    this.euler.x -= (e.movementY || 0) * 0.0022;
+    this.euler.y -= dx * k;
+    this.euler.x -= dy * k;
     this.euler.x = Math.max(-this.PI2 + 0.02, Math.min(this.PI2 - 0.02, this.euler.x));
     this.cam.quaternion.setFromEuler(this.euler);
   }
@@ -7768,7 +7992,7 @@ function enterFirstPerson() {
     toPos,
     toQuat,
     fromFov: camera.fov,
-    toFov: FP_FOV,
+    toFov: fpFov(),
     startT: performance.now(),
     duration: 1500,
     phase: 'in'
@@ -7780,6 +8004,7 @@ function exitFirstPerson() {
   FP.state = 'exiting';
   playUiSfx('exit_fps');
   if (FP.controls && FP.controls.locked) FP.controls.unlock();
+  fpTouch.hide();
   // restore the user's pre-FP X-ray choice
   setSeeThrough(FP.priorSeeThrough);
 
@@ -7864,7 +8089,9 @@ function updateFP(now) {
         FP.blockedSpot = null;
         if (!FP.controls) FP.controls = new SimpleFPControls(camera, renderer.domElement);
         FP.controls.syncFromCamera();
-        FP.controls.lock();
+        // phones / tablets have no pointer lock or keyboard — thumb controls instead
+        if (QUALITY.coarse) fpTouch.show();
+        else FP.controls.lock();
         if (fpVignette) fpVignette.style.opacity = '0.18';
         updateFpHint();
         const ui = document.getElementById('fp-ui');
@@ -7897,6 +8124,7 @@ function updateFP(now) {
     if (FP.keys.back) desired.sub(fwd);
     if (FP.keys.right) desired.add(right);
     if (FP.keys.left)  desired.sub(right);
+    if (FP.analog.active) desired.addScaledVector(fwd, -FP.analog.y).addScaledVector(right, FP.analog.x);
     if (desired.lengthSq() > 0) desired.normalize().multiplyScalar(BOAT_SPEED * (FP.keys.run ? 1.6 : 1));
     FP.velocity.lerp(desired, Math.min(1, dt * 2.5));            // heavy, glidey boat
     let bx = Math.max(-55, Math.min(55, boatObj.position.x + FP.velocity.x * dt));
@@ -7911,7 +8139,9 @@ function updateFP(now) {
     if (key !== FP._ctxKey) {
       FP._ctxKey = key;
       const el = document.getElementById('fp-hint');
-      if (el) el.textContent = nearShore ? 'E — step onto land · WASD row' : 'WASD row · row to shore to step off · ESC exit';
+      if (el) el.textContent = QUALITY.coarse
+        ? (nearShore ? 'Tap step ashore · thumb rows' : 'Left thumb rows · find the shore to step off')
+        : (nearShore ? 'E — step onto land · WASD row' : 'WASD row · row to shore to step off · ESC exit');
     }
     return;
   }
@@ -7923,7 +8153,8 @@ function updateFP(now) {
     FP.eyeCur += (seat.eye - FP.eyeCur) * Math.min(1, dt * 8);
     if (FP._ctxKey !== 'sit') { FP._ctxKey = 'sit'; FP.activeTarget = null; updateFpHint(); }
     // any movement key also stands you up, so you can never get stuck
-    const wantsMove = FP.keys.fwd || FP.keys.back || FP.keys.left || FP.keys.right;
+    const wantsMove = FP.keys.fwd || FP.keys.back || FP.keys.left || FP.keys.right ||
+      (FP.analog.active && Math.hypot(FP.analog.x, FP.analog.y) > 0.5);
     if (!wantsMove) {
       const sx = camera.position.x + (seat.x - camera.position.x) * Math.min(1, dt * 10);
       const sz = camera.position.z + (seat.z - camera.position.z) * Math.min(1, dt * 10);
@@ -7963,9 +8194,15 @@ function updateFP(now) {
   if (FP.keys.back) desired.sub(fwd);
   if (FP.keys.right) desired.add(right);
   if (FP.keys.left)  desired.sub(right);
-  const running = FP.keys.run;
+  // touch thumbstick: speed follows how far it's pushed; full tilt runs
+  let stickAmount = 1;
+  if (FP.analog.active) {
+    desired.addScaledVector(fwd, -FP.analog.y).addScaledVector(right, FP.analog.x);
+    stickAmount = Math.min(1, Math.hypot(FP.analog.x, FP.analog.y));
+  }
+  const running = FP.keys.run || (FP.analog.active && stickAmount > 0.92);
   if (desired.lengthSq() > 0) {
-    desired.normalize().multiplyScalar(FP.speed * (running ? FP.runMul : 1));
+    desired.normalize().multiplyScalar(FP.speed * (running ? FP.runMul : 1) * (running ? 1 : stickAmount));
   }
   FP.velocity.lerp(desired, Math.min(1, dt * 14));
 
@@ -8031,8 +8268,117 @@ function setupFPKeys() {
 }
 buildFPColliders();
 setupFPKeys();
+
+// ---- first-person TOUCH controls (phones / tablets) ----
+// The left ~45% of the screen holds a floating thumbstick (walk; push it to
+// the rim to run); dragging anywhere else looks around. The context button
+// does whatever E would do right now, labelled with the action.
+function fpActionLabel() {
+  if (FP.state !== 'active' || FP.portal) return '';
+  if (FP.inBoat) return boatNearLand() ? 'Step ashore' : '';
+  if (FP.posture === 'sitting') return 'Stand up';
+  const t = FP.activeTarget;
+  if (!t) return '';
+  if (t.kind === 'door') return FP.doorOpen ? 'Close door' : 'Open door';
+  if (t.kind === 'sit') {
+    const l = (t.spot.label || 'sit').replace(/^E — /, '');
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  }
+  if (t.kind === 'dog') return 'Pet ' + (t.dog.userData.dogName || 'the dog');
+  if (t.kind === 'owl') return 'Pet the owl';
+  if (t.kind === 'boat') return 'Board the boat';
+  if (t.kind === 'tv') return 'Play Painted Crowns';
+  return '';
+}
+const fpTouch = (() => {
+  const layer = document.getElementById('fp-touch');
+  const stick = document.getElementById('fp-stick');
+  const knob = document.getElementById('fp-stick-knob');
+  const actionBtn = document.getElementById('fp-action');
+  const lightBtn = document.getElementById('fp-light-btn');
+  const RADIUS = 50, DEAD = 0.12, LOOK_SPEED = 0.0048;
+  let stickId = null, lookId = null, sx = 0, sy = 0, lx = 0, ly = 0, shownLabel = null;
+  function rest() {
+    stick.classList.remove('active');
+    stick.style.left = '96px';
+    stick.style.top = (window.innerHeight - 150) + 'px';
+    knob.style.transform = '';
+    FP.analog.x = FP.analog.y = 0;
+    FP.analog.active = false;
+  }
+  layer.addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    if (stickId === null && e.clientX < window.innerWidth * 0.45) {
+      stickId = e.pointerId; sx = e.clientX; sy = e.clientY;
+      stick.style.left = sx + 'px';
+      stick.style.top = sy + 'px';
+      stick.classList.add('active');
+    } else if (lookId === null) {
+      lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
+    } else return;
+    try { layer.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+  layer.addEventListener('pointermove', e => {
+    if (e.pointerId === stickId) {
+      let dx = e.clientX - sx, dy = e.clientY - sy;
+      const len = Math.hypot(dx, dy);
+      if (len > RADIUS) { dx *= RADIUS / len; dy *= RADIUS / len; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      // radial dead zone, then rescale so the stick still reaches full speed
+      const vx = dx / RADIUS, vy = dy / RADIUS, m = Math.hypot(vx, vy);
+      const k = m < DEAD ? 0 : (m - DEAD) / (1 - DEAD) / m;
+      FP.analog.x = vx * k;
+      FP.analog.y = vy * k;
+      FP.analog.active = true;
+    } else if (e.pointerId === lookId) {
+      if (FP.controls) FP.controls.rotateBy(e.clientX - lx, e.clientY - ly, LOOK_SPEED);
+      lx = e.clientX; ly = e.clientY;
+    }
+  });
+  const release = e => {
+    if (e.pointerId === stickId) { stickId = null; rest(); }
+    if (e.pointerId === lookId) lookId = null;
+  };
+  layer.addEventListener('pointerup', release);
+  layer.addEventListener('pointercancel', release);
+  actionBtn.addEventListener('click', () => fpInteract());
+  lightBtn.addEventListener('click', () => {
+    FP.flashlight = !FP.flashlight;
+    lightBtn.classList.toggle('on', FP.flashlight);
+    lightBtn.setAttribute('aria-pressed', String(FP.flashlight));
+  });
+  return {
+    show() {
+      document.body.classList.add('fp-touch');
+      rest();
+      shownLabel = null;
+      updateFpHint();
+    },
+    hide() {
+      document.body.classList.remove('fp-touch');
+      stickId = lookId = null;
+      rest();
+      shownLabel = null;
+      actionBtn.classList.remove('visible');
+    },
+    // called every frame while first-person is active on a touch screen
+    update() {
+      const label = fpActionLabel();
+      if (label === shownLabel) return;
+      shownLabel = label;
+      actionBtn.textContent = label;
+      actionBtn.classList.toggle('visible', !!label);
+    }
+  };
+})();
 // register the click target on the programmer's torso
 if (programmerTorso) makeInteractive(programmerTorso, 'enterFP', 'Step inside · first-person');
+// touch screens: describe the touch gestures instead of mouse + keyboard
+if (QUALITY.coarse) {
+  const controlsHint = document.getElementById('info-controls');
+  if (controlsHint) controlsHint.innerHTML = 'Drag to look · Pinch to zoom<br>Tap the person at the desk to walk around';
+}
 // wire the on-screen Exit button (the only pointer-events: auto element in
 // the FP overlay) so users without a keyboard can leave too
 const _fpExitBtn = document.getElementById('fp-exit');
@@ -8046,6 +8392,7 @@ window.addEventListener('keydown', e => { if (FP.portal && e.key === 'Escape') e
 // if we're in first-person but the pointer isn't captured (e.g. just returned
 // from the Painted Crowns game, after the browser's post-Esc cooldown), a click re-locks it
 renderer.domElement.addEventListener('pointerdown', () => {
+  if (QUALITY.coarse) return;   // touch screens use the on-screen thumb controls
   if (FP.state === 'active' && !FP.portal && FP.controls && !FP.controls.locked) FP.controls.lock();
 });
 
@@ -8058,7 +8405,7 @@ scene.add(ambient);
 const sunLight = new THREE.DirectionalLight(0xffe0c0, 1.0);
 sunLight.position.set(-3, 6, -8);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.mapSize.set(QUALITY.shadowMapSize, QUALITY.shadowMapSize);
 sunLight.shadow.camera.near = 1;
 sunLight.shadow.camera.far = 30;
 sunLight.shadow.camera.left = -8;
@@ -8081,20 +8428,23 @@ scene.add(interiorWarm);
 // ==========================================================
 // DAY/NIGHT
 // ==========================================================
-function lerpColor(a, b, t) {
-  return new THREE.Color(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+function lerpColor(a, b, t, out) {
+  return (out || new THREE.Color()).setRGB(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
 }
-function multiLerp(stops, t) {
+// applyTime runs every frame while the day cycles, so color results can be
+// written into a caller-owned `out` instead of allocating a new Color.
+function multiLerp(stops, t, out) {
   // stops: [{t, value}], value is THREE.Color or number
   for (let i = 0; i < stops.length - 1; i++) {
     if (t >= stops[i].t && t <= stops[i + 1].t) {
       const lt = (t - stops[i].t) / (stops[i + 1].t - stops[i].t);
       const a = stops[i].value, b = stops[i + 1].value;
       if (typeof a === 'number') return a + (b - a) * lt;
-      return lerpColor(a, b, lt);
+      return lerpColor(a, b, lt, out);
     }
   }
-  return stops[stops.length - 1].value;
+  const last = stops[stops.length - 1].value;
+  return out && typeof last !== 'number' ? out.copy(last) : last;
 }
 
 const SKY_STOPS = [
@@ -8171,10 +8521,61 @@ function timeLabel(t) {
 let timeOfDay = 0.45; // mid-day
 const tlabel = document.getElementById('time-label');
 
+// applyTime runs every frame while the day cycles: its stop tables and
+// result colors are allocated once here instead of on every call.
+const PORCH_LAMP_STOPS = [
+  { t: 0.00, value: 1.4 },
+  { t: 0.20, value: 0.9 },
+  { t: 0.36, value: 0.0 },
+  { t: 0.55, value: 0.6 },
+  { t: 0.70, value: 1.2 },
+  { t: 0.85, value: 1.5 },
+  { t: 1.00, value: 1.4 }
+];
+const SUN_DISC_STOPS = [
+  { t: 0.18, value: new THREE.Color(0xffd39c) },
+  { t: 0.36, value: new THREE.Color(0xfff5e1) },
+  { t: 0.55, value: new THREE.Color(0xff8055) }
+];
+const MOUNTAIN_TINT_STOPS = [
+  { t: 0.00, value: new THREE.Color(0x12162a) },
+  { t: 0.18, value: new THREE.Color(0xb89a8a) },
+  { t: 0.36, value: new THREE.Color(0xffffff) },
+  { t: 0.55, value: new THREE.Color(0xc97a5a) },
+  { t: 0.72, value: new THREE.Color(0x4a3a5a) },
+  { t: 1.00, value: new THREE.Color(0x12162a) }
+];
+const HILL_TINT_STOPS = [
+  { t: 0.00, value: new THREE.Color(0x161a30) },
+  { t: 0.18, value: new THREE.Color(0xc8a99a) },
+  { t: 0.36, value: new THREE.Color(0xffffff) },
+  { t: 0.55, value: new THREE.Color(0xd48a64) },
+  { t: 0.72, value: new THREE.Color(0x52456a) },
+  { t: 1.00, value: new THREE.Color(0x161a30) }
+];
+// the sky dome's color straight overhead, paired with SKY_STOPS (horizon)
+const ZENITH_STOPS = [
+  { t: 0.00, value: new THREE.Color(0x03061c) }, // night
+  { t: 0.08, value: new THREE.Color(0x11164a) }, // pre-dawn
+  { t: 0.18, value: new THREE.Color(0x4d5fa6) }, // dawn
+  { t: 0.28, value: new THREE.Color(0x5e98d6) }, // morning
+  { t: 0.45, value: new THREE.Color(0x3a83d4) }, // midday
+  { t: 0.55, value: new THREE.Color(0x4a4c9a) }, // sunset
+  { t: 0.65, value: new THREE.Color(0x29215a) }, // dusk
+  { t: 0.78, value: new THREE.Color(0x0b1138) }, // late dusk
+  { t: 1.00, value: new THREE.Color(0x03061c) }  // night
+];
+const AMBIENT_WARM = new THREE.Color(0xffeed0);
+const _skyCol = new THREE.Color();
+const _zenithCol = new THREE.Color();
+const _tintCol = new THREE.Color();
+let _timeLabelText = '';
+
 function applyTime(t) {
   timeOfDay = t;
   // sky — visible THROUGH the window now that the blocking sky-plane is gone
-  const skyCol = multiLerp(SKY_STOPS, t);
+  const skyCol = multiLerp(SKY_STOPS, t, _skyCol);
+  multiLerp(ZENITH_STOPS, t, _zenithCol);
   scene.background = skyCol;
   // fog color tracks the sky so distant terrain fades cleanly into the
   // background instead of revealing a sharp edge against a different color
@@ -8189,7 +8590,7 @@ function applyTime(t) {
   const sunX = -Math.sin(angle) * 6;
   sunLight.position.set(sunX, sunY, -8);
   sunLight.target.position.set(0, 1.5, 0);
-  sunLight.color.copy(multiLerp(SUN_COL_STOPS, t));
+  multiLerp(SUN_COL_STOPS, t, sunLight.color);
   sunLight.intensity = multiLerp(SUN_INT_STOPS, t);
   // remember the time-of-day baseline so the weather block can multiply on
   // top each frame without compounding (the weather block runs every frame
@@ -8198,7 +8599,7 @@ function applyTime(t) {
 
   ambient.intensity = multiLerp(AMBIENT_INT_STOPS, t);
   ambient.userData.baseIntensity = ambient.intensity;
-  ambient.color.copy(multiLerp(SKY_STOPS, t).clone().lerp(new THREE.Color(0xffeed0), 0.35));
+  ambient.color.copy(skyCol).lerp(AMBIENT_WARM, 0.35);
 
   fillLight.intensity = 0.05 + 0.2 * Math.sin(t * Math.PI);
 
@@ -8207,15 +8608,7 @@ function applyTime(t) {
 
   // exterior porch light — full at night, off in midday sun
   {
-    const lampI = multiLerp([
-      { t: 0.00, value: 1.4 },
-      { t: 0.20, value: 0.9 },
-      { t: 0.36, value: 0.0 },
-      { t: 0.55, value: 0.6 },
-      { t: 0.70, value: 1.2 },
-      { t: 0.85, value: 1.5 },
-      { t: 1.00, value: 1.4 }
-    ], t);
+    const lampI = multiLerp(PORCH_LAMP_STOPS, t);
     if (porchPointLight) porchPointLight.intensity = lampI;
     lampBaseI = lampI;   // stair-top + dock lamps ride this base, flickered in the animate loop
   }
@@ -8260,23 +8653,11 @@ function applyTime(t) {
     ));
     starsPoints.userData.targetOpacity = Math.max(0, Math.min(1, dayness));
   }
-  const sunDiscCol = multiLerp([
-    { t: 0.18, value: new THREE.Color(0xffd39c) },
-    { t: 0.36, value: new THREE.Color(0xfff5e1) },
-    { t: 0.55, value: new THREE.Color(0xff8055) }
-  ], THREE.MathUtils.clamp(t, 0.18, 0.55));
-  sun.material.color.copy(sunDiscCol);
+  multiLerp(SUN_DISC_STOPS, THREE.MathUtils.clamp(t, 0.18, 0.55), sun.material.color);
 
   // tint the far mountains so they read warm at sunset, dark at night
   if (outsideGroup && outsideGroup.userData.mountainsMat) {
-    const mtTint = multiLerp([
-      { t: 0.00, value: new THREE.Color(0x12162a) },
-      { t: 0.18, value: new THREE.Color(0xb89a8a) },
-      { t: 0.36, value: new THREE.Color(0xffffff) },
-      { t: 0.55, value: new THREE.Color(0xc97a5a) },
-      { t: 0.72, value: new THREE.Color(0x4a3a5a) },
-      { t: 1.00, value: new THREE.Color(0x12162a) }
-    ], t);
+    const mtTint = multiLerp(MOUNTAIN_TINT_STOPS, t, _tintCol);
     outsideGroup.userData.mountainsMat.color.copy(mtTint);
     if (outsideGroup.userData.mtBackdropMat) {
       outsideGroup.userData.mtBackdropMat.color.copy(mtTint);
@@ -8286,31 +8667,56 @@ function applyTime(t) {
   // tint the rolling hills the same way so they track lighting too. they
   // sit closer than the mountains so warm/cool tones read a bit stronger.
   if (outsideGroup && outsideGroup.userData.hillMats) {
-    const hillTint = multiLerp([
-      { t: 0.00, value: new THREE.Color(0x161a30) },
-      { t: 0.18, value: new THREE.Color(0xc8a99a) },
-      { t: 0.36, value: new THREE.Color(0xffffff) },
-      { t: 0.55, value: new THREE.Color(0xd48a64) },
-      { t: 0.72, value: new THREE.Color(0x52456a) },
-      { t: 1.00, value: new THREE.Color(0x161a30) }
-    ], t);
+    const hillTint = multiLerp(HILL_TINT_STOPS, t, _tintCol);
     for (const m of outsideGroup.userData.hillMats) m.color.copy(hillTint);
   }
 
   // tint the back-side far mountain billboard with the same mountain curve
   if (outsideGroup && outsideGroup.userData.farBackMtMat) {
-    const mtTint = multiLerp([
-      { t: 0.00, value: new THREE.Color(0x12162a) },
-      { t: 0.18, value: new THREE.Color(0xb89a8a) },
-      { t: 0.36, value: new THREE.Color(0xffffff) },
-      { t: 0.55, value: new THREE.Color(0xc97a5a) },
-      { t: 0.72, value: new THREE.Color(0x4a3a5a) },
-      { t: 1.00, value: new THREE.Color(0x12162a) }
-    ], t);
-    outsideGroup.userData.farBackMtMat.color.copy(mtTint);
+    outsideGroup.userData.farBackMtMat.color.copy(multiLerp(MOUNTAIN_TINT_STOPS, t, _tintCol));
   }
 
-  tlabel.textContent = timeLabel(t);
+  // only touch the DOM when the label actually changes
+  const label = timeLabel(t);
+  if (label !== _timeLabelText) { _timeLabelText = label; tlabel.textContent = label; }
+}
+
+// Final sky colors, every frame: the time-of-day horizon/zenith pair, washed
+// toward a dimmer gray as cloud cover builds (skyWeather eases toward the
+// active preset's skyGray in the weather block). Feeds the dome, the fog,
+// the side haze and the clear color so they always agree.
+let skyWeather = 0;
+const _skyHorizon = new THREE.Color(), _skyZenith = new THREE.Color(), _skyGrayCol = new THREE.Color();
+function washSky(src, dst, w, dim) {
+  const l = src.r * 0.299 + src.g * 0.587 + src.b * 0.114;
+  _skyGrayCol.setRGB(l * dim, l * dim, l * dim * 1.06);
+  return dst.copy(src).lerp(_skyGrayCol, w);
+}
+function updateSky() {
+  const w = skyWeather;
+  washSky(_skyCol, _skyHorizon, w, 1 - 0.18 * w);
+  washSky(_zenithCol, _skyZenith, w, 1 - 0.3 * w);
+  skyUniforms.horizonColor.value.copy(_skyHorizon);
+  skyUniforms.zenithColor.value.copy(_skyZenith);
+  scene.background = _skyHorizon;
+  if (scene.fog) scene.fog.color.copy(_skyHorizon);
+  for (const m of sideFogMats) m.color.copy(_skyHorizon);
+  skyDome.position.copy(camera.position);
+  // halos follow the actual sun / moon discs; clouds hide both
+  const clear = 1 - Math.min(1, w * 1.1);
+  if (sun.visible) {
+    skyUniforms.sunDir.value.copy(sun.position).sub(camera.position).normalize();
+    skyUniforms.sunColor.value.copy(sun.material.color);
+    skyUniforms.sunStrength.value = clear;
+  } else skyUniforms.sunStrength.value = 0;
+  if (moon.visible) {
+    skyUniforms.moonDir.value.copy(moon.position).sub(camera.position).normalize();
+    skyUniforms.moonStrength.value = clear;
+  } else skyUniforms.moonStrength.value = 0;
+  sunMat.opacity = 1 - 0.85 * w;
+  sunGlowMat.opacity = 0.35 * clear;
+  moonMat.opacity = 1 - 0.8 * w;
+  moonGlowMat.opacity = 0.22 * clear;
 }
 
 const slider = document.getElementById('time-slider');
@@ -8367,6 +8773,7 @@ function pickRandomWeather() {
 }
 // roll on initial page load
 pickRandomWeather();
+skyWeather = WEATHER_PRESETS[weather.target].skyGray || 0;   // start settled, not mid-fade
 
 // ==========================================================
 // INTERACTIVITY (raycaster)
@@ -8591,7 +8998,7 @@ function maybeShowOnboardingHint() {
   hint.innerHTML = `
     <div class="hint-arrow"></div>
     <div class="hint-body">
-      <strong>Click anything to explore</strong>
+      <strong>${QUALITY.coarse ? 'Tap' : 'Click'} anything to explore</strong>
       <span>Each object opens a project. Find them all to unlock the firework show.</span>
     </div>
     <button class="hint-x" type="button" aria-label="Dismiss">×</button>
@@ -8831,6 +9238,9 @@ renderer.domElement.addEventListener('pointerup', e => {
     markDiscovered(hovered.userData.key);
     openModal(hovered.userData.key);
   }
+  // touch screens have no hover-out, so drop the highlight + tooltip now
+  // rather than leaving the tapped object glowing after its card closes
+  if (!QUALITY.canHover) setHovered(null);
 });
 // cancel if the pointer leaves / interaction is interrupted
 renderer.domElement.addEventListener('pointercancel', () => { _tapStart.valid = false; });
@@ -8940,13 +9350,318 @@ modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) c
 window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 // ==========================================================
+// LIGHT GLOWS — soft additive halos on the fires, lamps and lanterns so
+// light sources bloom a little after dark. Each sprite rides its light's
+// intensity and is nudged toward the camera so nearby walls don't slice it.
+// ==========================================================
+const lightGlows = [];
+function addLightGlow(light, color, size, gain) {
+  if (!light) return;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 0
+  }));
+  sprite.scale.set(size, size, 1);
+  sprite.renderOrder = 20;
+  scene.add(sprite);
+  lightGlows.push({ sprite, light, gain });
+}
+addLightGlow(fireLight, 0xff8a3c, 2.0, 0.3);
+addLightGlow(campfireGlowLight, 0xff8a3c, 2.8, 0.42);
+addLightGlow(porchPointLight, 0xffc27a, 1.1, 0.45);
+addLightGlow(lampLight, 0xffd29c, 0.75, 0.22);
+for (const lp of exteriorLampParts) addLightGlow(lp.light, 0xffc27a, 1.5, 0.5);
+const _glowPos = new THREE.Vector3(), _glowToCam = new THREE.Vector3();
+function updateLightGlows() {
+  for (const g of lightGlows) {
+    const k = g.light.visible ? Math.min(1, g.light.intensity * g.gain) : 0;
+    g.sprite.visible = k > 0.01;
+    if (!g.sprite.visible) continue;
+    g.light.getWorldPosition(_glowPos);
+    _glowToCam.subVectors(camera.position, _glowPos);
+    const dist = _glowToCam.length();
+    g.sprite.position.copy(_glowPos).addScaledVector(_glowToCam, Math.min(0.55, dist * 0.4) / dist);
+    g.sprite.material.opacity = k;
+  }
+}
+
+// ==========================================================
+// STATIC BATCHING
+// The cabin is built from ~2,800 small meshes, and every mesh is its own
+// draw call. A desktop shrugs that off; on phones the per-draw overhead is
+// what caps the frame rate. Once the scene is assembled, meshes that never
+// move or change are merged — one mesh per material "look", with differing
+// colors carried as vertex colors — so the result renders identically with
+// a fraction of the draw calls. Interactive objects, anything animated, and
+// anything whose visibility or material is changed later stay untouched.
+// ==========================================================
+const BAKE_TEXTURE_SLOTS = ['map', 'alphaMap', 'emissiveMap', 'normalMap', 'bumpMap', 'roughnessMap',
+  'metalnessMap', 'aoMap', 'lightMap', 'envMap', 'displacementMap'];
+
+// Grouping key for a mesh, or null if it must not be merged. Untextured
+// standard/lambert/basic materials that differ only in color share a key
+// (their colors become vertex colors). Anything textured or special — and
+// any material shared with an interactive or animated object — only merges
+// with meshes using that exact material object, so later writes to it
+// (hover glow, flicker, tints) still reach every merged piece.
+function bakeKey(mesh, allowTransparent, protectedMats) {
+  const mat = mesh.material, geo = mesh.geometry;
+  if (!mat || Array.isArray(mat) || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.userData.key) return null;
+  if (mat.transparent && !allowTransparent) return null;
+  if (!geo || !geo.isBufferGeometry || !geo.attributes.position || !geo.attributes.normal) return null;
+  if (Object.keys(geo.morphAttributes).length || geo.drawRange.start !== 0 || geo.drawRange.count !== Infinity) return null;
+  if (geo.attributes.position.count > 65535) return null;
+  const textured = BAKE_TEXTURE_SLOTS.some(slot => mat[slot]);
+  if (textured && !geo.attributes.uv) return null;
+  if (mat.vertexColors && !geo.attributes.color) return null;
+  const recolorable = !textured && !protectedMats.has(mat) && !mat.vertexColors && mat.color &&
+    mat.onBeforeCompile === THREE.Material.prototype.onBeforeCompile &&
+    (mat.type === 'MeshStandardMaterial' || mat.type === 'MeshLambertMaterial' || mat.type === 'MeshBasicMaterial');
+  const look = recolorable
+    ? ['look', mat.type, mat.roughness, mat.metalness, mat.emissive ? mat.emissive.getHex() : '', mat.emissiveIntensity,
+       mat.flatShading, mat.side, mat.transparent, mat.opacity, mat.depthWrite, mat.depthTest, mat.alphaTest,
+       mat.blending, mat.fog, mat.toneMapped, mat.polygonOffset, mat.polygonOffsetFactor, mat.polygonOffsetUnits,
+       mat.wireframe, mat.visible].join('|')
+    : 'mat|' + mat.uuid;
+  return [look, mesh.castShadow, mesh.receiveShadow, mesh.renderOrder, mesh.frustumCulled].join('#');
+}
+
+// Merge meshes into one indexed geometry in `space`'s local coordinates.
+// colorMode: 'material' bakes each mesh's material color into vertex colors,
+// 'attribute' carries existing vertex colors over, null writes none.
+function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
+  let vCount = 0, iCount = 0;
+  for (const m of meshes) {
+    const g = m.geometry;
+    vCount += g.attributes.position.count;
+    iCount += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
+  const uv = withUv ? new Float32Array(vCount * 2) : null;
+  const col = colorMode ? new Float32Array(vCount * 3) : null;
+  const idx = new Uint16Array(iCount);
+  const mtx = new THREE.Matrix4(), nmat = new THREE.Matrix3(), v = new THREE.Vector3();
+  let vo = 0, io = 0;
+  for (const m of meshes) {
+    const g = m.geometry, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, C = g.attributes.color;
+    mtx.multiplyMatrices(invSpace, m.matrixWorld);
+    nmat.getNormalMatrix(mtx);
+    const c = m.material.color;
+    for (let i = 0; i < P.count; i++) {
+      const k = (vo + i) * 3;
+      v.fromBufferAttribute(P, i).applyMatrix4(mtx);
+      pos[k] = v.x; pos[k + 1] = v.y; pos[k + 2] = v.z;
+      v.fromBufferAttribute(N, i).applyMatrix3(nmat).normalize();
+      nor[k] = v.x; nor[k + 1] = v.y; nor[k + 2] = v.z;
+      if (uv) { uv[(vo + i) * 2] = U.getX(i); uv[(vo + i) * 2 + 1] = U.getY(i); }
+      if (col && colorMode === 'attribute') { col[k] = C.getX(i); col[k + 1] = C.getY(i); col[k + 2] = C.getZ(i); }
+      else if (col) { col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; }
+    }
+    // a mirrored transform flips triangle winding — swap two corners back
+    const flip = mtx.determinant() < 0;
+    const I = g.index, count = I ? I.count : P.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      const a = I ? I.getX(i) : i, b = I ? I.getX(i + 1) : i + 1, d = I ? I.getX(i + 2) : i + 2;
+      idx[io++] = vo + a; idx[io++] = vo + (flip ? d : b); idx[io++] = vo + (flip ? b : d);
+    }
+    vo += P.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  if (col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setIndex(new THREE.BufferAttribute(idx.subarray(0, io), 1));
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
+  return out;
+}
+
+// Merge the static meshes under `space` (skipping `skip` subtrees and any
+// object flagged userData.noBake). Merged meshes are added to `space`
+// itself. Returns a Map of original mesh → merged mesh.
+function bakeStaticMeshes(space, { skip = null, allowTransparent = false } = {}) {
+  space.updateMatrixWorld(true);
+  const skipped = o => o !== space && ((skip && skip.has(o)) || o.userData.noBake);
+  // Materials used by interactive or skipped meshes keep their identity:
+  // hover glow and per-frame animation write to them directly.
+  const protectedMats = new Set();
+  const protect = o => { if (o.isMesh) [].concat(o.material).forEach(m => protectedMats.add(m)); };
+  scene.traverse(o => { if (o.isMesh && o.userData.key) protect(o); });
+  if (skip) for (const o of skip) if (o && o !== space) o.traverse(protect);
+  space.traverse(o => { if (o.userData.noBake && o !== space) o.traverse(protect); });
+
+  const buckets = new Map();
+  (function walk(o) {
+    if (skipped(o) || !o.visible) return;   // hidden parts may be switched on later
+    if (o.isMesh && o !== space && o.children.length === 0) {
+      const key = bakeKey(o, allowTransparent, protectedMats);
+      if (key) {
+        let list = buckets.get(key);
+        if (!list) buckets.set(key, list = []);
+        list.push(o);
+      }
+    }
+    for (const c of o.children) walk(c);
+  })(space);
+
+  const replaced = new Map();
+  const invSpace = new THREE.Matrix4().copy(space.matrixWorld).invert();
+  for (const [key, meshes] of buckets) {
+    if (meshes.length < 2) continue;
+    const first = meshes[0].material;
+    const textured = BAKE_TEXTURE_SLOTS.some(slot => first[slot]);
+    const recolor = key.startsWith('look|') && meshes.some(m => !m.material.color.equals(first.color));
+    let material = first;
+    if (recolor) {
+      material = first.clone();
+      material.color.setRGB(1, 1, 1);
+      material.vertexColors = true;
+    }
+    // chunk so every merged mesh fits a 16-bit index buffer
+    let chunk = [], verts = 0;
+    const flush = () => {
+      if (!chunk.length) return;
+      const colorMode = recolor ? 'material' : (material.vertexColors ? 'attribute' : null);
+      const merged = new THREE.Mesh(mergeMeshGeometry(chunk, invSpace, textured, colorMode), material);
+      merged.castShadow = chunk[0].castShadow;
+      merged.receiveShadow = chunk[0].receiveShadow;
+      merged.renderOrder = chunk[0].renderOrder;
+      merged.frustumCulled = chunk[0].frustumCulled;
+      merged.matrixAutoUpdate = false;
+      merged.userData.baked = true;
+      space.add(merged);
+      for (const m of chunk) { replaced.set(m, merged); m.parent.remove(m); }
+      chunk = []; verts = 0;
+    };
+    for (const m of meshes) {
+      const n = m.geometry.attributes.position.count;
+      if (verts + n > 65535) flush();
+      chunk.push(m); verts += n;
+    }
+    flush();
+  }
+  return replaced;
+}
+
+// planar UVs picked per vertex from the dominant normal axis (world units / tile)
+function boxProjectUVs(geo, tile) {
+  const P = geo.attributes.position, N = geo.attributes.normal, U = geo.attributes.uv;
+  for (let i = 0; i < P.count; i++) {
+    const nx = Math.abs(N.getX(i)), ny = Math.abs(N.getY(i)), nz = Math.abs(N.getZ(i));
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    if (ny >= nx && ny >= nz) U.setXY(i, x / tile, z / tile);
+    else if (nx >= nz) U.setXY(i, z / tile, y / tile);
+    else U.setXY(i, x / tile, y / tile);
+  }
+  U.needsUpdate = true;
+}
+
+// snow caps that got merged: swap the originals in `snowCaps` for the merged
+// mesh so the accumulation fade still drives them
+function replaceSnowCaps(replaced) {
+  const merged = new Set();
+  for (let i = snowCaps.length - 1; i >= 0; i--) {
+    const m = replaced.get(snowCaps[i]);
+    if (m) { snowCaps.splice(i, 1); merged.add(m); }
+  }
+  for (const m of merged) snowCaps.push(m);
+}
+
+{
+  // everything the code animates, toggles, highlights or re-tints later
+  const dynamic = new Set([
+    sun, moon, starsPoints, programmer, deskChairObj, sideChairObj, tvObject, doorPivot,
+    porchOwl, boatObj, campfireEmbers, fpHighlight, fpFlashlight,
+    rainSystem && rainSystem.mesh, snowSystem && snowSystem.mesh, lightningBolt && lightningBolt.mesh,
+    ...campChairObjs, ...dogs, ...yardAnimals, ...birds, ...clouds,
+    ...flames, ...campfireFlames, ...campfireSmoke, ...smokeParticles,
+    ...fireplaceInteriorParts, ...snowCaps, ...foamRibbons, ...infoIcons,
+    ...wallData.map(w => w.mesh), ...lavaBlobs.map(b => b.mesh),
+    ...seaRocks.flatMap(r => [r.ring, r.splash]),
+    ...dogs.map(d => d.userData.ball),
+    ...(window.snowGroundMeshes || []),
+  ].filter(Boolean));
+  bakeStaticMeshes(root, { skip: dynamic });
+  bakeStaticMeshes(outsideGroup, { skip: dynamic });
+  // The cliff's pieces are now one mesh, so they can share box-projected
+  // world UVs: rock strata at one scale on the 1200-unit face and the small
+  // ledges alike (a single texture repeat used to stretch one or the other).
+  const cliffs = outsideGroup.children.filter(m => m.userData.baked && m.material === cliffMat);
+  if (cliffs.length) {
+    for (const m of cliffs) boxProjectUVs(m.geometry, 12);
+    cliffMat.map.repeat.set(1, 1);
+    cliffMat.map.anisotropy = MAX_ANISO;
+  }
+  // objects that move, hide or get outlined as a whole keep their group,
+  // but the parts inside each one can still be merged together
+  for (const g of [programmer, deskChairObj, sideChairObj, tvObject, boatObj, ...campChairObjs]) {
+    if (g) bakeStaticMeshes(g);
+  }
+  // each cloud's puffs share one material, so a cloud can be a single mesh
+  for (const cl of clouds) bakeStaticMeshes(cl, { allowTransparent: true });
+}
+
+// ==========================================================
 // RESIZE
 // ==========================================================
 window.addEventListener('resize', () => {
+  const wasHome = FP.state === 'orbit' && !cameraAnim && camera.position.distanceToSquared(HOME_CAM) < 0.05;
   camera.aspect = window.innerWidth / window.innerHeight;
+  fitHomeView(camera.aspect);
+  if (FP.state === 'orbit') {
+    camera.fov = ORBIT_FOV;
+    if (wasHome) camera.position.copy(HOME_CAM);   // e.g. a phone rotating while parked at home
+  } else if (FP.state === 'active') {
+    camera.fov = fpFov();
+  }
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// ==========================================================
+// ADAPTIVE RESOLUTION
+// Watches real frame times and nudges the render scale so slower phones and
+// laptops stay smooth while fast devices keep full sharpness. Changes are
+// rare (seconds apart) because resizing the drawing buffer costs a frame.
+// ==========================================================
+const adaptiveRes = {
+  ratio: QUALITY.startPixelRatio,
+  samples: [],
+  lastChange: performance.now() + 2500,   // let shaders and textures warm up first
+  lastUpgrade: -Infinity,
+  noMoreUpgrades: false,                  // set once a step up proved too costly
+  sample(dtMs) {
+    if (!(dtMs > 0 && dtMs < 250)) return; // tab switches and one-off hitches
+    this.samples.push(dtMs);
+    if (this.samples.length < 90) return;
+    const now = performance.now();
+    const sorted = this.samples.sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1];
+    this.samples.length = 0;
+    if (now - this.lastChange < 2500) return;
+    let next = this.ratio;
+    if (median > 24) next = Math.max(QUALITY.minPixelRatio, this.ratio - (median > 40 ? 0.35 : 0.2));
+    else if (median < 17.5 && !this.noMoreUpgrades) next = Math.min(QUALITY.maxPixelRatio, this.ratio + 0.15);
+    next = Math.round(next * 100) / 100;
+    if (next === this.ratio) return;
+    if (next < this.ratio && now - this.lastUpgrade < 8000) this.noMoreUpgrades = true;
+    if (next > this.ratio) this.lastUpgrade = now;
+    this.ratio = next;
+    this.lastChange = now;
+    renderer.setPixelRatio(next);
+  }
+};
+
+// Animated screens (TV, monitor, laptop) redraw on a timer and only while in
+// view — every redraw re-uploads the canvas texture to the GPU.
+const _viewFrustum = new THREE.Frustum();
+const _viewProj = new THREE.Matrix4();
+let _screensNextDraw = 0;
+const _ballAxis = new THREE.Vector3();
+let _shadowTick = 0;
+let _lastFrameAt = performance.now();
+let _lightningOpacity = '';
 
 // ==========================================================
 // MAIN LOOP
@@ -8956,7 +9671,12 @@ function animate() {
   requestAnimationFrame(animate);
   // Painted Crowns game overlay owns the screen — pause the cabin render to free the GPU
   if (FP.portal) return;
-  const t = performance.now() - startTime;
+  const frameNow = performance.now();
+  const frameMs = frameNow - _lastFrameAt;
+  _lastFrameAt = frameNow;
+  FRAME_SCALE = Math.min(4, Math.max(0.25, frameMs / (1000 / 60)));
+  adaptiveRes.sample(frameMs);
+  const t = frameNow - startTime;
   for (let i = 0; i < propTickers.length; i++) propTickers[i](t / 1000);
   tickAutoTime();
   // update indoor/outdoor SFX muffling smoothly as the camera moves
@@ -8966,7 +9686,7 @@ function animate() {
     // factor in real-time (no audible step when crossing the threshold)
     if (ambientAudio && !ambientAudio.paused) {
       const target = computeAmbientTargetVolume();
-      ambientAudio.volume += (target - ambientAudio.volume) * 0.15;
+      ambientAudio.volume += (target - ambientAudio.volume) * easeK(0.15);
     }
     // FIREPLACE — proximity-based volume. Loud near the firebox, fades
     // with distance, gated by indoorFactor (only audible when inside).
@@ -9001,7 +9721,7 @@ function animate() {
           const p = fireplaceAudio.play();
           if (p && p.catch) p.catch(() => {});
         }
-        fireplaceAudio.volume += (target - fireplaceAudio.volume) * 0.18;
+        fireplaceAudio.volume += (target - fireplaceAudio.volume) * easeK(0.18);
       }
     }
   }
@@ -9021,9 +9741,12 @@ function animate() {
 
   // first-person mode owns the camera entirely during entering / active / exiting
   updateFP(performance.now());
+  if (QUALITY.coarse && FP.state === 'active') fpTouch.update();
   if (FP.state === 'orbit') {
     controls.update();
-    checkHover();
+    // hover highlighting needs a real pointer — touch screens resolve taps
+    // directly in the pointerup handler instead of ray-casting every frame
+    if (QUALITY.canHover) checkHover();
     // re-evaluate which walls block the camera's view of the room
     updateSeeThrough();
   }
@@ -9058,7 +9781,7 @@ function animate() {
   const wetTarget = (weather.target === 'rain' || weather.target === 'storm') ? 1 : 0;
   // dying out is faster than re-lighting (real fires take a moment to catch)
   const ease = wetTarget > campfireWetness ? 0.0035 : 0.0018;
-  campfireWetness += (wetTarget - campfireWetness) * ease * 16;
+  campfireWetness += (wetTarget - campfireWetness) * easeK(ease * 16);
   campfireWetness = Math.max(0, Math.min(1, campfireWetness));
   const dryness = 1 - campfireWetness;
   for (const fl of campfireFlames) {
@@ -9083,7 +9806,7 @@ function animate() {
   for (const s of campfireSmoke) {
     s.visible = campfireWetness > 0.01;
     if (!s.visible) continue;
-    s.userData.age += 0.018;
+    s.userData.age += 0.018 * FRAME_SCALE;
     if (s.userData.age > 3.2) s.userData.age -= 3.2;
     const a = s.userData.age;
     s.position.y = s.userData.baseY + a * 0.45;
@@ -9096,7 +9819,7 @@ function animate() {
 
   // chimney smoke — each puff rises, drifts, expands, fades, then resets
   for (const s of smokeParticles) {
-    s.userData.age += 0.012;
+    s.userData.age += 0.012 * FRAME_SCALE;
     if (s.userData.age > 3.6) s.userData.age = 0;
     const a = s.userData.age;
     s.position.y = s.userData.baseY + a * 0.55;
@@ -9106,10 +9829,15 @@ function animate() {
     s.material.opacity = Math.max(0, 0.55 - a * 0.16);
   }
 
-  // animated screens
-  tvAnim.draw(t);
-  laptopAnim.draw(t);
-  monitorAnim.draw(t);
+  // animated screens — on a timer, and only the ones currently in view
+  if (t >= _screensNextDraw) {
+    _screensNextDraw = t + QUALITY.screenFrameMs;
+    _viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _viewFrustum.setFromProjectionMatrix(_viewProj);
+    for (const anim of [tvAnim, laptopAnim, monitorAnim]) {
+      if (!anim.screen || _viewFrustum.intersectsObject(anim.screen)) anim.draw(t);
+    }
+  }
 
   // lava lamp blobs
   for (const b of lavaBlobs) {
@@ -9146,8 +9874,8 @@ function animate() {
       const bspeed = Math.hypot(bvx, bvz);
       // axis = up × velocity (so ball rolls forward, not slides)
       ball.rotateOnWorldAxis(
-        new THREE.Vector3(-bvz, 0, bvx).normalize(),
-        bspeed * 0.06
+        _ballAxis.set(-bvz, 0, bvx).normalize(),
+        bspeed * 0.06 * FRAME_SCALE
       );
       // Ellie's position — same loop, a hair smaller radius, trails the ball
       const dx = cx + Math.cos(a) * (Rx - 0.05);
@@ -9316,21 +10044,21 @@ function animate() {
   {
     const active = WEATHER_PRESETS[weather.target];
     const visibleCount = active.cloudCount;
-    const tintC = new THREE.Color(active.cloudColor);
+    const tintC = active.tint || (active.tint = new THREE.Color(active.cloudColor));
 
     // CLOUDS — drift + cycle visibility/opacity
     const cWind = 0.018; // X drift per ms
     for (let i = 0; i < clouds.length; i++) {
       const cl = clouds[i];
-      cl.position.x += cl.userData.driftSpeed * cWind;
+      cl.position.x += cl.userData.driftSpeed * cWind * FRAME_SCALE;
       // wrap around the spread so clouds keep moving
       if (cl.position.x > 130) cl.position.x = -130;
       const wantVisible = i < visibleCount;
       const targetOp = wantVisible ? active.cloudOpacity : 0;
       const m = cl.userData.mat;
-      m.opacity += (targetOp - m.opacity) * 0.04;
+      m.opacity += (targetOp - m.opacity) * easeK(0.04);
       // tint toward the active cloud color
-      m.color.lerp(tintC, 0.04);
+      m.color.lerp(tintC, easeK(0.04));
       cl.visible = m.opacity > 0.005;
     }
 
@@ -9338,12 +10066,12 @@ function animate() {
     // with intensity above 1 so storm rain visibly drives down faster.
     if (rainSystem) {
       const targetIntensity = active.rain;
-      rainSystem.intensity += (targetIntensity - rainSystem.intensity) * 0.03;
+      rainSystem.intensity += (targetIntensity - rainSystem.intensity) * easeK(0.03);
       rainSystem.mat.opacity = Math.min(1, rainSystem.intensity * 0.7);
       if (rainSystem.intensity > 0.02) {
         rainSystem.mesh.visible = true;
         const pos = rainSystem.positions;
-        const dt = 1 / 60;
+        const dt = FRAME_SCALE / 60;
         const speedMul = 1 + Math.max(0, rainSystem.intensity - 1) * 0.6;
         for (let i = 0; i < rainSystem.N; i++) {
           const dy = rainSystem.speeds[i] * speedMul * dt;
@@ -9372,17 +10100,17 @@ function animate() {
     // each one a gentle sway on the way down.
     if (snowSystem) {
       const targetIntensity = active.snow;
-      snowSystem.intensity += (targetIntensity - snowSystem.intensity) * 0.02;
+      snowSystem.intensity += (targetIntensity - snowSystem.intensity) * easeK(0.02);
       snowSystem.mat.opacity = Math.min(1, snowSystem.intensity * 0.95);
       if (snowSystem.intensity > 0.02) {
         snowSystem.mesh.visible = true;
         const pos = snowSystem.positions;
-        const dt = 1 / 60;
+        const dt = FRAME_SCALE / 60;
         const tt = t * 0.0009;
         for (let i = 0; i < snowSystem.N; i++) {
           pos[i * 3 + 1] -= snowSystem.fallV[i] * dt;
           // tiny lateral wobble
-          pos[i * 3 + 0] += Math.sin(tt + snowSystem.drift[i]) * 0.005;
+          pos[i * 3 + 0] += Math.sin(tt + snowSystem.drift[i]) * 0.005 * FRAME_SCALE;
           const x = pos[i * 3 + 0], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
           if (y < snowSystem.endY || inShelter(x, y, z)) {
             pos[i * 3 + 0] = (Math.random() - 0.5) * snowSystem.rangeXZ;
@@ -9399,7 +10127,7 @@ function animate() {
     // SNOW ACCUMULATION — fades in while it's snowing, fades out otherwise.
     // applies to the per-tree snow caps (opacity) and the field tint.
     const snowingTarget = (active.snow > 0) ? 1 : 0;
-    snowAccum += (snowingTarget - snowAccum) * (snowingTarget ? 0.0035 : 0.006);
+    snowAccum += (snowingTarget - snowAccum) * easeK(snowingTarget ? 0.0035 : 0.006);
     snowAccum = Math.max(0, Math.min(1, snowAccum));
     for (const cap of snowCaps) {
       cap.material.opacity = snowAccum;
@@ -9417,34 +10145,39 @@ function animate() {
     // time-of-day baseline. Read from the cached base each frame so the
     // multiplier doesn't compound (otherwise repeated frames where applyTime
     // didn't run would keep multiplying intensity toward zero).
+    skyWeather += ((active.skyGray || 0) - skyWeather) * easeK(0.02);
+    updateSky();
+
     const baseAmbient = ambient.userData.baseIntensity ?? ambient.intensity;
     const baseSun = sunLight.userData.baseIntensity ?? sunLight.intensity;
     ambient.intensity = baseAmbient * active.skyMul;
     sunLight.intensity = baseSun * active.skyMul;
 
     // LIGHTNING — random strikes during 'storm', with a short cooldown
-    lightningCooldown -= 16; // approx ms per frame
+    lightningCooldown -= frameMs;
     if (active.lightning > 0 && lightningCooldown <= 0) {
       // ~1.2% chance per frame eligible → roughly 1 strike every 5–9 seconds
-      if (Math.random() < 0.012 * active.lightning) {
+      if (Math.random() < easeK(0.012 * active.lightning)) {
         fireLightning();
         lightningCooldown = 4000 + Math.random() * 4000;
       }
     }
     if (lightningFlash > 0) {
-      lightningFlash = Math.max(0, lightningFlash - 0.06);
+      lightningFlash = Math.max(0, lightningFlash - 0.06 * FRAME_SCALE);
       // CSS overlay flash
-      lightningEl.style.opacity = String(lightningFlash * 0.65);
+      _lightningOpacity = String(lightningFlash * 0.65);
+      lightningEl.style.opacity = _lightningOpacity;
       // boost scene lights briefly so the flash also hits the geometry
       ambient.intensity += 1.5 * lightningFlash;
       sunLight.intensity += 1.2 * lightningFlash;
-    } else {
+    } else if (_lightningOpacity !== '0') {
+      _lightningOpacity = '0';                 // style writes only when it changes
       lightningEl.style.opacity = '0';
     }
     // visible bolt — fades fast (≈ 250ms)
     if (lightningBolt) {
       if (lightningBoltLife > 0) {
-        lightningBoltLife = Math.max(0, lightningBoltLife - 0.06);
+        lightningBoltLife = Math.max(0, lightningBoltLife - 0.06 * FRAME_SCALE);
         lightningBolt.mat.opacity = lightningBoltLife;
         lightningBolt.mesh.visible = true;
       } else {
@@ -9470,7 +10203,7 @@ function animate() {
 
   // fireworks — integrate position, fade, and recycle when expired
   if (fireworkParticles.length) {
-    const dt = 1 / 60; // approximate; visual effect, doesn't need to be exact
+    const dt = FRAME_SCALE / 60; // visual effect — frame-scaled, doesn't need to be exact
     const grav = 6.5;
     for (let i = fireworkParticles.length - 1; i >= 0; i--) {
       const p = fireworkParticles[i];
@@ -9508,6 +10241,13 @@ function animate() {
     icon.visible = !modalOpen && m !== hovered && (seeThrough || isDoor);
   }
 
+  updateLightGlows();
+
+  // phones refresh the sun's shadow map every other frame (QUALITY.shadowEvery)
+  if (QUALITY.shadowEvery > 1 && ++_shadowTick >= QUALITY.shadowEvery) {
+    _shadowTick = 0;
+    renderer.shadowMap.needsUpdate = true;
+  }
   renderer.render(scene, camera);
 }
 animate();
