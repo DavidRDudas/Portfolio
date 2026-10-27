@@ -1,0 +1,114 @@
+/* Byte, the robot guide from the 3D world, on the homepage and the portfolio:
+   the button in the corner, the hello bubble and the chat (byte.js makes the
+   markup). The robot and its animations are the cabin's (world.html); the
+   rest uses the site's tokens from portfolio-site.css. */
+
+/* ---------- the robot ---------- */
+.guide{--gap:22px;position:fixed;right:max(var(--gap),env(safe-area-inset-right));bottom:max(var(--gap),env(safe-area-inset-bottom));z-index:80;font-family:var(--sans);pointer-events:none}
+/* only the robot, the bubble and the chat take clicks, never the empty wrapper */
+.guide>*{pointer-events:auto}
+/* the homepage's opening has the screen to itself; byte.js adds .ready after */
+.guide:not(.ready){visibility:hidden}
+.guide:not(.ready) *{animation-play-state:paused}
+.guide-bot{position:relative;display:block;width:64px;height:64px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;touch-action:manipulation;opacity:0;transform:translateY(16px) scale(.9);transition:opacity .45s ease,transform .6s var(--ease)}
+.guide.ready .guide-bot{opacity:1;transform:none}
+/* tucked (byte.js): peeking out of the corner while a link or button is under him */
+.guide.tucked .guide-bot{transform:translate(calc(var(--gap) + 25%),calc(var(--gap) + 20%)) rotate(-10deg)}
+.guide.tucked .guide-bot:hover,.guide.tucked .guide-bot:focus-visible{transform:none}
+.guide-bot svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 8px 16px rgba(0,0,0,.55))}
+.guide-bot:focus-visible{outline-offset:3px;border-radius:50%}
+.guide-float{transform-origin:36px 40px}
+.guide-shadow{opacity:.25;transform-box:fill-box;transform-origin:center}
+.guide-eyes{transform:translate(var(--ex,0px),var(--ey,0px));transition:transform .18s ease-out}
+.guide-eye{transform-box:fill-box;transform-origin:center}
+.guide-mouth-open{opacity:0}
+@media(prefers-reduced-motion:no-preference){
+  .guide-float{animation:guide-bob 3.4s ease-in-out infinite}
+  .guide-bot:hover .guide-float{animation-duration:1.5s}
+  .guide.hop .guide-float{animation:guide-hop .5s cubic-bezier(.3,1.6,.5,1)}
+  .guide-shadow{animation:guide-shadow 3.4s ease-in-out infinite}
+  .guide-eye{animation:guide-blink 5.3s infinite}
+  .guide.talking .guide-mouth{animation:guide-talk-a .3s steps(1) infinite}
+  .guide.talking .guide-mouth-open{animation:guide-talk-b .3s steps(1) infinite}
+  .guide.talking .guide-bulb,.guide.open .guide-bulb{animation:guide-bulb .55s ease-in-out infinite alternate}
+}
+@media(prefers-reduced-motion:reduce){
+  .guide-bot{transform:none;transition:opacity .3s ease}
+}
+@keyframes guide-bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-3px) rotate(2deg)}}
+@keyframes guide-hop{0%{transform:translateY(0) scale(1,1)}30%{transform:translateY(-9px) scale(.94,1.08)}65%{transform:translateY(0) scale(1.08,.93)}100%{transform:translateY(0) scale(1,1)}}
+@keyframes guide-shadow{0%,100%{transform:scaleX(1);opacity:.3}50%{transform:scaleX(.82);opacity:.18}}
+@keyframes guide-blink{0%,92%,100%{transform:scaleY(1)}94.5%{transform:scaleY(.1)}}
+@keyframes guide-talk-a{0%{opacity:1}50%{opacity:0}}
+@keyframes guide-talk-b{0%{opacity:0}50%{opacity:1}}
+@keyframes guide-bulb{from{fill:#ffb87a}to{fill:#fff4dc}}
+
+/* ---------- buttons shared by the bubble and the chat ---------- */
+.guide-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 14px;border:1px solid var(--line-2);border-radius:999px;background:rgba(255,255,255,.045);color:var(--ink);font-family:var(--sans);font-size:13px;font-weight:600;line-height:1.2;text-align:center;cursor:pointer;touch-action:manipulation;transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s ease}
+.guide-btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.26)}
+.guide-btn:active{transform:scale(.96)}
+.guide-btn.primary{border-color:transparent;color:var(--amber-ink);background:linear-gradient(180deg,#ffcc96 0%,var(--amber) 48%,#ff9a52 100%);box-shadow:0 8px 20px -10px rgba(255,150,70,.7),inset 0 1px 0 rgba(255,255,255,.5)}
+.guide-btn.primary:hover{background:linear-gradient(180deg,#ffd4a6 0%,#ffbd7c 48%,#ffa463 100%)}
+.guide-x{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);font-family:var(--sans);font-size:20px;line-height:1;cursor:pointer;transition:color .15s ease,background-color .15s ease}
+.guide-x:hover{color:var(--ink);background:rgba(255,255,255,.08)}
+
+/* ---------- hello bubble ---------- */
+.guide-bubble{position:absolute;right:4px;bottom:calc(100% + 10px);width:max-content;max-width:min(290px,calc(100vw - 40px));padding:12px 38px 12px 16px;border:1px solid var(--line-2);border-radius:18px 18px 6px 18px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02)),var(--panel);color:var(--ink);font-size:14px;line-height:1.5;box-shadow:0 22px 50px -18px rgba(0,0,0,.85);opacity:0;visibility:hidden;transform:translateY(8px) scale(.96);transform-origin:100% 100%;transition:opacity .2s ease,transform .3s cubic-bezier(.2,.9,.25,1.25),visibility 0s .3s}
+.guide-bubble.visible{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.guide-bubble p{min-height:1.5em;cursor:pointer}
+@media(prefers-reduced-motion:reduce){.guide-bubble,.guide-btn:active{transform:none}}
+
+/* ---------- chat ---------- */
+.guide-panel{position:absolute;right:0;bottom:calc(100% + 12px);display:flex;flex-direction:column;width:360px;max-width:calc(100vw - 32px);height:min(520px,calc(100vh - 130px));border:1px solid var(--line-2);border-radius:var(--radius);background:radial-gradient(120% 50% at 100% 0%,rgba(255,180,106,.07),transparent 70%),linear-gradient(180deg,var(--panel-2),var(--bg-2));box-shadow:0 34px 80px -24px rgba(0,0,0,.9);overflow:hidden;transform-origin:100% 100%}
+.guide-panel[hidden]{display:none}
+.guide-panel:focus{outline:none}
+@media(prefers-reduced-motion:no-preference){.guide-panel{animation:guide-panel-in .24s cubic-bezier(.2,.9,.25,1.15)}}
+@keyframes guide-panel-in{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+.guide-head,.guide-chips,.guide-form{flex-shrink:0}
+.guide-head{position:relative;display:flex;align-items:center;gap:10px;padding:14px 50px 13px 18px;border-bottom:1px solid var(--line)}
+.guide-title{flex:1;min-width:0}
+.guide-title strong{display:block;font-family:var(--display);font-size:19px;font-weight:700;line-height:1.1;letter-spacing:-.02em;color:var(--ink)}
+.guide-title span{display:flex;align-items:center;gap:7px;margin-top:5px;font-family:var(--mono);font-size:10.5px;line-height:1.2;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.guide-title span::before{content:"";width:6px;height:6px;flex:none;border-radius:50%;background:var(--amber);box-shadow:0 0 10px 1px rgba(255,170,90,.8)}
+.guide-head .guide-x{top:50%;right:12px;transform:translateY(-50%)}
+.guide-quiet{min-height:30px;padding:4px 12px;font-size:12px;font-weight:500;color:var(--ink-2)}
+.guide-log{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;padding:16px 16px 12px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.guide-msg{flex:none;max-width:88%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.5;white-space:pre-line;overflow-wrap:anywhere}
+.guide-msg.bot{align-self:flex-start;border:1px solid var(--line);border-bottom-left-radius:6px;background:rgba(255,255,255,.045);color:var(--ink)}
+.guide-msg.me{align-self:flex-end;border-bottom-right-radius:6px;background:linear-gradient(180deg,#ffcc96 0%,var(--amber) 48%,#ff9a52 100%);color:var(--amber-ink);font-weight:500}
+/* a project in a reply: title and category, like the catalogue's cards */
+.guide-msg-lead{display:block;margin-bottom:8px;color:var(--ink-2)}
+.guide-msg-title{display:block;font-family:var(--display);font-size:17px;font-weight:650;line-height:1.15;letter-spacing:-.02em;color:var(--ink)}
+.guide-msg-kicker{display:block;margin:5px 0 7px;font-family:var(--mono);font-size:10.5px;line-height:1.4;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.guide-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;white-space:normal}
+/* suggestions: one row that scrolls sideways */
+.guide-chips{display:flex;gap:6px;padding:10px 16px 2px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.guide-chips::-webkit-scrollbar{display:none}
+.guide-chips .guide-btn{flex:none;min-height:32px;padding-block:5px;font-size:12.5px;font-weight:500;color:var(--ink-2);white-space:nowrap}
+.guide-form{display:flex;gap:8px;padding:10px 14px 14px}
+.guide-form input{flex:1;min-width:0;height:44px;padding:0 16px;border:1px solid var(--line-2);border-radius:999px;background:rgba(255,255,255,.045);color:var(--ink);font-family:var(--sans);font-size:16px;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .2s ease,background-color .2s ease,box-shadow .2s ease}
+.guide-form input::placeholder{color:var(--muted)}
+.guide-form input:focus{border-color:rgba(255,180,106,.6);background:rgba(255,255,255,.07);box-shadow:0 0 0 4px rgba(255,180,106,.12)}
+.guide-form button{flex:none;display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:linear-gradient(180deg,#ffcc96 0%,var(--amber) 48%,#ff9a52 100%);color:var(--amber-ink);font-family:var(--sans);font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 8px 20px -10px rgba(255,150,70,.7),inset 0 1px 0 rgba(255,255,255,.5)}
+
+/* ---------- "Show me": the card Byte points at glows for a moment ---------- */
+.guide-spot{animation:guide-spot 3s ease both}
+@keyframes guide-spot{0%{box-shadow:0 0 0 0 rgba(255,180,106,0)}12%,72%{box-shadow:0 0 0 2px var(--amber),0 0 60px -6px rgba(255,160,80,.55)}100%{box-shadow:0 0 0 0 rgba(255,180,106,0)}}
+@media(prefers-reduced-motion:reduce){.guide-spot{animation:none;box-shadow:0 0 0 2px var(--amber)!important}}
+
+/* the footer's last line can't scroll out from under Byte: where the page is
+   too narrow to leave him a clear corner, it keeps his width free */
+@media(min-width:641px) and (max-width:1430px){.footer-bottom{padding-right:88px}}
+
+/* ---------- phones (and short landscape screens): a smaller robot, and the
+   chat as a full-width sheet; byte.js's isSheet() uses the same query ---------- */
+@media(max-width:640px),(max-height:480px){
+  .guide{--gap:14px}
+  .guide-bot{width:56px;height:56px}
+  .guide-bubble{right:0;max-width:calc(100vw - 28px)}
+  /* --guide-vh: the visible height, so the sheet stays clear of the keyboard */
+  .guide-panel{position:fixed;left:0;right:0;bottom:0;width:auto;max-width:none;height:min(80vh,600px);height:min(80svh,600px);max-height:calc(var(--guide-vh,100vh) - 12px);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);border-width:1px 0 0;border-radius:22px 22px 0 0;box-shadow:0 -24px 60px -12px rgba(0,0,0,.85);transform-origin:50% 100%}
+  .guide.open .guide-bot{opacity:0;visibility:hidden}
+  .guide-x{width:36px;height:36px}
+  .guide-head{padding-right:56px}
+}
