@@ -7542,6 +7542,911 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
 }
 
 // ==========================================================
+// OPEN-PLAN FURNISHINGS — shared kit for the kitchen, the dining table and
+// the living room (one open space along the front of the cabin)
+// ==========================================================
+// Floor-standing pieces are plain meshes in a handful of shared looks, which
+// STATIC BATCHING folds into the cabin's merged meshes, colours and all. Wood
+// goes into one kit on a fine furniture grain; firewood joins the woodpile's
+// timber. Anything hung on an outer wall or from the ceiling, or standing on
+// the mantel, is built into one kit per surface and look, and hides with that
+// surface in X-ray view. Lamp shades and candle flames share one glow
+// material that warms up as the lamps come on after dark. Colours are given
+// as they should look and linearised here: a plain hex colour is otherwise
+// read as linear and comes out pale.
+const openPlan = (() => {
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear().getHex();
+  const looks = new Map();
+  const look = (color, rough, metal) => {
+    const key = color + '|' + rough + '|' + metal;
+    let m = looks.get(key);
+    if (!m) looks.set(key, m = matStandard(lin(color), rough, metal));
+    return m;
+  };
+  // a fine, low-contrast grain running along v (each part's grain axis)
+  const grainTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#f3ede3'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 90; i++) {
+      g.fillStyle = `rgba(110, 72, 40, ${0.04 + Math.random() * 0.1})`;
+      g.fillRect(Math.random() * 256, 0, 0.6 + Math.random() * 2.4, 256);
+    }
+    for (let i = 0; i < 10; i++) {
+      const x0 = Math.random() * 256, amp = 2 + Math.random() * 5, ph = Math.random() * 6;
+      g.strokeStyle = `rgba(95, 60, 32, ${0.1 + Math.random() * 0.12})`;
+      g.lineWidth = 0.8 + Math.random() * 1.2;
+      g.beginPath();
+      for (let y = 0; y <= 256; y += 8) g[y ? 'lineTo' : 'moveTo'](x0 + Math.sin(y / 40 + ph) * amp, y);
+      g.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.encoding = THREE.sRGBEncoding;
+    tex.anisotropy = MAX_ANISO;
+    return tex;
+  })();
+  const woodMat = new THREE.MeshStandardMaterial({ map: grainTex, vertexColors: true, roughness: 0.7 });
+  // grain UVs over the whole texture (grainUV fills the log atlas's left half)
+  const woodUV = (geo, axis) => {
+    grainUV(geo, axis);
+    const U = geo.attributes.uv;
+    for (let i = 0; i < U.count; i++) U.setX(i, U.getX(i) * 2);
+    return geo;
+  };
+  const glowMat = new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.8, side: THREE.DoubleSide, emissive: 0xffc47e, emissiveIntensity: 0.3,
+  });
+  const kits = {
+    wood: cabinKit(), logs: cabinKit(), glow: cabinKit(),               // floor-standing
+    front: cabinKit(), frontWood: cabinKit(), frontMetal: cabinKit(),   // on the front wall
+    ceiling: cabinKit(), ceilingGlow: cabinKit(),                       // the dining pendant
+    right: cabinKit(), rightGlow: cabinKit(),                           // the mantel and the right wall
+  };
+  const UP = new THREE.Vector3(0, 1, 0), ONE = new THREE.Vector3(1, 1, 1), _e = new THREE.Euler();
+  // One piece of furniture: a frame standing at (x, z), turned `ry` about Y.
+  // Its parts are placed in its local space.
+  function piece(x, z, ry = 0) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = ry;
+    root.add(g);
+    g.updateMatrixWorld(true);
+    const frame = (pos, quat, scale = ONE) => g.matrixWorld.clone().multiply(new THREE.Matrix4().compose(pos, quat, scale));
+    const at = (px, py, pz, rx, rry, rz, sx = 1, sy = sx, sz = sx) => frame(new THREE.Vector3(px, py, pz),
+      new THREE.Quaternion().setFromEuler(_e.set(rx, rry, rz)), new THREE.Vector3(sx, sy, sz));
+    return {
+      // a plain part in a shared look (roughness, metalness)
+      part(geo, color, rough, metal, px, py, pz, rx = 0, rry = 0, rz = 0, cast = false) {
+        const m = new THREE.Mesh(geo, look(color, rough, metal));
+        m.position.set(px, py, pz);
+        m.rotation.set(rx, rry, rz);
+        m.castShadow = cast;
+        g.add(m);
+        return m;
+      },
+      // a wooden part, its grain along the geometry's `axis` (into the
+      // floor-standing wood kit unless another wood kit is given)
+      wood(geo, color, axis, px, py, pz, rx = 0, rry = 0, rz = 0, sx = 1, sy = sx, sz = sx, kit = kits.wood) {
+        kit.addMatrix(woodUV(geo, axis), lin(color), at(px, py, pz, rx, rry, rz, sx, sy, sz));
+      },
+      // a part into one of the kits, optionally scaled
+      into(kit, geo, color, px, py, pz, rx = 0, rry = 0, rz = 0, sx = 1, sy = sx, sz = sx) {
+        kit.addMatrix(geo, lin(color), at(px, py, pz, rx, rry, rz, sx, sy, sz));
+      },
+      // a rod from a to b ([x, y, z] in local space), radius r0 → r1: into the
+      // wood kit ('wood'), another kit, or a plain look [rough, metal, cast]
+      rod(a, b, r0, r1, color, where, radial = 8) {
+        const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+        const geo = taper(r0, r1, d.length(), 2, radial);
+        const q = new THREE.Quaternion().setFromUnitVectors(UP, d.normalize());
+        const mid = new THREE.Vector3((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+        if (Array.isArray(where)) {
+          const m = new THREE.Mesh(geo, look(color, where[0], where[1]));
+          m.position.copy(mid);
+          m.quaternion.copy(q);
+          m.castShadow = !!where[2];
+          g.add(m);
+        } else if (where === 'wood') {
+          kits.wood.addMatrix(woodUV(geo, 'y'), lin(color), frame(mid, q));
+        } else {
+          where.addMatrix(geo, lin(color), frame(mid, q));
+        }
+      },
+    };
+  }
+  // Taper a rounded box toward its top: the top face shrinks to kx × kz of
+  // the bottom, about the centre in x and about the back face (+z) in z.
+  function taperTop(geo, kx, kz) {
+    geo.computeBoundingBox();
+    const b = geo.boundingBox, P = geo.attributes.position, N = geo.attributes.normal;
+    const h = b.max.y - b.min.y, slopeX = (b.max.x - b.min.x) / 2 * (1 - kx) / h, slopeZ = (b.max.z - b.min.z) * (1 - kz) / h;
+    const n = new THREE.Vector3();
+    for (let i = 0; i < P.count; i++) {
+      const t = (P.getY(i) - b.min.y) / h;
+      P.setX(i, P.getX(i) * (1 - (1 - kx) * t));
+      P.setZ(i, b.max.z - (b.max.z - P.getZ(i)) * (1 - (1 - kz) * t));
+      n.fromBufferAttribute(N, i);
+      n.y += Math.abs(n.x) * slopeX + Math.max(0, -n.z) * slopeZ;   // the sides lean in, so their normals tip up
+      n.normalize();
+      N.setXYZ(i, n.x, n.y, n.z);
+    }
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    return geo;
+  }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  // small shared shapes
+  const shapes = {
+    knob: lathe([[0, 0], [0.011, 0], [0.009, 0.014], [0.02, 0.03], [0, 0.042]], 8),
+    mug: lathe([[0, 0], [0.034, 0], [0.038, 0.005], [0.04, 0.09], [0.036, 0.092], [0.034, 0.085], [0, 0.078]], 12),
+    mugHandle: new THREE.TorusGeometry(0.024, 0.007, 4, 10, Math.PI),
+    leaf: new THREE.SphereGeometry(0.028, 6, 4),
+    pot: lathe([[0, 0], [0.042, 0], [0.05, 0.085], [0.058, 0.09], [0.058, 0.11], [0.048, 0.11], [0.046, 0.1], [0, 0.1]], 12),
+    soil: rcyl(0.046, 0.01, 0.003, 12, 1),
+  };
+  // a mug standing at (x, y, z) in piece `p`, its handle turned `a` about Y
+  // from +x; into `kit` when given, else a plain glazed look
+  function mug(p, color, x, y, z, a = 0, kit = null) {
+    const hx = x + Math.cos(a) * 0.04, hz = z - Math.sin(a) * 0.04;
+    if (kit) {
+      p.into(kit, shapes.mug, color, x, y, z);
+      p.into(kit, shapes.mugHandle, color, hx, y + 0.045, hz, 0, a, -Math.PI / 2);
+    } else {
+      p.part(shapes.mug, color, 0.4, 0, x, y, z);
+      p.part(shapes.mugHandle, color, 0.4, 0, hx, y + 0.045, hz, 0, a, -Math.PI / 2);
+    }
+  }
+  return { lin, glowMat, woodMat, kits, piece, taperTop, rnd, shapes, mug };
+})();
+
+// ==========================================================
+// KITCHEN — cream cabinets along the front wall under the window: a red
+// retro fridge, an apron sink, a range under a copper hood, a tiled
+// backsplash, open shelves, and the clutter of a kitchen that gets used
+// ==========================================================
+{
+  const { kits, rnd, shapes } = openPlan;
+  const k = openPlan.piece(0, ROOM.d / 2);     // the front wall's inside face is z = 0 here; the room is -z
+  const TOP = 0.92, FACE = -0.58;              // counter height; cabinet faces (the doors sit just proud)
+  const X0 = -1.55, X1 = 1.95;                 // the cabinet run
+  const SINK = [-0.65, 0.15];                  // apron sink, centred under the window (x = -0.25)
+  const RANGE = [0.8, 1.52], RX = 1.16;        // range, clear of the window's sill so its hood fits
+  const PAINT = 0xe0d3b6, PANEL = 0xd2c4a4, KICK = 0x3a2e24, BLOCK = 0xc28a52, BRASS = 0xd9b56c;
+  const ENAMEL = 0xe6dabd, IRON = 0x262321, CERAMIC = 0xf0ebe0, RED = 0xa3302a, CHROME = 0xd8d4cc;
+  const CREAM = 0xe6dcc6, SAGE = 0x6f8f6e, TERRACOTTA = 0xb45c3a, SOIL = 0x2e2016;
+  const knob = (x, y, z) => k.part(shapes.knob, BRASS, 0.4, 0.7, x, y, z, -Math.PI / 2);
+  // a shaker front: a slab, a raised centre panel, and a knob
+  const front = (x0, x1, y0, y1, kx = (x0 + x1) / 2, ky = (y0 + y1) / 2) => {
+    const w = x1 - x0, h = y1 - y0, x = (x0 + x1) / 2, y = (y0 + y1) / 2;
+    k.part(rbox(w, h, 0.025, 0.012, 1), PAINT, 0.7, 0, x, y, FACE - 0.0125);
+    if (w > 0.2 && h > 0.15) k.part(new THREE.BoxGeometry(w - 0.09, h - 0.09, 0.012), PANEL, 0.7, 0, x, y, FACE - 0.029);
+    knob(kx, ky, FACE - 0.025);
+  };
+
+  // ---- base cabinets: carcasses on a recessed toe kick, a butcher-block top ----
+  // (lower under the sink, so the basin sits in it)
+  for (const [a, b, h] of [[X0, SINK[0], 0.77], [SINK[0], SINK[1], 0.58], [SINK[1], RANGE[0], 0.77], [RANGE[1], X1, 0.77]]) {
+    k.part(rbox(b - a, h, -FACE - 0.005, 0.02, 1), PAINT, 0.7, 0, (a + b) / 2, 0.1 + h / 2, (FACE - 0.005) / 2, 0, 0, 0, true);
+    k.part(new THREE.BoxGeometry(b - a, 0.1, 0.5), KICK, 0.85, 0, (a + b) / 2, 0.05, -0.26);
+  }
+  const slab = (a, b, z0, z1) => k.wood(rbox(b - a, 0.05, z1 - z0, 0.015, 1), BLOCK, 'x', (a + b) / 2, TOP - 0.025, (z0 + z1) / 2);
+  slab(X0, SINK[0], -0.645, -0.005);
+  slab(SINK[1], RANGE[0], -0.645, -0.005);
+  slab(RANGE[1], X1, -0.645, -0.005);
+  slab(SINK[0], SINK[1], -0.105, -0.005);      // the strip behind the sink that carries the faucet
+  // drawers by the fridge
+  front(-1.545, -1.005, 0.69, 0.86);
+  front(-1.545, -1.005, 0.425, 0.68);
+  front(-1.545, -1.005, 0.11, 0.415);
+  // sink base: two doors under the apron, false fronts beside it
+  front(-0.995, -0.255, 0.11, 0.6, -0.31, 0.53);
+  front(-0.245, 0.495, 0.11, 0.6, -0.19, 0.53);
+  front(-0.995, -0.66, 0.625, 0.86);
+  front(0.16, 0.495, 0.625, 0.86);
+  // a tall, narrow pull-out between the sink and the range
+  front(0.505, 0.795, 0.11, 0.86, 0.65, 0.78);
+  // past the range: a drawer over a door
+  front(1.525, 1.945, 0.69, 0.86);
+  front(1.525, 1.945, 0.11, 0.68, 1.585, 0.61);
+
+  // ---- apron sink, brass gooseneck faucet ----
+  {
+    const x = (SINK[0] + SINK[1]) / 2, w = SINK[1] - SINK[0];
+    const zf = -0.64, zb = -0.1, zc = (zf + zb) / 2, top = TOP + 0.015;
+    k.part(rbox(w, 0.3, 0.05, 0.02, 1), CERAMIC, 0.5, 0, x, top - 0.15, zf + 0.025, 0, 0, 0, true);   // the apron
+    k.part(rbox(w, 0.24, 0.05, 0.02, 1), CERAMIC, 0.4, 0, x, top - 0.12, zb - 0.025);
+    for (const s of [-1, 1]) k.part(rbox(0.05, 0.24, zb - zf - 0.04, 0.02, 1), CERAMIC, 0.4, 0, x + s * (w / 2 - 0.025), top - 0.12, zc);
+    k.part(rbox(w - 0.08, 0.04, zb - zf - 0.08, 0.015, 1), CERAMIC, 0.4, 0, x, top - 0.22, zc);
+    k.part(rcyl(0.035, 0.012, 0.004, 12, 1), 0x9a958e, 0.3, 0.55, x, top - 0.195, zc);   // drain
+    const fz = -0.055, R = 0.085, py = TOP + 0.21;
+    k.part(rcyl(0.028, 0.02, 0.008, 12, 1), BRASS, 0.4, 0.7, x, TOP + 0.01, fz);
+    k.part(rcyl(0.016, 0.2, 0.006, 10, 1), BRASS, 0.4, 0.7, x, TOP + 0.11, fz);
+    k.part(new THREE.TorusGeometry(R, 0.014, 6, 14, Math.PI), BRASS, 0.4, 0.7, x, py, fz - R, 0, Math.PI / 2);
+    k.part(rcyl(0.018, 0.045, 0.006, 10, 1), BRASS, 0.4, 0.7, x, py - 0.02, fz - 2 * R);
+    for (const s of [-1, 1]) {
+      k.part(rcyl(0.017, 0.04, 0.006, 10, 1), BRASS, 0.4, 0.7, x + s * 0.12, TOP + 0.02, fz);
+      k.rod([x + s * 0.12, TOP + 0.05, fz], [x + s * 0.17, TOP + 0.075, fz - 0.01], 0.008, 0.01, BRASS, [0.4, 0.7]);
+    }
+    // a sponge on the counter beside it
+    k.part(rbox(0.09, 0.022, 0.06, 0.008, 1), 0xdcb844, 0.85, 0, SINK[1] + 0.08, TOP + 0.011, -0.13, 0, 0.2);
+    k.part(rbox(0.09, 0.012, 0.06, 0.005, 1), 0x5a8a46, 0.85, 0, SINK[1] + 0.08, TOP + 0.028, -0.13, 0, 0.2);
+  }
+
+  // ---- range: cream enamel, black cooktop, a kettle and a skillet on the burners ----
+  {
+    const x = RX, w = RANGE[1] - RANGE[0];
+    k.part(rbox(w, 0.82, 0.6, 0.03, 1), ENAMEL, 0.5, 0, x, 0.48, -0.325, 0, 0, 0, true);
+    k.part(new THREE.BoxGeometry(w - 0.06, 0.07, 0.5), KICK, 0.85, 0, x, 0.035, -0.3);
+    k.part(rbox(w, 0.03, 0.6, 0.012, 1), IRON, 0.5, 0, x, 0.905, -0.325);
+    const ring = new THREE.TorusGeometry(0.075, 0.011, 4, 14), cap = rcyl(0.035, 0.016, 0.006, 10, 1);
+    for (const bx of [-0.17, 0.17]) {
+      for (const bz of [-0.19, -0.46]) {
+        k.part(ring, IRON, 0.5, 0, x + bx, 0.928, bz, Math.PI / 2);
+        k.part(cap, 0x3e3934, 0.5, 0, x + bx, 0.928, bz);
+      }
+    }
+    // backguard with a little clock
+    k.part(rbox(w, 0.17, 0.06, 0.025, 1), ENAMEL, 0.4, 0, x, 1.0, -0.04);
+    k.part(rcyl(0.045, 0.012, 0.004, 14, 1), BRASS, 0.4, 0.7, x, 1.0, -0.074, Math.PI / 2);
+    k.part(rcyl(0.037, 0.006, 0.002, 14, 1), 0xf2e8d0, 0.85, 0, x, 1.0, -0.079, Math.PI / 2);
+    k.part(new THREE.BoxGeometry(0.004, 0.026, 0.003), IRON, 0.5, 0, x - 0.006, 1.01, -0.083, 0, 0, 0.5);
+    k.part(new THREE.BoxGeometry(0.004, 0.032, 0.003), IRON, 0.5, 0, x + 0.012, 1.004, -0.084, 0, 0, -1.3);
+    // control knobs, oven door with its window and brass bar, warming drawer
+    for (const dx of [-0.27, -0.09, 0.09, 0.27]) k.part(rcyl(0.024, 0.03, 0.008, 12, 1), IRON, 0.5, 0, x + dx, 0.825, -0.64, Math.PI / 2);
+    k.part(rbox(0.64, 0.5, 0.03, 0.025, 1), ENAMEL, 0.4, 0, x, 0.44, -0.64);
+    k.part(rbox(0.42, 0.2, 0.012, 0.03, 1), 0x241c16, 0.25, 0, x, 0.47, -0.656);
+    k.part(capsule(0.014, 0.46, 3, 8), BRASS, 0.4, 0.7, x, 0.73, -0.7, 0, 0, Math.PI / 2);
+    for (const s of [-1, 1]) k.part(rcyl(0.01, 0.05, 0.004, 8, 1), BRASS, 0.4, 0.7, x + s * 0.21, 0.73, -0.675, Math.PI / 2);
+    k.part(rbox(0.64, 0.1, 0.025, 0.012, 1), ENAMEL, 0.4, 0, x, 0.125, -0.635);
+    knob(x, 0.125, -0.647);
+    // a striped tea towel over the oven bar
+    const tx = x - 0.15;
+    k.part(capsule(0.016, 0.17, 2, 8), CREAM, 0.9, 0, tx, 0.735, -0.7, 0, 0, Math.PI / 2);
+    k.part(rbox(0.2, 0.3, 0.012, 0.006, 1), CREAM, 0.9, 0, tx, 0.585, -0.718, 0.03);
+    k.part(rbox(0.2, 0.16, 0.01, 0.005, 1), CREAM, 0.9, 0, tx, 0.66, -0.684);
+    for (const y of [0.5, 0.54]) k.part(new THREE.BoxGeometry(0.202, 0.02, 0.004), RED, 0.9, 0, tx, y, -0.7255 + (0.585 - y) * 0.03, 0.03);
+    // red enamel kettle on the back burner, skillet on the front one
+    const kx = x - 0.17, kz = -0.19, ky = 0.94, KETTLE = 0xb03a2c;
+    k.part(lathe([[0, 0], [0.075, 0], [0.088, 0.012], [0.097, 0.05], [0.092, 0.095], [0.072, 0.13], [0.047, 0.146],
+      [0.044, 0.155], [0, 0.155]], 16), KETTLE, 0.5, 0, kx, ky, kz, 0, 0, 0, true);
+    k.part(new THREE.SphereGeometry(0.018, 8, 6), IRON, 0.5, 0, kx, ky + 0.168, kz);
+    k.rod([kx - 0.075, ky + 0.06, kz - 0.015], [kx - 0.15, ky + 0.13, kz - 0.05], 0.022, 0.011, KETTLE, [0.4, 0]);
+    k.part(new THREE.TorusGeometry(0.065, 0.011, 6, 12, Math.PI), IRON, 0.5, 0, kx, ky + 0.15, kz, 0, -0.3);
+    const px = x + 0.17, pz = -0.46;
+    k.part(lathe([[0, 0], [0.1, 0], [0.112, 0.008], [0.122, 0.045], [0.114, 0.047], [0.104, 0.014], [0, 0.012]], 16),
+      0x2e2a28, 0.5, 0, px, 0.94, pz, 0, 0, 0, true);
+    k.rod([px + 0.11, 0.975, pz], [px + 0.28, 0.995, pz + 0.025], 0.012, 0.014, 0x2e2a28, [0.5, 0]);
+  }
+
+  // ---- red retro fridge against the bedroom wall ----
+  {
+    const x = -2.0;
+    k.part(new THREE.BoxGeometry(0.7, 0.1, 0.54), KICK, 0.85, 0, x, 0.05, -0.31);
+    k.part(rbox(0.76, 1.66, 0.6, 0.1, 2), RED, 0.5, 0, x, 0.92, -0.32, 0, 0, 0, true);
+    k.part(rbox(0.74, 0.42, 0.06, 0.06, 2), RED, 0.5, 0, x, 1.5, -0.645, 0, 0, 0, true);    // freezer door
+    k.part(rbox(0.74, 1.1, 0.06, 0.06, 2), RED, 0.5, 0, x, 0.69, -0.645, 0, 0, 0, true);    // main door
+    // chrome handles on stand-offs along the free edge, and a badge
+    for (const [y, len] of [[1.4, 0.16], [1.02, 0.34]]) {
+      k.part(capsule(0.017, len, 3, 8), CHROME, 0.3, 0.55, x + 0.3, y, -0.71);
+      for (const s of [-1, 1]) k.part(rcyl(0.012, 0.04, 0.004, 8, 1), CHROME, 0.3, 0.55, x + 0.3, y + s * len / 2, -0.69, Math.PI / 2);
+    }
+    k.part(capsule(0.012, 0.12, 2, 8), CHROME, 0.3, 0.55, x, 1.63, -0.678, 0, 0, Math.PI / 2);
+    // notes and a drawing held up by magnets
+    for (const [nx, ny, rz, c, mc] of [[-0.13, 1.03, 0.08, 0xf0e8d4, RED], [0.02, 0.94, -0.06, 0x9ab8c8, 0x4a6a4a],
+                                       [-0.1, 0.8, -0.1, 0xe6cc6a, 0x3a5a7a]]) {
+      k.part(rbox(0.1, 0.13, 0.004, 0.002, 1), c, 0.85, 0, x + nx, ny, -0.677, 0, 0, rz);
+      k.part(new THREE.SphereGeometry(0.013, 8, 6), mc, 0.4, 0, x + nx - Math.sin(rz) * 0.05, ny + 0.055, -0.681).scale.z = 0.6;
+    }
+    // a wicker basket of onions on top
+    const bx = x - 0.08;
+    k.part(lathe([[0, 0], [0.11, 0], [0.13, 0.02], [0.14, 0.12], [0.13, 0.12], [0.12, 0.03], [0, 0.03]], 12), 0xa47c4a, 0.9, 0,
+      bx, 1.75, -0.3).scale.set(1.25, 1, 0.9);
+    for (const [ox, oz] of [[-0.06, 0.02], [0.05, -0.03], [0.0, 0.05]]) {
+      k.part(new THREE.SphereGeometry(0.045, 8, 6), 0xc49050, 0.6, 0, bx + ox, 1.82, -0.3 + oz);
+    }
+  }
+
+  // ---- on the counters: coffee maker, bread board, dish rack, crock, fruit ----
+  {
+    // drip coffee maker with a half-full carafe, and a mug waiting by it
+    const x = -1.36, z = -0.2, C = 0x2f2d2b;
+    k.part(rbox(0.21, 0.035, 0.25, 0.012, 1), C, 0.45, 0, x, TOP + 0.0175, z);
+    k.part(rbox(0.21, 0.36, 0.11, 0.03, 1), C, 0.45, 0, x, TOP + 0.18, z + 0.07);
+    k.part(rbox(0.21, 0.08, 0.2, 0.03, 1), C, 0.45, 0, x, TOP + 0.33, z - 0.03);
+    k.part(lathe([[0, 0], [0.058, 0], [0.066, 0.025], [0.066, 0.06], [0, 0.06]], 12), 0x3a2214, 0.25, 0, x, TOP + 0.035, z - 0.06);
+    k.part(lathe([[0.066, 0], [0.064, 0.035], [0.046, 0.07], [0.042, 0.08], [0, 0.08]], 12), 0xb9c4c2, 0.25, 0, x, TOP + 0.095, z - 0.06);
+    k.part(rbox(0.016, 0.09, 0.03, 0.006, 1), C, 0.45, 0, x + 0.075, TOP + 0.1, z - 0.06);
+    k.into(kits.glow, new THREE.SphereGeometry(0.008, 6, 4), 0xff6a3a, x + 0.07, TOP + 0.05, z - 0.126);
+    openPlan.mug(k, CREAM, -1.12, TOP, -0.36, 1.2);
+    // a loaf on the bread board, with a knife
+    const bx = -0.9, bz = -0.34;
+    k.wood(rbox(0.4, 0.024, 0.26, 0.012, 1), 0xd2a46c, 'x', bx, TOP + 0.012, bz, 0, 0.1);
+    k.part(capsule(0.068, 0.13, 3, 10), 0xbf7a34, 0.85, 0, bx - 0.04, TOP + 0.078, bz + 0.01, 0, 0.1, Math.PI / 2).scale.set(0.8, 1, 1);
+    for (const dx of [-0.07, 0, 0.07]) {
+      k.rod([bx - 0.04 + dx - 0.015, TOP + 0.128, bz + 0.01 - 0.04], [bx - 0.04 + dx + 0.015, TOP + 0.128, bz + 0.01 + 0.04],
+        0.007, 0.007, 0xe6c48e, [0.85, 0], 5);
+    }
+    k.part(rbox(0.17, 0.004, 0.03, 0.002, 1), 0xc8c6c0, 0.3, 0.55, bx + 0.09, TOP + 0.03, bz - 0.09, 0, 0.35);
+    k.part(rbox(0.09, 0.02, 0.026, 0.008, 1), 0x3a2618, 0.85, 0, bx + 0.21, TOP + 0.034, bz - 0.13, 0, 0.35);
+    // a wooden dish rack of plates, and a mug upside down to drain
+    const rx = 0.47, rz = -0.3, RACK = 0xc49a68;
+    k.wood(rbox(0.3, 0.02, 0.36, 0.008, 1), RACK, 'z', rx, TOP + 0.01, rz);
+    for (const s of [-1, 1]) k.wood(rbox(0.02, 0.07, 0.36, 0.008, 1), RACK, 'z', rx + s * 0.14, TOP + 0.045, rz);
+    const plate = lathe([[0, 0], [0.06, 0], [0.066, 0.006], [0.1, 0.018], [0.103, 0.022], [0.062, 0.012], [0, 0.012]], 12);
+    [[-0.18, CREAM], [-0.245, CREAM], [-0.31, SAGE], [-0.375, CREAM]].forEach(([z2, c], i) => {
+      k.part(plate, c, 0.4, 0, rx - 0.04, TOP + 0.125, z2, Math.PI / 2 - 0.15 + i * 0.03);
+    });
+    k.part(shapes.mug, SAGE, 0.4, 0, rx + 0.08, TOP + 0.11, -0.43, Math.PI);
+    // crock of wooden spoons and a bowl of fruit past the range
+    const cx = 1.81, cz = -0.14, SPOON = 0xd09c64;
+    k.part(lathe([[0, 0], [0.055, 0], [0.062, 0.02], [0.064, 0.15], [0.07, 0.165], [0.064, 0.17], [0.056, 0.16], [0, 0.15]], 14),
+      0x5e7c60, 0.4, 0, cx, TOP, cz);
+    for (const [dx, dz, h, flat] of [[-0.03, 0.01, 0.34, 0], [0.025, -0.02, 0.31, 1], [0.0, 0.03, 0.29, 0], [0.035, 0.025, 0.37, 0]]) {
+      const b = [cx + dx * 2.4, TOP + h, cz + dz * 2.4];
+      k.rod([cx + dx * 0.3, TOP + 0.05, cz + dz * 0.3], b, 0.008, 0.008, SPOON, 'wood', 6);
+      k.wood(flat ? rbox(0.05, 0.075, 0.012, 0.006, 1) : new THREE.SphereGeometry(0.026, 8, 6), SPOON, 'y',
+        b[0] + dx * 0.4, b[1] + 0.035, b[2] + dz * 0.4, dz * 4, 0, -dx * 4, 1, flat ? 1 : 1.35, flat ? 1 : 0.45);
+    }
+    const fx = 1.72, fz = -0.45;
+    k.wood(lathe([[0, 0], [0.06, 0], [0.11, 0.035], [0.135, 0.075], [0.128, 0.078], [0.1, 0.045], [0, 0.03]], 16), 0xaa7446, 'y', fx, TOP, fz);
+    for (const [dx, dy, dz, r, c] of [[-0.045, 0.07, 0.03, 0.04, 0xb83a2c], [0.045, 0.07, 0.025, 0.042, 0xe0842a],
+                                      [0.0, 0.07, -0.05, 0.038, 0xa02c22], [0.005, 0.112, 0.0, 0.037, 0xe2bc3a]]) {
+      k.part(new THREE.SphereGeometry(r, 10, 8), c, 0.6, 0, fx + dx, TOP + dy, fz + dz);
+    }
+    k.part(new THREE.TorusGeometry(0.085, 0.017, 5, 10, 1.3), 0xe2c040, 0.6, 0, fx - 0.06, TOP + 0.1, fz - 0.01, Math.PI / 2 - 0.4, 0, 0.9);
+  }
+
+  // ---- a woven runner in front of the sink ----
+  {
+    const C = 0xd2c4a0, R = 0xa3302a, G = 0x5a7650;
+    let x = -1.3;
+    for (const [w, c] of [[0.3, C], [0.08, R], [0.18, C], [0.08, G], [0.72, C], [0.08, G], [0.18, C], [0.08, R], [0.3, C]]) {
+      k.part(new THREE.BoxGeometry(w, 0.008, 0.6), c, 0.95, 0, x + w / 2, 0.004, -1.08);
+      x += w;
+    }
+  }
+
+  // ---- on the front wall (these hide with it in X-ray view) ----
+  // green tile backsplash: hand-made tiles, each a slightly different green
+  {
+    const PITCH = 0.158, y0 = TOP + 0.004, cols = Math.floor((X1 - X0) / PITCH);
+    const ox = X0 + ((X1 - X0) - cols * PITCH) / 2 + PITCH / 2;
+    const tile = new THREE.PlaneGeometry(0.146, 0.146), GROUT = 0xd8cdb2;
+    const tones = [0x6a8a6c, 0x63846a, 0x739274, 0x5d7c62, 0x779676];
+    let lo = Infinity, hi = -Infinity;
+    for (let c = 0; c < cols; c++) {
+      const x = ox + c * PITCH, tall = x > -1.12 && x < 0.62;   // one row higher under the window
+      if (tall) { lo = Math.min(lo, x); hi = Math.max(hi, x); }
+      for (let r = 0; r < (tall ? 5 : 4); r++) k.into(kits.front, tile, pickTone(tones), x, y0 + (r + 0.5) * PITCH, -0.0135, 0, Math.PI);
+    }
+    k.into(kits.front, new THREE.BoxGeometry(cols * PITCH, 4 * PITCH, 0.01), GROUT, (X0 + X1) / 2, y0 + 2 * PITCH, -0.007);
+    k.into(kits.front, new THREE.BoxGeometry(hi - lo + PITCH, PITCH, 0.01), GROUT, (lo + hi) / 2, y0 + 4.5 * PITCH, -0.007);
+  }
+  // copper hood over the range, its duct running up to the ceiling
+  {
+    const COPPER = 0xc27444;
+    k.into(kits.frontMetal, openPlan.taperTop(rbox(0.76, 0.56, 0.5, 0.04, 2), 0.45, 0.55), COPPER, RX, 1.9, -0.255);
+    k.into(kits.frontMetal, rbox(0.78, 0.06, 0.52, 0.02, 1), BRASS, RX, 1.645, -0.265);
+    k.into(kits.frontMetal, rbox(0.6, 0.012, 0.36, 0.005, 1), 0x2e2a26, RX, 1.612, -0.25);
+    k.into(kits.frontMetal, rbox(0.32, 2.8, 0.26, 0.02, 1), COPPER, RX, 2.16 + 1.4, -0.135);
+    k.into(kits.frontMetal, rbox(0.36, 0.05, 0.29, 0.015, 1), BRASS, RX, 2.2, -0.15);
+  }
+  // a wall cabinet over the fridge
+  {
+    const x0 = -2.36, x1 = -1.3, y0 = 1.95, y1 = 2.72, D = 0.36;
+    const x = (x0 + x1) / 2, y = (y0 + y1) / 2, w = x1 - x0, h = y1 - y0;
+    k.into(kits.front, rbox(w, h, D - 0.03, 0.02, 1), PAINT, x, y, -(D - 0.03) / 2 - 0.005);
+    k.into(kits.front, rbox(w + 0.06, 0.05, D + 0.03, 0.015, 1), PANEL, x, y1 + 0.025, -(D + 0.03) / 2 - 0.005);
+    for (const s of [-1, 1]) {
+      const dx = x + s * w / 4;
+      k.into(kits.front, rbox(w / 2 - 0.01, h - 0.02, 0.024, 0.012, 1), PAINT, dx, y, -D + 0.018);
+      k.into(kits.front, new THREE.BoxGeometry(w / 2 - 0.1, h - 0.11, 0.012), PANEL, dx, y, -D + 0.002);
+      k.into(kits.frontMetal, shapes.knob, BRASS, x + s * 0.035, y0 + 0.09, -D + 0.006, -Math.PI / 2);
+    }
+  }
+  // open shelves beside the hood: spice jars below, bowls and a mug above
+  {
+    for (const y of [1.66, 2.1]) {
+      k.wood(rbox(0.38, 0.035, 0.24, 0.01, 1), 0xb0784a, 'x', 1.76, y, -0.125, 0, 0, 0, 1, 1, 1, kits.frontWood);
+      for (const x of [1.6, 1.92]) {
+        k.wood(rbox(0.025, 0.09, 0.16, 0.008, 1), 0x9a6a40, 'y', x, y - 0.06, -0.085, 0, 0, 0, 1, 1, 1, kits.frontWood);
+      }
+    }
+    const jar = rcyl(0.03, 0.085, 0.01, 10, 1), lid = rcyl(0.032, 0.02, 0.006, 10, 1);
+    for (const [x, c] of [[1.65, 0xa84a28], [1.74, 0xcf9a2e], [1.83, 0x6e7e36]]) {
+      k.into(kits.front, jar, c, x, 1.678 + 0.0425, -0.12);
+      k.into(kits.front, lid, CREAM, x, 1.678 + 0.095, -0.12);
+    }
+    const bowl = lathe([[0, 0], [0.04, 0], [0.07, 0.025], [0.08, 0.05], [0.074, 0.05], [0.062, 0.03], [0, 0.012]], 14);
+    k.into(kits.front, bowl, CREAM, 1.68, 2.118, -0.12);
+    k.into(kits.front, bowl, SAGE, 1.68, 2.15, -0.12, 0, 0, 0, 0.9);
+    openPlan.mug(k, CREAM, 1.86, 2.118, -0.12, 0.9, kits.front);
+  }
+  // herbs in pots on the window sill
+  {
+    const sill = 1.9, z = -0.12;
+    for (const [x, kind] of [[-0.82, 0], [-0.3, 1], [0.22, 2]]) {
+      k.into(kits.front, shapes.pot, TERRACOTTA, x, sill, z);
+      k.into(kits.front, shapes.soil, SOIL, x, sill + 0.1, z);
+      if (kind === 0) {          // basil
+        for (let i = 0; i < 8; i++) {
+          const a = i * 2.4, r = 0.015 + (i % 3) * 0.018;
+          k.into(kits.front, shapes.leaf, i % 2 ? 0x5a8a3e : 0x6a9c48, x + Math.cos(a) * r, sill + 0.13 + (i % 4) * 0.028,
+            z + Math.sin(a) * r, rnd(-0.5, 0.5), a, 0, 1, 0.45, 0.75);
+        }
+      } else if (kind === 1) {   // rosemary
+        for (let i = 0; i < 10; i++) {
+          const a = i * 2.1, lean = 0.02 + (i % 3) * 0.02;
+          k.rod([x + Math.cos(a) * 0.02, sill + 0.1, z + Math.sin(a) * 0.02],
+                [x + Math.cos(a) * (0.02 + lean), sill + 0.22 + (i % 4) * 0.025, z + Math.sin(a) * (0.02 + lean)], 0.007, 0.004, 0x4a6a40, kits.front, 5);
+        }
+      } else {                   // parsley
+        for (let i = 0; i < 9; i++) {
+          const a = i * 2.3, r = 0.01 + (i % 3) * 0.02;
+          k.into(kits.front, shapes.leaf, i % 2 ? 0x64983e : 0x568a36, x + Math.cos(a) * r, sill + 0.15 + (i % 3) * 0.02,
+            z + Math.sin(a) * r, 0, 0, 0, 0.8);
+        }
+      }
+    }
+  }
+
+  // the fridge and the counters block a walker; soft shadows under them all
+  const FZ = ROOM.d / 2;
+  furnitureColliders.push(new THREE.Box3(new THREE.Vector3(-2.4, 0, FZ - 0.72), new THREE.Vector3(-1.6, 1.75, FZ)));
+  furnitureColliders.push(new THREE.Box3(new THREE.Vector3(X0 - 0.03, 0, FZ - 0.67), new THREE.Vector3(X1 + 0.02, TOP, FZ)));
+  furnitureShadows.push([-2.0, FZ - 0.36, 1.0, 0.95, 0]);
+  furnitureShadows.push([(X0 + X1) / 2, FZ - 0.33, X1 - X0 + 0.45, 0.95, 0]);
+}
+
+// ==========================================================
+// DINING — an oak farmhouse table with four painted spindle-back chairs,
+// wildflowers between two candles, an enamel pendant lamp above, and a
+// cane-front sideboard against the back wall between the doors
+// ==========================================================
+{
+  const { kits, rnd, shapes } = openPlan;
+  const TX = -0.25, TZ = 2.9, TOP = 0.78;
+  const OAK = 0xd29a62, OAK_DK = 0xa8784a, GREEN = 0x6f8a66, BRASS = 0xd9b56c, RED = 0xa3302a;
+  const t = openPlan.piece(TX, TZ);
+  t.wood(rbox(1.6, 0.065, 0.94, 0.03, 2), OAK, 'x', 0, TOP - 0.0325, 0);
+  t.wood(rbox(1.38, 0.1, 0.72, 0.015, 1), OAK_DK, 'x', 0, TOP - 0.115, 0);
+  const leg = lathe([[0, 0], [0.034, 0], [0.04, 0.02], [0.031, 0.07], [0.029, 0.26], [0.04, 0.31], [0.044, 0.35],
+    [0.034, 0.4], [0.032, 0.54], [0.043, 0.57], [0.043, TOP - 0.065], [0, TOP - 0.065]], 10);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) t.wood(leg, OAK_DK, 'y', sx * 0.64, 0, sz * 0.32);
+
+  // spindle-back chairs (the sitter faces +z in each chair's frame)
+  const chair = (x, z, ry) => {
+    const c = openPlan.piece(x, z, ry);
+    const paint = [0.7, 0, false];
+    c.wood(rbox(0.44, 0.045, 0.42, 0.02, 1), OAK, 'z', 0, 0.455, 0.01);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      c.rod([sx * 0.165, 0.44, sz * 0.15], [sx * 0.2, 0.012, sz * 0.18], 0.018, 0.014, GREEN, paint, 6);
+    }
+    for (const sx of [-1, 1]) c.rod([sx * 0.187, 0.17, -0.169], [sx * 0.187, 0.17, 0.169], 0.01, 0.01, GREEN, paint, 6);
+    c.rod([-0.187, 0.17, 0], [0.187, 0.17, 0], 0.01, 0.01, GREEN, paint, 6);
+    for (const sx of [-1, 1]) c.rod([sx * 0.17, 0.46, -0.17], [sx * 0.185, 0.98, -0.235], 0.017, 0.014, GREEN, paint, 6);
+    c.part(rbox(0.46, 0.075, 0.035, 0.016, 1), GREEN, 0.7, 0, 0, 0.955, -0.232, -0.12);
+    for (const sx of [-0.09, 0, 0.09]) c.rod([sx, 0.47, -0.175], [sx * 1.05, 0.92, -0.226], 0.009, 0.008, GREEN, paint, 6);
+    furnitureShadows.push([x, z, 0.6, 0.58, ry]);
+  };
+  chair(TX - 0.38 + rnd(-0.03, 0.03), TZ - 0.68, rnd(-0.06, 0.06));
+  chair(TX + 0.4, TZ - 0.74, rnd(-0.1, 0.1));            // pulled out a little
+  chair(TX - 0.37, TZ + 0.69, Math.PI + rnd(-0.06, 0.06));
+  chair(TX + 0.42, TZ + 0.72, Math.PI + 0.16);            // turned out, as if just left
+
+  // a linen runner, a stoneware jug of wildflowers and a pair of candles
+  t.part(rbox(1.2, 0.006, 0.34, 0.003, 1), 0xdccfae, 0.95, 0, 0, TOP + 0.003, 0);
+  for (const s of [-1, 1]) t.part(new THREE.BoxGeometry(0.035, 0.002, 0.34), RED, 0.95, 0, s * 0.5, TOP + 0.0065, 0);
+  t.part(lathe([[0, 0], [0.05, 0], [0.062, 0.03], [0.066, 0.09], [0.056, 0.15], [0.042, 0.18], [0.046, 0.2], [0.04, 0.2],
+    [0.036, 0.18], [0, 0.17]], 14), 0x86a2ae, 0.5, 0, 0, TOP + 0.006, 0, 0, 0, 0, true);
+  const bloom = new THREE.SphereGeometry(0.028, 6, 4);
+  for (const [fx, fy, fz, c] of [[0.0, 0.4, 0.0, 0xf2ead8], [0.08, 0.35, 0.03, 0xe6ae34], [-0.07, 0.36, -0.02, 0xb83a2c],
+                                 [0.03, 0.33, -0.08, 0xf2ead8], [-0.04, 0.32, 0.08, 0xe6ae34], [0.1, 0.29, -0.05, 0x8a68a8],
+                                 [-0.1, 0.3, 0.04, 0xf2ead8]]) {
+    t.rod([fx * 0.2, TOP + 0.17, fz * 0.2], [fx, TOP + fy - 0.02, fz], 0.004, 0.004, 0x5a7e44, [0.85, 0], 4);
+    t.part(bloom, c, 0.85, 0, fx, TOP + fy, fz).scale.y = 0.6;
+  }
+  const stick = lathe([[0, 0], [0.042, 0], [0.042, 0.01], [0.016, 0.026], [0.012, 0.09], [0.022, 0.1], [0.02, 0.112], [0, 0.112]], 12);
+  for (const s of [-1, 1]) {
+    t.part(stick, BRASS, 0.4, 0.7, s * 0.36, TOP + 0.006, 0);
+    t.part(rcyl(0.014, 0.14, 0.004, 10, 1), 0xf2e8d2, 0.85, 0, s * 0.36, TOP + 0.118 + 0.07, 0);
+    t.into(kits.glow, taper(0.011, 0.002, 0.022, 2, 6), 0xffe2a8, s * 0.36, TOP + 0.118 + 0.14 + 0.024, 0);
+  }
+
+  // enamel pendant on a long cord (it lifts away with the ceiling in X-ray view)
+  {
+    const SHADE_Y = 1.78, H = 0.3, ENAMEL_GREEN = 0x355c46;
+    const prof = [[0.262, 0], [0.255, 0.01], [0.225, 0.07], [0.17, 0.17], [0.1, 0.25], [0.05, 0.288], [0.03, H]];
+    const cordTop = ROOM.h - 0.06, cordBot = SHADE_Y + H + 0.03;
+    t.into(kits.ceiling, rcyl(0.075, 0.035, 0.012, 14, 1), ENAMEL_GREEN, 0, ROOM.h - 0.04, 0);
+    t.into(kits.ceiling, new THREE.CylinderGeometry(0.0065, 0.0065, cordTop - cordBot, 5), 0x1e1c1a, 0, (cordTop + cordBot) / 2, 0);
+    t.into(kits.ceiling, rcyl(0.035, 0.05, 0.01, 12, 1), BRASS, 0, SHADE_Y + H + 0.01, 0);
+    t.into(kits.ceiling, lathe(prof, 20), ENAMEL_GREEN, 0, SHADE_Y, 0);
+    t.into(kits.ceiling, new THREE.TorusGeometry(0.262, 0.007, 4, 28), BRASS, 0, SHADE_Y, 0, Math.PI / 2);
+    t.into(kits.ceilingGlow, lathe(prof.map(([r, y]) => [r * 0.955, y - 0.006]).reverse(), 20), 0xf4e8ce, 0, SHADE_Y, 0);
+    t.into(kits.ceilingGlow, new THREE.SphereGeometry(0.055, 10, 8), 0xfff4dc, 0, SHADE_Y + 0.08, 0);
+  }
+  furnitureColliders.push(new THREE.Box3(new THREE.Vector3(TX - 0.8, 0, TZ - 0.47), new THREE.Vector3(TX + 0.8, TOP, TZ + 0.47)));
+  furnitureShadows.push([TX, TZ, 1.95, 1.3, 0]);
+
+  // ---- cane-front sideboard against the back wall, between the two doorways ----
+  {
+    const SZ = -0.64, W = 1.1, D = 0.42, LEG = 0.2, BODY = 0.5, TOPY = LEG + BODY + 0.04, WOOD = 0xc89260;
+    const s = openPlan.piece(0, SZ);          // its front faces +z, into the room
+    s.wood(rbox(W, BODY, D, 0.03, 2), WOOD, 'x', 0, LEG + BODY / 2, 0);
+    s.wood(rbox(W + 0.04, 0.04, D + 0.02, 0.015, 1), WOOD, 'x', 0, LEG + BODY + 0.02, 0);
+    const legGeo = lathe([[0, 0], [0.016, 0], [0.026, LEG + 0.01], [0, LEG + 0.01]], 8);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) s.wood(legGeo, 0x8e5e36, 'y', sx * 0.48, 0, sz * 0.16);
+    for (const sx of [-1, 1]) {
+      s.wood(rbox(W / 2 - 0.03, BODY - 0.06, 0.02, 0.01, 1), WOOD, 'y', sx * W / 4, LEG + BODY / 2, D / 2 + 0.005);
+      s.part(new THREE.BoxGeometry(W / 2 - 0.13, BODY - 0.16, 0.01), 0xd8bc84, 0.85, 0, sx * W / 4, LEG + BODY / 2, D / 2 + 0.017);
+      s.part(shapes.knob, BRASS, 0.4, 0.7, sx * 0.04, LEG + BODY / 2, D / 2 + 0.015, Math.PI / 2);
+    }
+    // on top: eucalyptus in a stoneware vase, a bowl of lemons, a framed photo
+    s.part(lathe([[0, 0], [0.05, 0], [0.075, 0.08], [0.07, 0.17], [0.04, 0.24], [0.045, 0.26], [0.038, 0.26], [0, 0.24]], 14),
+      0xe0d6c0, 0.5, 0, -0.32, TOPY, -0.02, 0, 0, 0, true);
+    const sprig = new THREE.SphereGeometry(0.024, 6, 4);
+    for (const [ex, ez, eh] of [[-0.16, 0.02, 0.5], [0.04, -0.06, 0.58], [0.13, 0.05, 0.46], [-0.05, 0.07, 0.42]]) {
+      const base = [-0.32, TOPY + 0.24, -0.02], tip = [-0.32 + ex, TOPY + eh, -0.02 + ez];
+      s.rod(base, tip, 0.005, 0.004, 0x6a7e60, [0.85, 0], 4);
+      for (let i = 1; i <= 3; i++) {
+        const f = i / 3.6;
+        s.part(sprig, i % 2 ? 0x8aa696 : 0x7a988a, 0.85, 0, base[0] + ex * f + (i % 2 ? 0.02 : -0.02), base[1] + (eh - 0.24) * f,
+          base[2] + ez * f, 0, i, 0.4).scale.set(1, 0.35, 0.8);
+      }
+    }
+    s.wood(lathe([[0, 0], [0.05, 0], [0.1, 0.03], [0.12, 0.06], [0.113, 0.062], [0.09, 0.035], [0, 0.025]], 14), 0xaa7446, 'y', 0.06, TOPY, 0.04);
+    for (const [dx, dz] of [[-0.035, 0.0], [0.035, 0.02], [0.0, -0.035]]) {
+      s.part(new THREE.SphereGeometry(0.036, 10, 8), 0xe2bc3a, 0.6, 0, 0.06 + dx, TOPY + 0.06, 0.04 + dz).scale.set(1, 0.85, 1.2);
+    }
+    // (the photo sits 2 mm proud of the frame, which leans back 0.12 rad)
+    const lean = Math.tan(0.12), faceZ = y => -0.09 - (y - (TOPY + 0.11)) * lean + 0.002;
+    s.wood(rbox(0.17, 0.22, 0.02, 0.008, 1), 0x6e4a2c, 'y', 0.36, TOPY + 0.11, -0.1, -0.12);
+    s.part(new THREE.PlaneGeometry(0.12, 0.08), 0x9cc0d4, 0.85, 0, 0.36, TOPY + 0.15, faceZ(TOPY + 0.15), -0.12);
+    s.part(new THREE.PlaneGeometry(0.12, 0.08), 0x6e8e56, 0.85, 0, 0.36, TOPY + 0.072, faceZ(TOPY + 0.072), -0.12);
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(-W / 2 - 0.02, 0, SZ - D / 2), new THREE.Vector3(W / 2 + 0.02, TOPY, SZ + D / 2 + 0.02)));
+    furnitureShadows.push([0, SZ, W + 0.25, D + 0.25, 0]);
+  }
+}
+
+// ==========================================================
+// LIVING ROOM — a moss-green sofa facing the fire across a chunky coffee
+// table, a leather armchair in the corner by the hearth with a reading lamp,
+// a basket of logs, a dog bed under the window, and things on the mantel
+// ==========================================================
+{
+  const { kits, rnd, shapes } = openPlan;
+  const SOFA = 0x52734c, LEATHER = 0x8e5028, HONEY = 0xc8925c, FOOT = 0x6a4428, BRASS = 0xd9b56c;
+  const CREAM = 0xe2d6ba, MUSTARD = 0xcc9a36, RED = 0xa3302a, SHADE = 0xf4e8ce, TERRACOTTA = 0xb45c3a, SOIL = 0x2e2016;
+  const footGeo = lathe([[0, 0], [0.022, 0], [0.028, 0.02], [0.034, 0.13], [0, 0.13]], 10);
+
+  // ---- sofa: its back to the dining table, facing the fireplace ----
+  {
+    const s = openPlan.piece(2.5, 3.0, Math.PI / 2);   // local +z faces the fire (+x); local x runs along it (-z)
+    s.part(rbox(2.2, 0.24, 0.88, 0.07, 2), SOFA, 0.92, 0, 0, 0.25, 0, 0, 0, 0, true);
+    for (const x of [-0.59, 0, 0.59]) {
+      s.part(rbox(0.58, 0.15, 0.64, 0.065, 2), SOFA, 0.92, 0, x, 0.44, 0.1, 0, 0, 0, true);
+      s.part(rbox(0.57, 0.44, 0.17, 0.08, 1), SOFA, 0.92, 0, x, 0.68, -0.16, -0.12, 0, 0, true);
+    }
+    s.part(rbox(2.2, 0.5, 0.22, 0.09, 2), SOFA, 0.92, 0, 0, 0.6, -0.33, 0, 0, 0, true);
+    for (const sx of [-1, 1]) {
+      s.part(rbox(0.22, 0.32, 0.88, 0.08, 2), SOFA, 0.92, 0, sx * 0.99, 0.49, 0, 0, 0, 0, true);
+      s.part(capsule(0.115, 0.64, 3, 12), SOFA, 0.92, 0, sx * 0.99, 0.62, 0.03, Math.PI / 2, 0, 0, true);
+      for (const sz of [-1, 1]) s.wood(footGeo, FOOT, 'y', sx * 1.0, 0, sz * 0.36);
+    }
+    // cushions tossed against the back
+    for (const [x, c, rz, sc] of [[-0.66, CREAM, 0.16, 1], [-0.36, RED, -0.06, 0.82], [0.68, MUSTARD, -0.14, 1]]) {
+      s.part(rbox(0.4, 0.38, 0.13, 0.09, 1), c, 0.9, 0, x, 0.68, -0.02, -0.32, 0, rz).scale.setScalar(sc);
+    }
+    // a striped knit throw draped over the arm nearest the door
+    const ax = -0.99, tz = 0.06, TW = 0.56, THROW = 0xdacdb0, STRIPE = 0xa8462c, R = 0.124;
+    const drape = (r, h) => new THREE.CylinderGeometry(r, r, h, 14, 1, true, Math.PI / 2, Math.PI);
+    s.part(drape(R, TW), THROW, 0.92, 0, ax, 0.62, tz, Math.PI / 2, 0, 0, true);
+    s.part(rbox(0.022, 0.38, TW, 0.01, 1), THROW, 0.92, 0, ax - R - 0.005, 0.43, tz, 0, 0, -0.05, true);   // down the outside
+    s.part(rbox(0.022, 0.13, TW, 0.01, 1), THROW, 0.92, 0, ax + R + 0.004, 0.56, tz, 0, 0, 0.12, true);    // tucked toward the seat
+    for (const dz of [-0.2, 0.2]) {
+      s.part(drape(R + 0.003, 0.04), STRIPE, 0.9, 0, ax, 0.62, tz + dz, Math.PI / 2);
+      s.part(new THREE.BoxGeometry(0.004, 0.38, 0.04), STRIPE, 0.9, 0, ax - R - 0.0175, 0.43, tz + dz, 0, 0, -0.05);
+    }
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(2.04, 0, 1.88), new THREE.Vector3(2.97, 0.85, 4.14)));
+    furnitureShadows.push([2.5, 3.0, 1.2, 2.55, 0]);
+  }
+
+  // ---- coffee table on the rug, with a few things on it ----
+  {
+    const c = openPlan.piece(3.75, 3.0);
+    c.wood(rbox(0.64, 0.06, 1.16, 0.028, 2), HONEY, 'z', 0, 0.42, 0);
+    c.wood(rbox(0.54, 0.035, 1.04, 0.012, 1), HONEY, 'z', 0, 0.12, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) c.wood(rbox(0.065, 0.39, 0.065, 0.022, 1), HONEY, 'y', sx * 0.255, 0.195, sz * 0.51);
+    const T = 0.45;
+    c.part(rbox(0.2, 0.035, 0.26, 0.008, 1), 0x4a6c50, 0.85, 0, 0.08, T + 0.0175, -0.3, 0, 0.25);
+    c.part(rbox(0.17, 0.03, 0.22, 0.008, 1), RED, 0.85, 0, 0.09, T + 0.05, -0.31, 0, -0.1);
+    openPlan.mug(c, 0xe6dcc6, -0.13, T, 0.02, 2.2);
+    c.part(new THREE.CircleGeometry(0.035, 12), 0x4a2e1a, 0.85, 0, -0.13, T + 0.08, 0.02, -Math.PI / 2);
+    // a wooden bowl of pinecones
+    c.wood(lathe([[0, 0], [0.05, 0], [0.1, 0.03], [0.12, 0.06], [0.113, 0.062], [0.09, 0.035], [0, 0.025]], 14), 0xa06a40, 'y', 0.02, T, 0.32);
+    for (const [dx, dz, ry] of [[-0.04, 0.0, 0.3], [0.04, 0.03, 2.0], [0.0, -0.045, 4.0]]) {
+      c.part(lathe([[0, 0], [0.024, 0.01], [0.03, 0.03], [0.02, 0.055], [0, 0.065]], 8), 0x6e4828, 0.9, 0,
+        0.02 + dx, T + 0.055, 0.32 + dz, Math.PI / 2 - 0.2, ry, 0);
+    }
+    // on the shelf below: a board game and magazines
+    c.part(rbox(0.3, 0.06, 0.3, 0.012, 1), 0x3a5c80, 0.85, 0, 0.0, 0.1375 + 0.03, 0.25, 0, 0.08);
+    c.part(rbox(0.22, 0.025, 0.3, 0.006, 1), 0xe6dcc6, 0.85, 0, 0.0, 0.1375 + 0.0125, -0.25, 0, -0.06);
+    c.part(rbox(0.21, 0.02, 0.29, 0.006, 1), RED, 0.85, 0, 0.02, 0.1375 + 0.035, -0.24, 0, 0.1);
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(3.43, 0, 2.42), new THREE.Vector3(4.07, 0.46, 3.58)));
+    furnitureShadows.push([3.75, 3.0, 0.9, 1.45, 0]);
+  }
+
+  // ---- leather armchair in the corner beside the hearth, turned toward it ----
+  {
+    const AX = 6.05, AZ = 0.95, ry = -0.39;
+    const a = openPlan.piece(AX, AZ, ry);
+    a.part(rbox(0.84, 0.22, 0.82, 0.07, 2), LEATHER, 0.6, 0, 0, 0.25, 0, 0, 0, 0, true);
+    a.part(rbox(0.54, 0.14, 0.6, 0.06, 2), LEATHER, 0.6, 0, 0, 0.43, 0.07, 0, 0, 0, true);
+    a.part(rbox(0.84, 0.54, 0.2, 0.09, 2), LEATHER, 0.6, 0, 0, 0.62, -0.31, -0.08, 0, 0, true);
+    for (const sx of [-1, 1]) {
+      a.part(rbox(0.16, 0.3, 0.82, 0.07, 2), LEATHER, 0.6, 0, sx * 0.34, 0.48, 0, 0, 0, 0, true);
+      a.part(capsule(0.09, 0.64, 3, 12), LEATHER, 0.6, 0, sx * 0.34, 0.6, 0.03, Math.PI / 2, 0, 0, true);
+      for (const sz of [-1, 1]) a.wood(footGeo, FOOT, 'y', sx * 0.36, 0, sz * 0.34);
+    }
+    // a buttoned back, and a green lumbar cushion below the buttons
+    for (const bx of [-0.2, 0, 0.2]) {
+      for (const by of [0.72, 0.82]) a.part(new THREE.SphereGeometry(0.014, 6, 4), 0x5a3018, 0.6, 0, bx, by, -0.2 - (by - 0.62) * 0.08);
+    }
+    a.part(rbox(0.38, 0.2, 0.11, 0.07, 1), SOFA, 0.9, 0, 0.02, 0.57, -0.15, -0.22, 0, 0.05);
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(AX - 0.5, 0, AZ - 0.5), new THREE.Vector3(AX + 0.5, 0.9, AZ + 0.5)));
+    furnitureShadows.push([AX, AZ, 1.05, 1.0, ry]);
+  }
+
+  // ---- brass floor lamp at the armchair's side ----
+  {
+    const LX = 6.68, LZ = 1.32;
+    const f = openPlan.piece(LX, LZ);
+    f.part(rcyl(0.15, 0.035, 0.014, 18, 2), BRASS, 0.4, 0.5, 0, 0.0175, 0, 0, 0, 0, true);
+    f.part(capsule(0.013, 1.38, 2, 8), BRASS, 0.4, 0.5, 0, 0.725, 0, 0, 0, 0, true);
+    f.into(kits.glow, lathe([[0.2, 0], [0.155, 0.25]], 24), SHADE, 0, 1.36, 0);
+    f.into(kits.glow, new THREE.SphereGeometry(0.04, 8, 6), 0xfff4dc, 0, 1.45, 0);
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(LX - 0.15, 0, LZ - 0.15), new THREE.Vector3(LX + 0.15, 1.6, LZ + 0.15)));
+    furnitureShadows.push([LX, LZ, 0.42, 0.42, 0]);
+  }
+
+  // ---- side table and lamp at the sofa's far end ----
+  {
+    const st = openPlan.piece(2.46, 1.36);
+    st.wood(lathe([[0, 0], [0.16, 0], [0.17, 0.018], [0.15, 0.042], [0.06, 0.056], [0.045, 0.1], [0.034, 0.3], [0.048, 0.38],
+      [0.038, 0.48], [0.06, 0.54], [0, 0.54]], 14), HONEY, 'y', 0, 0, 0);
+    st.wood(rcyl(0.25, 0.045, 0.014, 20, 2), HONEY, 'y', 0, 0.5625, 0);
+    const ly = 0.585, lx = -0.03, lz = 0.03;
+    st.part(lathe([[0, 0], [0.05, 0], [0.075, 0.05], [0.082, 0.12], [0.06, 0.19], [0.026, 0.215], [0, 0.215]], 14),
+      0x4e7058, 0.5, 0, lx, ly, lz, 0, 0, 0, true);
+    st.part(rcyl(0.011, 0.14, 0.004, 8, 1), BRASS, 0.4, 0.7, lx, ly + 0.28, lz);
+    st.into(kits.glow, lathe([[0.16, 0], [0.12, 0.19]], 24), SHADE, lx, ly + 0.29, lz);
+    st.into(kits.glow, new THREE.SphereGeometry(0.035, 8, 6), 0xfff4dc, lx, ly + 0.38, lz);
+    st.part(rbox(0.14, 0.022, 0.2, 0.006, 1), 0x3a5c80, 0.85, 0, 0.1, ly + 0.011, -0.1, 0, 0.4);
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(2.21, 0, 1.11), new THREE.Vector3(2.71, 0.6, 1.61)));
+    furnitureShadows.push([2.46, 1.36, 0.62, 0.62, 0]);
+  }
+
+  // ---- wicker basket of firewood beside the hearth, log ends to the room ----
+  {
+    const BX = 6.52, BZ = 4.42, WICKER = 0xa47c4a, BAND = 0x7a5a36, sc = [1.3, 1, 0.85];   // long side out from the wall
+    const b = openPlan.piece(BX, BZ);
+    b.part(lathe([[0, 0], [0.2, 0], [0.215, 0.02], [0.238, 0.26], [0.25, 0.28], [0.238, 0.29], [0.224, 0.275], [0.2, 0.04],
+      [0, 0.035]], 16), WICKER, 0.92, 0, 0, 0, 0, 0, 0, 0, true).scale.set(...sc);
+    for (const y of [0.09, 0.18]) {
+      b.part(new THREE.TorusGeometry(0.219 + (y - 0.02) * 0.096, 0.01, 4, 20), BAND, 0.9, 0, 0, y, 0, Math.PI / 2).scale.set(sc[0], sc[2], 1);
+    }
+    b.part(new THREE.TorusGeometry(0.246, 0.016, 5, 24), WICKER, 0.9, 0, 0, 0.28, 0, Math.PI / 2).scale.set(sc[0], sc[2], 1);
+    for (const s of [-1, 1]) b.part(new THREE.TorusGeometry(0.055, 0.012, 4, 10, Math.PI), BAND, 0.9, 0, s * 0.31, 0.29, 0, 0, Math.PI / 2);
+    for (const [z, y, r] of [[-0.1, 0.1, 0.06], [0.0, 0.095, 0.064], [0.1, 0.1, 0.058], [-0.052, 0.205, 0.062],
+                             [0.056, 0.21, 0.06], [0.0, 0.31, 0.056]]) {
+      kits.logs.log('x', r, rnd(0.62, 0.7), pickTone(LOG_TONES), BX + rnd(-0.03, 0.02), y, BZ + z);
+    }
+    for (const z of [-0.08, 0.07]) kits.logs.log('x', 0.018, rnd(0.55, 0.62), pickTone(LOG_TONES), BX + rnd(-0.02, 0.02), 0.33, BZ + z);
+    furnitureColliders.push(new THREE.Box3(new THREE.Vector3(BX - 0.33, 0, BZ - 0.22), new THREE.Vector3(BX + 0.33, 0.38, BZ + 0.22)));
+    furnitureShadows.push([BX, BZ, 0.85, 0.56, 0]);
+  }
+
+  // ---- a dog bed under the window, with a rope toy and a rubber bone ----
+  {
+    const DX = 5.45, DZ = 6.32, ry = 0.08;
+    const d = openPlan.piece(DX, DZ, ry);
+    d.part(rcyl(0.34, 0.07, 0.025, 20, 2), 0xe2d6ba, 0.9, 0, 0, 0.04, 0).scale.set(1, 1, 0.78);
+    d.part(new THREE.TorusGeometry(0.32, 0.08, 8, 26), 0x6e7e56, 0.92, 0, 0, 0.1, 0, Math.PI / 2, 0, 0, true).scale.set(1, 0.78, 1);
+    // a toy lying along angle `a` (about Y) at (x, z): a shaft with knobs at its ends
+    const toy = (x, y, z, a, len, r, knob, pair, color, knobColor) => {
+      const ux = Math.cos(a), uz = -Math.sin(a);
+      d.part(capsule(r, len, 2, 6), color, 0.6, 0, x, y, z, 0, a, Math.PI / 2);
+      for (const e of [-1, 1]) {
+        for (const f of pair ? [-1, 1] : [0]) {
+          d.part(new THREE.SphereGeometry(knob, 8, 6), knobColor, 0.6, 0, x + e * (len / 2 + r) * ux + f * 0.018 * -uz,
+            y + 0.004, z + e * (len / 2 + r) * uz + f * 0.018 * ux);
+        }
+      }
+    };
+    toy(0.06, 0.092, 0.02, 0.5, 0.2, 0.016, 0.033, false, 0xe6d6b0, RED);      // rope tug on the cushion
+    toy(-0.5, 0.017, 0.2, -0.6, 0.11, 0.016, 0.022, true, 0xb83a2c, 0xb83a2c);  // rubber bone on the floor
+    furnitureShadows.push([DX, DZ, 0.85, 0.7, ry]);
+  }
+
+  // ---- a cactus and a succulent on the window sill (they hide with the front wall) ----
+  {
+    const w = openPlan.piece(0, ROOM.d / 2), SILL = 1.7, z = -0.12;
+    w.into(kits.front, shapes.pot, TERRACOTTA, 5.28, SILL, z);
+    w.into(kits.front, shapes.soil, SOIL, 5.28, SILL + 0.1, z);
+    w.into(kits.front, new THREE.SphereGeometry(0.042, 8, 6), 0x5a8a50, 5.28, SILL + 0.15, z, 0, 0, 0, 1, 1.35, 1);
+    w.into(kits.front, new THREE.SphereGeometry(0.013, 6, 4), 0xd87090, 5.28, SILL + 0.205, z);
+    w.into(kits.front, shapes.pot, 0xe6dcc6, 5.92, SILL, z, 0, 0, 0, 0.9);
+    w.into(kits.front, shapes.soil, SOIL, 5.92, SILL + 0.09, z, 0, 0, 0, 0.9);
+    for (let i = 0; i < 7; i++) {
+      const a = i * 0.9;
+      w.into(kits.front, shapes.leaf, i % 2 ? 0x7a9c78 : 0x88aa84, 5.92 + Math.cos(a) * 0.03, SILL + 0.115, z - Math.sin(a) * 0.03,
+        0, a, 0.5, 1, 0.45, 0.7);   // each leaf points out along its angle, tipped up
+    }
+  }
+
+  // ---- on the mantel and the right wall (they hide with it in X-ray view) ----
+  // The mantel beam (see FIREPLACE) runs along the right wall: its top is at
+  // y 1.53, centred 0.79 m out from the wall, from z 2.02 to 3.98.
+  {
+    const m = openPlan.piece(0, 0);
+    const MX = ROOM.w / 2 - 0.79, MY = 1.53, WOOD = 0x6e4a2c, GILT = 0xd2aa5c;
+    // a tambour mantel clock at ten past ten
+    const CZ = 3.0;
+    m.into(kits.right, rbox(0.1, 0.16, 0.28, 0.03, 2), WOOD, MX, MY + 0.08, CZ);
+    m.into(kits.right, capsule(0.075, 0.13, 3, 12), WOOD, MX, MY + 0.16, CZ, Math.PI / 2, 0, 0, 0.62, 1, 1);
+    m.into(kits.right, rcyl(0.06, 0.012, 0.004, 16, 1), 0xf2e8d0, MX - 0.052, MY + 0.12, CZ, 0, 0, Math.PI / 2);
+    m.into(kits.right, new THREE.TorusGeometry(0.062, 0.009, 5, 18), GILT, MX - 0.056, MY + 0.12, CZ, 0, Math.PI / 2);
+    for (const [len, th] of [[0.036, -1.05], [0.05, 1.05]]) {
+      m.into(kits.right, new THREE.BoxGeometry(0.004, len, 0.006), 0x1a1410, MX - 0.06, MY + 0.12 + Math.cos(th) * len / 2,
+        CZ + Math.sin(th) * len / 2, th);
+    }
+    // a pair of brass candlesticks
+    const stick = lathe([[0, 0], [0.04, 0], [0.04, 0.01], [0.015, 0.026], [0.011, 0.11], [0.02, 0.12], [0.018, 0.13], [0, 0.13]], 12);
+    for (const [z, sy, ch] of [[2.3, 1, 0.16], [2.48, 0.72, 0.12]]) {
+      m.into(kits.right, stick, GILT, MX, MY, z, 0, 0, 0, 1, sy, 1);
+      const top = MY + 0.13 * sy;
+      m.into(kits.right, rcyl(0.013, ch, 0.004, 10, 1), 0xf2e8d2, MX, top + ch / 2, z);
+      m.into(kits.rightGlow, taper(0.01, 0.002, 0.02, 2, 6), 0xffe2a8, MX, top + ch + 0.018, z);
+    }
+    // a little pothos trailing over the front edge
+    const PZ = 3.68;
+    m.into(kits.right, shapes.pot, TERRACOTTA, MX, MY, PZ);
+    m.into(kits.right, shapes.soil, SOIL, MX, MY + 0.1, PZ);
+    for (const [dz, len] of [[-0.05, 5], [0.04, 4], [0.0, 3]]) {
+      let p = [MX - 0.02, MY + 0.11, PZ + dz * 0.3];
+      for (let i = 0; i < len; i++) {
+        const q = [MX - 0.07 - Math.min(i, 2) * 0.035, MY + 0.12 - i * 0.07 - (i > 1 ? 0.03 : 0), PZ + dz * (1 + i * 0.4)];
+        m.rod(p, q, 0.004, 0.004, 0x46663a, kits.right, 4);
+        m.into(kits.right, shapes.leaf, i % 2 ? 0x5a8044 : 0x6e9652, q[0], q[1], q[2], 0, rnd(-0.6, 0.6), 0, 0.45, 0.9, 0.95);
+        p = q;
+      }
+    }
+    // a framed mountain-lake painting above the armchair
+    const PX = ROOM.w / 2, QZ = 0.8, QY = 2.35, W = 0.95, H = 0.7, FW = 0.06, FRAME = 0x5e3e24;
+    for (const s of [-1, 1]) {
+      m.into(kits.right, rbox(0.045, FW, W, 0.012, 1), FRAME, PX - 0.03, QY + s * (H - FW) / 2, QZ);
+      m.into(kits.right, rbox(0.045, H - 2 * FW + 0.002, FW, 0.012, 1), FRAME, PX - 0.03, QY, QZ + s * (W - FW) / 2);
+    }
+    const cw = W - 2 * FW + 0.01, ch = H - 2 * FW + 0.01;
+    // flat shapes facing the room, layered toward it; tri() is a peak with its base at y0
+    const flat = (geo, color, y, z, layer, sx = 1, sy = 1, rz = 0) =>
+      m.into(kits.right, geo, color, PX - 0.012 - layer * 0.002, y, z, 0, -Math.PI / 2, rz, sx, sy, 1);
+    const triGeo = new THREE.CircleGeometry(1, 3);
+    const tri = (z, y0, w, h, color, layer) => flat(triGeo, color, y0 + h / 3, z, layer, h / 1.5, w / 1.732, Math.PI / 2);
+    flat(new THREE.PlaneGeometry(cw, ch), 0xd6e2e0, QY, QZ, 0);
+    flat(new THREE.CircleGeometry(0.045, 14), 0xf2dca2, QY + 0.17, QZ + 0.25, 1);
+    // (every shape stays inside the canvas, which spans QZ ± 0.42)
+    tri(QZ - 0.17, QY - 0.12, 0.5, 0.34, 0x8c9cae, 2);
+    tri(QZ + 0.12, QY - 0.12, 0.56, 0.4, 0x7e90a4, 2);
+    tri(QZ + 0.12, QY + 0.19, 0.126, 0.09, 0xeef0f2, 3);
+    tri(QZ - 0.17, QY + 0.145, 0.11, 0.075, 0xeef0f2, 3);
+    tri(QZ - 0.25, QY - 0.13, 0.34, 0.21, 0x55745e, 4);
+    tri(QZ + 0.26, QY - 0.13, 0.3, 0.17, 0x4e6c58, 4);
+    flat(new THREE.PlaneGeometry(cw, 0.12), 0x78a4b4, QY - 0.18, QZ, 5);
+    flat(new THREE.PlaneGeometry(cw, 0.06), 0x6a8a4c, QY - ch / 2 + 0.03, QZ, 6);
+    for (const z of [-0.34, -0.29, 0.29, 0.355]) tri(QZ + z, QY - 0.27, 0.05, 0.13, 0x34503c, 7);
+  }
+}
+
+// ==========================================================
+// ENTRY — a peg rail beside the front door with a coat and scarf, a dog
+// leash and a hat, boots on a tray beneath it, and a coir mat inside the
+// door (the door's approach and swing stay clear)
+// ==========================================================
+{
+  const { kits } = openPlan;
+  const e = openPlan.piece(0, ROOM.d / 2);   // the front wall's frame: z = 0 at the wall, the room at -z
+  const RAIL_Y = 1.74, PEGS = [2.22, 2.4, 2.58, 2.76], BRASS = 0xd9b56c;
+  e.wood(rbox(0.72, 0.12, 0.03, 0.012, 1), 0x8a5e36, 'x', (PEGS[0] + PEGS[3]) / 2, RAIL_Y, -0.02, 0, 0, 0, 1, 1, 1, kits.frontWood);
+  const peg = lathe([[0, 0], [0.02, 0], [0.016, 0.02], [0.012, 0.06], [0.022, 0.075], [0.02, 0.088], [0, 0.09]], 10);
+  for (const x of PEGS) e.wood(peg, 0x9a6a40, 'y', x, RAIL_Y, -0.035, -Math.PI / 2, 0, 0, 1, 1, 1, kits.frontWood);
+  // a red wool coat hung by its collar, a mustard scarf looped over it
+  {
+    const COAT = 0x9e3528, SCARF = 0xcc9a36, cx = PEGS[0], y0 = RAIL_Y - 1.0, H = 0.9;
+    const frontZ = t => -0.02 - 0.15 * (1 - 0.15 * t);   // the coat's front face at height t (0 hem .. 1 top)
+    e.into(kits.front, openPlan.taperTop(rbox(0.46, H, 0.15, 0.06, 2), 0.82, 0.85), COAT, cx, y0 + H / 2, -0.095);
+    e.into(kits.front, capsule(0.07, 0.25, 3, 10), COAT, cx, RAIL_Y - 0.12, -0.095, 0, 0, Math.PI / 2, 1, 1, 0.8);
+    e.into(kits.front, capsule(0.05, 0.1, 2, 8), COAT, cx, RAIL_Y - 0.035, -0.115, 0, 0, Math.PI / 2);
+    for (const s of [-1, 1]) e.rod([cx + s * 0.185, RAIL_Y - 0.15, -0.11], [cx + s * 0.215, RAIL_Y - 0.72, -0.13], 0.052, 0.046, COAT, kits.front, 10);
+    for (const y of [0.25, 0.43, 0.61]) {
+      e.into(kits.front, new THREE.SphereGeometry(0.014, 8, 6), 0x2a1e18, cx, RAIL_Y - 0.1 - y, frontZ(1 - y / H) - 0.006);
+    }
+    e.into(kits.front, capsule(0.04, 0.18, 2, 8), SCARF, cx, RAIL_Y - 0.08, -0.16, 0, 0, Math.PI / 2, 1, 1, 0.8);
+    for (const [dx, len, rz] of [[-0.07, 0.52, 0.04], [0.075, 0.44, -0.05]]) {
+      const yc = RAIL_Y - 0.1 - len / 2, d = len / 2 - 0.05;   // d: from the tail's centre to its cream stripe
+      const zc = frontZ((yc - y0) / H) - 0.022;
+      e.into(kits.front, rbox(0.09, len, 0.02, 0.01, 1), SCARF, cx + dx, yc, zc, 0, 0, rz);
+      e.into(kits.front, new THREE.BoxGeometry(0.092, 0.025, 0.004), 0xe6dcc6, cx + dx + Math.sin(rz) * d, yc - Math.cos(rz) * d,
+        zc - 0.012, 0, 0, rz);
+    }
+  }
+  // a dog leash looped over the third peg
+  {
+    const lx = PEGS[2], LEASH = 0x4e7050;
+    e.into(kits.front, new THREE.TorusGeometry(0.045, 0.008, 4, 14), LEASH, lx, RAIL_Y - 0.03, -0.11);
+    e.rod([lx - 0.02, RAIL_Y - 0.07, -0.1], [lx - 0.03, RAIL_Y - 0.62, -0.06], 0.008, 0.008, LEASH, kits.front, 5);
+    e.rod([lx + 0.02, RAIL_Y - 0.07, -0.1], [lx + 0.03, RAIL_Y - 0.55, -0.07], 0.008, 0.008, LEASH, kits.front, 5);
+    e.into(kits.frontMetal, capsule(0.012, 0.035, 2, 6), BRASS, lx - 0.03, RAIL_Y - 0.65, -0.06);
+  }
+  // a felt hat hung by its crown on the last peg, tipped toward the room
+  {
+    const hx = PEGS[3], FELT = 0xa07c52, tilt = -0.45;   // the brim's back edge just touches the wall
+    const brim = rcyl(0.14, 0.012, 0.005, 20, 1);
+    const crown = lathe([[0.09, 0], [0.094, 0.055], [0.085, 0.1], [0.046, 0.118], [0, 0.112]], 16).translate(0, 0.006, 0);
+    const band = rcyl(0.095, 0.024, 0.004, 16, 1).translate(0, 0.018, 0);
+    for (const [geo, c] of [[brim, FELT], [crown, FELT], [band, 0x3a2a1e]]) e.into(kits.front, geo, c, hx, RAIL_Y - 0.01, -0.13, tilt);
+  }
+  // green wellies on a rubber tray under the pegs
+  {
+    const TX = 2.48, TZ = ROOM.d / 2 - 0.2, WELLY = 0x3f5a3c, SOLE = 0x24211e;
+    openPlan.piece(TX, TZ).part(rbox(0.7, 0.03, 0.36, 0.012, 1), 0x2e2a26, 0.85, 0, 0, 0.015, 0);
+    const shaft = lathe([[0, 0], [0.05, 0], [0.056, 0.05], [0.057, 0.25], [0.062, 0.29], [0.055, 0.295], [0, 0.285]], 14);
+    for (const [dx, dz, ry] of [[-0.12, 0.0, Math.PI + 0.12], [0.11, 0.02, Math.PI - 0.1]]) {
+      const b = openPlan.piece(TX + dx, TZ + dz, ry);   // toes toward the room
+      b.part(rbox(0.112, 0.026, 0.28, 0.012, 1), SOLE, 0.85, 0, 0, 0.043, 0.01);
+      b.part(rbox(0.104, 0.09, 0.24, 0.045, 1), WELLY, 0.5, 0, 0, 0.1, 0.03, 0, 0, 0, true);
+      b.part(shaft, WELLY, 0.5, 0, 0, 0.056, -0.055, 0, 0, 0, true).scale.set(1, 1, 1.2);
+      b.part(rcyl(0.05, 0.006, 0.002, 12, 1), SOLE, 0.85, 0, 0, 0.345, -0.055).scale.set(1, 1, 1.2);
+    }
+    furnitureShadows.push([TX, TZ, 0.85, 0.5, 0]);
+  }
+  // coir doormat inside the door (flat enough for the door to swing over)
+  {
+    const d = openPlan.piece(CABIN_DOOR.at, ROOM.d / 2 - 0.42);
+    d.part(rbox(0.92, 0.012, 0.56, 0.005, 1), 0x46342a, 0.95, 0, 0, 0.006, 0);
+    d.part(rbox(0.8, 0.006, 0.44, 0.003, 1), 0xa88050, 0.95, 0, 0, 0.012, 0);
+  }
+}
+
+// ==========================================================
+// OPEN-PLAN FURNISHINGS — build the shared kits
+// ==========================================================
+{
+  const { kits, glowMat, woodMat } = openPlan;
+  // floor-standing wood is one mesh; the firewood joins the woodpile's merged mesh
+  root.add(kits.wood.build(woodMat));
+  root.add(kits.logs.build(cabinTimberMat));
+  root.add(kits.glow.build(glowMat, { cast: false, receive: false }));
+  // hung pieces: one mesh per surface and look, hiding with that surface
+  const paintMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62 });
+  const metalMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.35 });
+  for (const [kit, mat, ref] of [
+    [kits.front, paintMat, wallRef('front')], [kits.frontWood, woodMat, wallRef('front')],
+    [kits.frontMetal, metalMat, wallRef('front')],
+    [kits.ceiling, paintMat, ceilingRef()], [kits.ceilingGlow, glowMat, ceilingRef()],
+    [kits.right, paintMat, wallRef('right')], [kits.rightGlow, glowMat, wallRef('right')],
+  ]) {
+    const m = kit.build(mat, { cast: false });
+    m.userData.noBake = true;
+    root.add(m);
+    trackLike(m, ref);
+  }
+  // shades and flames brighten as the lamps come on after dark
+  propTickers.push(() => { glowMat.emissiveIntensity = 0.25 + 0.75 * Math.min(1, lampLight.intensity / 2.4); });
+}
+
+// ==========================================================
 // DOGS — Ellie (yellow chihuahua), Luna (black chihuahua), Nova (border collie/aussie mix)
 // ==========================================================
 // Soft, toy-like dogs built in "dog units" and scaled by `size`. The parts
