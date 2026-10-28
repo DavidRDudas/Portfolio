@@ -15403,7 +15403,8 @@ const warmUpShaders = (() => {
   const kindOf = (o, m) => [m.type, m.vertexShader, m.fragmentShader, JSON.stringify(m.defines),
     m.onBeforeCompile.toString(), m.customProgramCacheKey(), ...SLOTS.map(k => !!m[k]), m.vertexColors,
     m.flatShading, m.side, m.alphaTest > 0, m.fog, m.toneMapped, m.dithering, !!o.isInstancedMesh].join('|');
-  let queue = null, next = 0, kinds = new Set(), total = 0;
+  const kinds = new Set();   // kinds visited so far
+  let queue = null, next = 0, total = 0;
   return budget => {
     if (!queue) {
       const seen = new Set(), all = new Set();
