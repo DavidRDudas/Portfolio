@@ -64,11 +64,16 @@
   #loading::before { content: 'dd'; display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 20px; border-radius: 50%; font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: var(--amber-ink); background: radial-gradient(circle at 32% 28%, #ffe0bd, var(--amber) 52%, var(--amber-2)); box-shadow: 0 0 34px rgba(255, 160, 80, 0.45), inset 0 -2px 4px rgba(120, 50, 0, 0.25); animation: loadOrb 2.4s ease-in-out infinite; }
   @keyframes loadOrb { 0%, 100% { box-shadow: 0 0 26px rgba(255, 160, 80, 0.35), inset 0 -2px 4px rgba(120, 50, 0, 0.25); } 50% { box-shadow: 0 0 44px rgba(255, 160, 80, 0.6), inset 0 -2px 4px rgba(120, 50, 0, 0.25); } }
   #loading .name { font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 18px; }
-  #loading .bar { width: 180px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, 0.09); position: relative; overflow: hidden; }
-  #loading .bar::after { content: ''; position: absolute; left: -40%; top: 0; height: 100%; width: 40%; background: linear-gradient(90deg, transparent, var(--amber), transparent); animation: load 1.4s ease-in-out infinite; }
-  @keyframes load { 0% { left: -40%; } 100% { left: 100%; } }
-  #loading .hint { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-top: 18px; }
-  @media (prefers-reduced-motion: reduce) { #loading::before { animation: none; } }
+  #loading .bar { width: 220px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.09); position: relative; overflow: hidden; }
+  #loading .bar .fill { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, var(--amber-2), var(--amber)); box-shadow: 0 0 10px rgba(255, 160, 80, 0.5); transform: scaleX(0); transform-origin: 0 50%; transition: transform 0.35s ease; }
+  /* a light sweeping along the track; transform only, so it keeps moving even
+     while the build has the page busy */
+  #loading .bar::after { content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, rgba(255, 236, 214, 0.55), transparent); animation: loadSweep 1.4s ease-in-out infinite; }
+  @keyframes loadSweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+  #loading .hint { display: flex; gap: 12px; justify-content: center; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-top: 18px; }
+  #load-pct { color: var(--amber); font-variant-numeric: tabular-nums; }
+  #load-pct:empty { display: none; }
+  @media (prefers-reduced-motion: reduce) { #loading::before { animation: none; } #loading .bar::after { display: none; } #loading .bar .fill { transition: none; } }
 
   /* ---------- TOOLTIP ---------- */
   #tooltip { position: fixed; pointer-events: none; padding: 7px 12px; background: var(--glass-strong); border: 1px solid var(--line-2); color: var(--ink); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 8px; transform: translate(-50%, -150%); white-space: nowrap; opacity: 0; transition: opacity 0.18s ease; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 50; font-weight: 500; box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.7); }
@@ -519,8 +524,8 @@
 
 <div id="loading">
   <div class="name">David Dudas</div>
-  <div class="bar"></div>
-  <div class="hint">Building room…</div>
+  <div class="bar" role="progressbar" aria-label="Building the world" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="load-fill"></div></div>
+  <div class="hint"><span id="load-step">Downloading…</span><span id="load-pct"></span></div>
 </div>
 
 <div id="tooltip"><span class="text"></span><span class="arrow"></span></div>
@@ -907,11 +912,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<script>
+<script type="text/x-world-part" data-label="Setting up" data-weight="30">
 /* =========================================================
  * DAVID DUDAS — INTERACTIVE 3D PORTFOLIO ROOM
  * A cozy 90s programmer's room. Each object is a project.
  * ========================================================= */
+
+// The world is built in steps: this script is split into parts that BUILD
+// (at the end of the page) runs one at a time, so the loading screen can show
+// progress. Code that runs while the world builds can only call functions
+// declared in its own part or an earlier one, which is why the shared helpers
+// all sit near the top.
 
 // -------- PROJECT DATA (mapped to room objects) --------
 const PROJECTS = {
@@ -1372,6 +1383,324 @@ function rcyl(r, h, bevel = Math.min(r, h) * 0.2, radial = 16, bevelSeg = 3) {
   }
   pts.push([0, h / 2]);
   return lathe(pts, radial);
+}
+
+// -------- MESH MERGING --------
+// Used by the kits that merge their parts as they build (the cabin, the
+// animals) and by STATIC BATCHING once the scene is assembled.
+const BAKE_TEXTURE_SLOTS = ['map', 'alphaMap', 'emissiveMap', 'normalMap', 'bumpMap', 'roughnessMap',
+  'metalnessMap', 'aoMap', 'lightMap', 'envMap', 'displacementMap'];
+
+// Grouping key for a mesh, or null if it must not be merged. Untextured
+// standard/lambert/basic materials that differ only in color share a key
+// (their colors become vertex colors). Anything textured or special — and
+// any material shared with an interactive or animated object — only merges
+// with meshes using that exact material object, so later writes to it
+// (hover glow, flicker, tints) still reach every merged piece.
+function bakeKey(mesh, allowTransparent, protectedMats) {
+  const mat = mesh.material, geo = mesh.geometry;
+  if (!mat || Array.isArray(mat) || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.userData.key) return null;
+  if (mat.transparent && !allowTransparent) return null;
+  if (!geo || !geo.isBufferGeometry || !geo.attributes.position || !geo.attributes.normal) return null;
+  if (Object.keys(geo.morphAttributes).length || geo.drawRange.start !== 0 || geo.drawRange.count !== Infinity) return null;
+  if (geo.attributes.position.count > 65535) return null;
+  const textured = BAKE_TEXTURE_SLOTS.some(slot => mat[slot]);
+  if (textured && !geo.attributes.uv) return null;
+  if (mat.vertexColors && !geo.attributes.color) return null;
+  const recolorable = !textured && !protectedMats.has(mat) && !mat.vertexColors && mat.color &&
+    mat.onBeforeCompile === THREE.Material.prototype.onBeforeCompile &&
+    (mat.type === 'MeshStandardMaterial' || mat.type === 'MeshLambertMaterial' || mat.type === 'MeshBasicMaterial');
+  const look = recolorable
+    ? ['look', mat.type, mat.roughness, mat.metalness, mat.emissive ? mat.emissive.getHex() : '', mat.emissiveIntensity,
+       mat.flatShading, mat.side, mat.transparent, mat.opacity, mat.depthWrite, mat.depthTest, mat.alphaTest,
+       mat.blending, mat.fog, mat.toneMapped, mat.polygonOffset, mat.polygonOffsetFactor, mat.polygonOffsetUnits,
+       mat.wireframe, mat.visible].join('|')
+    : 'mat|' + mat.uuid;
+  return [look, mesh.castShadow, mesh.receiveShadow, mesh.renderOrder, mesh.frustumCulled].join('#');
+}
+
+// Merge meshes into one indexed geometry in `space`'s local coordinates.
+// colorMode: 'material' bakes each mesh's material color into vertex colors,
+// 'attribute' carries existing vertex colors over, null writes none.
+function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
+  let vCount = 0, iCount = 0;
+  for (const m of meshes) {
+    const g = m.geometry;
+    vCount += g.attributes.position.count;
+    iCount += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
+  const uv = withUv ? new Float32Array(vCount * 2) : null;
+  const col = colorMode ? new Float32Array(vCount * 3) : null;
+  const idx = vCount > 65535 ? new Uint32Array(iCount) : new Uint16Array(iCount);
+  const mtx = new THREE.Matrix4(), nmat = new THREE.Matrix3(), v = new THREE.Vector3();
+  let vo = 0, io = 0;
+  for (const m of meshes) {
+    const g = m.geometry, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, C = g.attributes.color;
+    mtx.multiplyMatrices(invSpace, m.matrixWorld);
+    nmat.getNormalMatrix(mtx);
+    const c = m.material.color;
+    for (let i = 0; i < P.count; i++) {
+      const k = (vo + i) * 3;
+      v.fromBufferAttribute(P, i).applyMatrix4(mtx);
+      pos[k] = v.x; pos[k + 1] = v.y; pos[k + 2] = v.z;
+      v.fromBufferAttribute(N, i).applyMatrix3(nmat).normalize();
+      nor[k] = v.x; nor[k + 1] = v.y; nor[k + 2] = v.z;
+      if (uv) { uv[(vo + i) * 2] = U.getX(i); uv[(vo + i) * 2 + 1] = U.getY(i); }
+      if (col && colorMode === 'attribute') { col[k] = C.getX(i); col[k + 1] = C.getY(i); col[k + 2] = C.getZ(i); }
+      else if (col) { col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; }
+    }
+    // a mirrored transform flips triangle winding — swap two corners back
+    const flip = mtx.determinant() < 0;
+    const I = g.index, count = I ? I.count : P.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      const a = I ? I.getX(i) : i, b = I ? I.getX(i + 1) : i + 1, d = I ? I.getX(i + 2) : i + 2;
+      idx[io++] = vo + a; idx[io++] = vo + (flip ? d : b); idx[io++] = vo + (flip ? b : d);
+    }
+    vo += P.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  if (col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setIndex(new THREE.BufferAttribute(idx.subarray(0, io), 1));
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
+  return out;
+}
+
+// Merge the static meshes under `space` (skipping `skip` subtrees and any
+// object flagged userData.noBake). Merged meshes are added to `space`
+// itself. Returns a Map of original mesh → merged mesh.
+function bakeStaticMeshes(space, { skip = null, allowTransparent = false } = {}) {
+  space.updateMatrixWorld(true);
+  const skipped = o => o !== space && ((skip && skip.has(o)) || o.userData.noBake);
+  // Materials used by interactive or skipped meshes keep their identity:
+  // hover glow and per-frame animation write to them directly.
+  const protectedMats = new Set();
+  const protect = o => { if (o.isMesh) [].concat(o.material).forEach(m => protectedMats.add(m)); };
+  scene.traverse(o => { if (o.isMesh && o.userData.key) protect(o); });
+  if (skip) for (const o of skip) if (o && o !== space) o.traverse(protect);
+  space.traverse(o => { if (o.userData.noBake && o !== space) o.traverse(protect); });
+
+  const buckets = new Map();
+  (function walk(o) {
+    if (skipped(o) || !o.visible) return;   // hidden parts may be switched on later
+    if (o.isMesh && o !== space && o.children.length === 0) {
+      const key = bakeKey(o, allowTransparent, protectedMats);
+      if (key) {
+        let list = buckets.get(key);
+        if (!list) buckets.set(key, list = []);
+        list.push(o);
+      }
+    }
+    for (const c of o.children) walk(c);
+  })(space);
+
+  const replaced = new Map();
+  const invSpace = new THREE.Matrix4().copy(space.matrixWorld).invert();
+  for (const [key, meshes] of buckets) {
+    if (meshes.length < 2) continue;
+    const first = meshes[0].material;
+    const textured = BAKE_TEXTURE_SLOTS.some(slot => first[slot]);
+    const recolor = key.startsWith('look|') && meshes.some(m => !m.material.color.equals(first.color));
+    let material = first;
+    if (recolor) {
+      material = first.clone();
+      material.color.setRGB(1, 1, 1);
+      material.vertexColors = true;
+    }
+    // chunk so every merged mesh fits a 16-bit index buffer
+    let chunk = [], verts = 0;
+    const flush = () => {
+      if (!chunk.length) return;
+      const colorMode = recolor ? 'material' : (material.vertexColors ? 'attribute' : null);
+      const merged = new THREE.Mesh(mergeMeshGeometry(chunk, invSpace, textured, colorMode), material);
+      merged.castShadow = chunk[0].castShadow;
+      merged.receiveShadow = chunk[0].receiveShadow;
+      merged.renderOrder = chunk[0].renderOrder;
+      merged.frustumCulled = chunk[0].frustumCulled;
+      merged.matrixAutoUpdate = false;
+      merged.userData.baked = true;
+      space.add(merged);
+      for (const m of chunk) { replaced.set(m, merged); m.parent.remove(m); }
+      chunk = []; verts = 0;
+    };
+    for (const m of meshes) {
+      const n = m.geometry.attributes.position.count;
+      if (verts + n > 65535) flush();
+      chunk.push(m); verts += n;
+    }
+    flush();
+  }
+  return replaced;
+}
+
+// planar UVs picked per vertex from the dominant normal axis (world units / tile)
+function boxProjectUVs(geo, tile) {
+  const P = geo.attributes.position, N = geo.attributes.normal, U = geo.attributes.uv;
+  for (let i = 0; i < P.count; i++) {
+    const nx = Math.abs(N.getX(i)), ny = Math.abs(N.getY(i)), nz = Math.abs(N.getZ(i));
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    if (ny >= nx && ny >= nz) U.setXY(i, x / tile, z / tile);
+    else if (nx >= nz) U.setXY(i, z / tile, y / tile);
+    else U.setXY(i, x / tile, y / tile);
+  }
+  U.needsUpdate = true;
+}
+
+// snow caps that got merged: swap the originals in `snowCaps` for the merged
+// mesh so the accumulation fade still drives them
+function replaceSnowCaps(replaced) {
+  const merged = new Set();
+  for (let i = snowCaps.length - 1; i >= 0; i--) {
+    const m = replaced.get(snowCaps[i]);
+    if (m) { snowCaps.splice(i, 1); merged.add(m); }
+  }
+  for (const m of merged) snowCaps.push(m);
+}
+
+// -------- SEEDED NOISE --------
+// A small seeded RNG and 2D gradient noise. The mountain ranges, boulders,
+// trees and clouds use them, so they come out the same on every visit (the
+// valley the sun sets into is always there).
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function makeNoise2D(seed) {
+  const rnd = mulberry32(seed);
+  const p = Array.from({ length: 256 }, (_, i) => i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  const perm = new Uint8Array(512);
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  const grad = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const X = xi & 255, Y = yi & 255;
+    const fx = x - xi, fy = y - yi, u = fade(fx), v = fade(fy);
+    const a = perm[X] + Y, b = perm[X + 1] + Y;
+    const n0 = grad(perm[a], fx, fy) + (grad(perm[b], fx - 1, fy) - grad(perm[a], fx, fy)) * u;
+    const n1 = grad(perm[a + 1], fx, fy - 1) + (grad(perm[b + 1], fx - 1, fy - 1) - grad(perm[a + 1], fx, fy - 1)) * u;
+    return n0 + (n1 - n0) * v;      // about -1..1
+  };
+}
+
+// -------- ANIMAL SHAPES --------
+// Shared by the animals (dogs, yard animals, owl, birds, teddy).
+
+// Fold the meshes under `part` into one mesh per look (roughness, metalness,
+// emissive), each piece's colour carried as vertex colours. Moving parts are
+// skipped by STATIC BATCHING, so this is what keeps a head's eyes, ears and
+// nose from costing a draw call apiece. Sub-parts in `skip` (a jaw inside a
+// head) are left for their own call. Look materials are shared by all the
+// animals unless `ownMaterials` (the teddy's hover glow writes to its own).
+function fuseMeshes(part, skip = [], ownMaterials = false) {
+  const looks = fuseMeshes.looks || (fuseMeshes.looks = new Map());
+  part.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(part.matrixWorld).invert();
+  const buckets = new Map();
+  (function walk(o) {
+    for (const c of o.children) {
+      if (skip.includes(c)) continue;
+      if (!c.isMesh || c.children.length) { walk(c); continue; }
+      const m = c.material;
+      const key = [m.roughness, m.metalness, m.emissive.getHex(), m.emissiveIntensity].join('|');
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(c);
+    }
+  })(part);
+  const fused = [];
+  for (const [key, meshes] of buckets) {
+    let mat = ownMaterials ? null : looks.get(key);
+    if (!mat) {
+      mat = meshes[0].material.clone();
+      mat.color.setRGB(1, 1, 1);
+      mat.vertexColors = true;
+      if (!ownMaterials) looks.set(key, mat);
+    }
+    const mesh = new THREE.Mesh(mergeMeshGeometry(meshes, inv, false, 'material'), mat);
+    mesh.castShadow = meshes.some(c => c.castShadow);
+    for (const c of meshes) c.parent.remove(c);
+    part.add(mesh);
+    fused.push(mesh);
+  }
+  return fused;
+}
+
+// Matte pieces all cast shadows, so an animal's fur batches into one mesh
+// instead of splitting by shadow flag; eyes, noses and catch-lights don't.
+function shadeAnimal(grp) {
+  grp.traverse(o => {
+    if (o.isMesh) o.castShadow = o.material.roughness > 0.5 && o.material.emissive.getHex() === 0;
+  });
+}
+
+// Ellipsoid: radius r at p, stretched by sc = [x, y, z].
+function blob(r, p, sc, mat, w = 12, h = 9) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, w, h), mat);
+  m.position.set(p[0], p[1], p[2]);
+  if (sc) m.scale.set(sc[0], sc[1], sc[2]);
+  return m;
+}
+
+// Tapered limb with rounded ends from point a (radius ra) to b (radius rb).
+function limb(a, b, ra, rb, mat, radial = 10) {
+  const A = new THREE.Vector3(a[0], a[1], a[2]), B = new THREE.Vector3(b[0], b[1], b[2]);
+  const d = B.clone().sub(A);
+  const m = new THREE.Mesh(taper(ra, rb, d.length(), radial > 8 ? 4 : 2, radial), mat);
+  m.position.copy(A).add(B).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  return m;
+}
+
+// Tube along a smooth curve through `pts` (tails, antlers, toes). `radius`
+// is a number or a function of 0..1 along it, so it can taper, swell, close.
+function tube(pts, radius, seg = 16, radial = 8) {
+  const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])));
+  const g = new THREE.TubeGeometry(curve, seg, 1, radial, false);
+  const P = g.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
+  for (let i = 0; i <= seg; i++) {
+    curve.getPointAt(i / seg, c);
+    const r = typeof radius === 'function' ? radius(i / seg) : radius;
+    for (let j = 0; j <= radial; j++) {
+      const k = i * (radial + 1) + j;
+      v.fromBufferAttribute(P, k).sub(c).multiplyScalar(r).add(c);
+      P.setXYZ(k, v.x, v.y, v.z);
+    }
+  }
+  g.computeBoundingSphere();
+  return g;
+}
+// radius profile for tube(): r0 → r1 along the length, closing in a round tip
+function roundTip(r0, r1, cap = 0.15) {
+  return u => (r0 + (r1 - r0) * u) * (u < 1 - cap ? 1 : Math.sqrt(Math.max(0, 1 - ((u - 1 + cap) / cap) ** 2)));
+}
+
+// Soft pointed solid along +Y (ears, tufts, beaks); flatten it with scale.z.
+function earGeo(r, h, radial = 12) {
+  return lathe([[0, 0], [r, 0], [r * 0.97, h * 0.2], [r * 0.84, h * 0.45], [r * 0.6, h * 0.7],
+    [r * 0.32, h * 0.9], [r * 0.1, h * 0.99], [0, h]], radial);
+}
+
+// Two glossy eyes with a white catch-light each, grouped about the point
+// between them so squashing the group in Y reads as a blink. `seg` is the
+// eyeball's [width, height] segments (fewer for animals seen from afar).
+function makeEyes(r, x, color = 0x120a06, seg = [12, 9]) {
+  const eyes = new THREE.Group();
+  const iris = matStandard(color, 0.3);
+  const shine = matEmissive(0xffffff, 0xffffff, 0.6);
+  for (const s of [-1, 1]) {
+    eyes.add(blob(r, [s * x, 0, 0], null, iris, seg[0], seg[1]));
+    eyes.add(blob(r * 0.3, [s * x + r * 0.32, r * 0.42, r * 0.8], null, shine, 8, 6));
+  }
+  return eyes;
 }
 
 // -------- PROCEDURAL TEXTURES --------
@@ -2031,6 +2360,8 @@ function vinylTexture() {
   return tex;
 }
 
+</script>
+<script type="text/x-world-part" data-label="Building the cabin" data-weight="27">
 // ==========================================================
 // ROOM
 // ==========================================================
@@ -3226,6 +3557,8 @@ const fieldMat = (() => {
   // vertex colors add broad meadow patches (lighter, darker, sun-dried)
   return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, vertexColors: true });
 })();
+</script>
+<script type="text/x-world-part" data-label="Shaping the cliffs and beach" data-weight="21">
 // ==========================================================
 // BOULDERS — a few rock shapes shared by every stone in the world:
 // subdivided icosahedrons pushed around by noise, flat-shaded and colored
@@ -4199,6 +4532,8 @@ const seaRocks = [];
   outsideGroup.add(boat);
 }
 
+</script>
+<script type="text/x-world-part" data-label="Raising the mountains" data-weight="21">
 // ==========================================================
 // MOUNTAINS & FAR HILLS — layered ranges with aerial perspective
 // ==========================================================
@@ -4208,37 +4543,8 @@ const seaRocks = [];
 // shelves), and a haze pass fades it toward the horizon color with distance
 // and toward its valley floor, so the layers separate the way real ranges
 // do. The haze color, and the sun's glow inside it, are copied from the sky
-// every frame (see updateSky), so time of day and weather carry over.
-
-// small seeded RNG + 2D gradient noise (the boulders, trees and clouds use
-// them too): the ranges come out the same on every visit, so the valley the
-// sun sets into is always there
-function mulberry32(a) {
-  return () => {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function makeNoise2D(seed) {
-  const rnd = mulberry32(seed);
-  const p = Array.from({ length: 256 }, (_, i) => i);
-  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
-  const perm = new Uint8Array(512);
-  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
-  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
-  const grad = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
-  return (x, y) => {
-    const xi = Math.floor(x), yi = Math.floor(y);
-    const X = xi & 255, Y = yi & 255;
-    const fx = x - xi, fy = y - yi, u = fade(fx), v = fade(fy);
-    const a = perm[X] + Y, b = perm[X + 1] + Y;
-    const n0 = grad(perm[a], fx, fy) + (grad(perm[b], fx - 1, fy) - grad(perm[a], fx, fy)) * u;
-    const n1 = grad(perm[a + 1], fx, fy - 1) + (grad(perm[b + 1], fx - 1, fy - 1) - grad(perm[a + 1], fx, fy - 1)) * u;
-    return n0 + (n1 - n0) * v;      // about -1..1
-  };
-}
+// every frame (see updateSky), so time of day and weather carry over. The
+// seeded noise is near the top, under SEEDED NOISE.
 
 // shared by every hazed material; updateSky refreshes the values
 const hazeUniforms = {
@@ -4974,6 +5280,8 @@ let starsPoints;
   root.add(starsPoints);
 }
 
+</script>
+<script type="text/x-world-part" data-label="Setting up camp" data-weight="11">
 // ==========================================================
 // RUG
 // ==========================================================
@@ -5925,6 +6233,8 @@ let campfireWetness = 0;
   root.add(truck);
 }
 
+</script>
+<script type="text/x-world-part" data-label="Furnishing the office" data-weight="13">
 // ==========================================================
 // PROGRAMMER CHARACTER — seated pose
 // (Group origin sits at the floor; thighs are horizontal on the chair seat
@@ -6134,14 +6444,13 @@ let programmerTorso = null; // exposed so the FP system can register the click t
 
   // the head and hands move on their own (typing, reading — see the main
   // loop), so static batching leaves them alone; each is rigid, though, so
-  // their own pieces are merged a frame later once the batching helpers
-  // further down exist (the boulders do the same)
+  // their own pieces are merged here
   programmer.userData.animParts = [head, ...hands];
   programmer.userData.head = head;
   programmer.userData.headRest = head.rotation.clone();
   programmer.userData.hands = hands;
   programmer.userData.handY = hands.map(h => h.position.y);
-  requestAnimationFrame(() => programmer.userData.animParts.forEach(p => bakeStaticMeshes(p)));
+  programmer.userData.animParts.forEach(p => bakeStaticMeshes(p));
 
   // group origin at floor; place him at chair seat centre, facing the desk
   programmer.position.set(-3.5, 0, -5.0);
@@ -7597,6 +7906,8 @@ const lampLight = new THREE.PointLight(0xffd29c, 0.0, 6, 2);
   root.add(bed);
 }
 
+</script>
+<script type="text/x-world-part" data-label="Furnishing the kitchen" data-weight="9">
 // ==========================================================
 // OPEN-PLAN FURNISHINGS — shared kit for the kitchen, the dining table and
 // the living room (one open space along the front of the cabin)
@@ -8504,6 +8815,8 @@ const openPlan = (() => {
   propTickers.push(() => { glowMat.emissiveIntensity = 0.25 + 0.75 * Math.min(1, lampLight.intensity / 2.4); });
 }
 
+</script>
+<script type="text/x-world-part" data-label="Furnishing the bedroom" data-weight="13">
 // ==========================================================
 // ROOM DRESSING KIT — shared helpers for the bedroom, game room and office
 // furnishings in the next three sections
@@ -9665,123 +9978,16 @@ const furnishKit = (() => {
   }
 }
 
+</script>
+<script type="text/x-world-part" data-label="Waking the animals" data-weight="8">
 // ==========================================================
 // DOGS — Ellie (yellow chihuahua), Luna (black chihuahua), Nova (border collie/aussie mix)
 // ==========================================================
 // Soft, toy-like dogs built in "dog units" and scaled by `size`. The parts
 // that move on their own (head, eyes, legs, tail, Nova's jaw, Luna's
 // breathing body) are pivots listed in userData.animParts, each fused into a
-// mesh or two by fuseMeshes; STATIC BATCHING merges everything else.
-
-// ---- helpers shared by the animals (dogs, yard animals, owl, birds, teddy) ----
-
-// Fold the meshes under `part` into one mesh per look (roughness, metalness,
-// emissive), each piece's colour carried as vertex colours. Moving parts are
-// skipped by STATIC BATCHING, so this is what keeps a head's eyes, ears and
-// nose from costing a draw call apiece. Sub-parts in `skip` (a jaw inside a
-// head) are left for their own call. Look materials are shared by all the
-// animals unless `ownMaterials` (the teddy's hover glow writes to its own).
-function fuseMeshes(part, skip = [], ownMaterials = false) {
-  const looks = fuseMeshes.looks || (fuseMeshes.looks = new Map());
-  part.updateMatrixWorld(true);
-  const inv = new THREE.Matrix4().copy(part.matrixWorld).invert();
-  const buckets = new Map();
-  (function walk(o) {
-    for (const c of o.children) {
-      if (skip.includes(c)) continue;
-      if (!c.isMesh || c.children.length) { walk(c); continue; }
-      const m = c.material;
-      const key = [m.roughness, m.metalness, m.emissive.getHex(), m.emissiveIntensity].join('|');
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key).push(c);
-    }
-  })(part);
-  const fused = [];
-  for (const [key, meshes] of buckets) {
-    let mat = ownMaterials ? null : looks.get(key);
-    if (!mat) {
-      mat = meshes[0].material.clone();
-      mat.color.setRGB(1, 1, 1);
-      mat.vertexColors = true;
-      if (!ownMaterials) looks.set(key, mat);
-    }
-    const mesh = new THREE.Mesh(mergeMeshGeometry(meshes, inv, false, 'material'), mat);
-    mesh.castShadow = meshes.some(c => c.castShadow);
-    for (const c of meshes) c.parent.remove(c);
-    part.add(mesh);
-    fused.push(mesh);
-  }
-  return fused;
-}
-
-// Matte pieces all cast shadows, so an animal's fur batches into one mesh
-// instead of splitting by shadow flag; eyes, noses and catch-lights don't.
-function shadeAnimal(grp) {
-  grp.traverse(o => {
-    if (o.isMesh) o.castShadow = o.material.roughness > 0.5 && o.material.emissive.getHex() === 0;
-  });
-}
-
-// Ellipsoid: radius r at p, stretched by sc = [x, y, z].
-function blob(r, p, sc, mat, w = 12, h = 9) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, w, h), mat);
-  m.position.set(p[0], p[1], p[2]);
-  if (sc) m.scale.set(sc[0], sc[1], sc[2]);
-  return m;
-}
-
-// Tapered limb with rounded ends from point a (radius ra) to b (radius rb).
-function limb(a, b, ra, rb, mat, radial = 10) {
-  const A = new THREE.Vector3(a[0], a[1], a[2]), B = new THREE.Vector3(b[0], b[1], b[2]);
-  const d = B.clone().sub(A);
-  const m = new THREE.Mesh(taper(ra, rb, d.length(), radial > 8 ? 4 : 2, radial), mat);
-  m.position.copy(A).add(B).multiplyScalar(0.5);
-  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
-  return m;
-}
-
-// Tube along a smooth curve through `pts` (tails, antlers, toes). `radius`
-// is a number or a function of 0..1 along it, so it can taper, swell, close.
-function tube(pts, radius, seg = 16, radial = 8) {
-  const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])));
-  const g = new THREE.TubeGeometry(curve, seg, 1, radial, false);
-  const P = g.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
-  for (let i = 0; i <= seg; i++) {
-    curve.getPointAt(i / seg, c);
-    const r = typeof radius === 'function' ? radius(i / seg) : radius;
-    for (let j = 0; j <= radial; j++) {
-      const k = i * (radial + 1) + j;
-      v.fromBufferAttribute(P, k).sub(c).multiplyScalar(r).add(c);
-      P.setXYZ(k, v.x, v.y, v.z);
-    }
-  }
-  g.computeBoundingSphere();
-  return g;
-}
-// radius profile for tube(): r0 → r1 along the length, closing in a round tip
-function roundTip(r0, r1, cap = 0.15) {
-  return u => (r0 + (r1 - r0) * u) * (u < 1 - cap ? 1 : Math.sqrt(Math.max(0, 1 - ((u - 1 + cap) / cap) ** 2)));
-}
-
-// Soft pointed solid along +Y (ears, tufts, beaks); flatten it with scale.z.
-function earGeo(r, h, radial = 12) {
-  return lathe([[0, 0], [r, 0], [r * 0.97, h * 0.2], [r * 0.84, h * 0.45], [r * 0.6, h * 0.7],
-    [r * 0.32, h * 0.9], [r * 0.1, h * 0.99], [0, h]], radial);
-}
-
-// Two glossy eyes with a white catch-light each, grouped about the point
-// between them so squashing the group in Y reads as a blink. `seg` is the
-// eyeball's [width, height] segments (fewer for animals seen from afar).
-function makeEyes(r, x, color = 0x120a06, seg = [12, 9]) {
-  const eyes = new THREE.Group();
-  const iris = matStandard(color, 0.3);
-  const shine = matEmissive(0xffffff, 0xffffff, 0.6);
-  for (const s of [-1, 1]) {
-    eyes.add(blob(r, [s * x, 0, 0], null, iris, seg[0], seg[1]));
-    eyes.add(blob(r * 0.3, [s * x + r * 0.32, r * 0.42, r * 0.8], null, shine, 8, 6));
-  }
-  return eyes;
-}
+// mesh or two by fuseMeshes; STATIC BATCHING merges everything else. The
+// shape helpers the animals share are near the top, under ANIMAL SHAPES.
 
 // ---- the three dogs ----
 
@@ -10512,6 +10718,8 @@ let porchOwl = null;
   porchOwl = owl;
 }
 
+</script>
+<script type="text/x-world-part" data-label="Brewing the weather" data-weight="5">
 // ==========================================================
 // WEATHER SYSTEM — clouds, rain, lightning, thunder
 // ==========================================================
@@ -11483,6 +11691,8 @@ const birds = [];
   }
 }
 
+</script>
+<script type="text/x-world-part" data-label="Lighting the fire" data-weight="13">
 // ==========================================================
 // INFO ICONS — floating "i" markers above clickable objects
 // ==========================================================
@@ -13820,6 +14030,8 @@ modalClose.onclick = closeModal;
 modalBackdrop.addEventListener('click', e => { if (e.target === modalBackdrop) closeModal(); });
 window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+</script>
+<script type="text/x-world-part" data-label="Planting the grass" data-weight="25">
 // ==========================================================
 // FX — WIND, GRASS & PARTICLES
 // The living layer of the world: wind-swept grass that parts around you in
@@ -14417,180 +14629,8 @@ function updateLightGlows() {
 // colors carried as vertex colors — so the result renders identically with
 // a fraction of the draw calls. Interactive objects, anything animated, and
 // anything whose visibility or material is changed later stay untouched.
+// (The merging helpers are near the top, under MESH MERGING.)
 // ==========================================================
-const BAKE_TEXTURE_SLOTS = ['map', 'alphaMap', 'emissiveMap', 'normalMap', 'bumpMap', 'roughnessMap',
-  'metalnessMap', 'aoMap', 'lightMap', 'envMap', 'displacementMap'];
-
-// Grouping key for a mesh, or null if it must not be merged. Untextured
-// standard/lambert/basic materials that differ only in color share a key
-// (their colors become vertex colors). Anything textured or special — and
-// any material shared with an interactive or animated object — only merges
-// with meshes using that exact material object, so later writes to it
-// (hover glow, flicker, tints) still reach every merged piece.
-function bakeKey(mesh, allowTransparent, protectedMats) {
-  const mat = mesh.material, geo = mesh.geometry;
-  if (!mat || Array.isArray(mat) || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.userData.key) return null;
-  if (mat.transparent && !allowTransparent) return null;
-  if (!geo || !geo.isBufferGeometry || !geo.attributes.position || !geo.attributes.normal) return null;
-  if (Object.keys(geo.morphAttributes).length || geo.drawRange.start !== 0 || geo.drawRange.count !== Infinity) return null;
-  if (geo.attributes.position.count > 65535) return null;
-  const textured = BAKE_TEXTURE_SLOTS.some(slot => mat[slot]);
-  if (textured && !geo.attributes.uv) return null;
-  if (mat.vertexColors && !geo.attributes.color) return null;
-  const recolorable = !textured && !protectedMats.has(mat) && !mat.vertexColors && mat.color &&
-    mat.onBeforeCompile === THREE.Material.prototype.onBeforeCompile &&
-    (mat.type === 'MeshStandardMaterial' || mat.type === 'MeshLambertMaterial' || mat.type === 'MeshBasicMaterial');
-  const look = recolorable
-    ? ['look', mat.type, mat.roughness, mat.metalness, mat.emissive ? mat.emissive.getHex() : '', mat.emissiveIntensity,
-       mat.flatShading, mat.side, mat.transparent, mat.opacity, mat.depthWrite, mat.depthTest, mat.alphaTest,
-       mat.blending, mat.fog, mat.toneMapped, mat.polygonOffset, mat.polygonOffsetFactor, mat.polygonOffsetUnits,
-       mat.wireframe, mat.visible].join('|')
-    : 'mat|' + mat.uuid;
-  return [look, mesh.castShadow, mesh.receiveShadow, mesh.renderOrder, mesh.frustumCulled].join('#');
-}
-
-// Merge meshes into one indexed geometry in `space`'s local coordinates.
-// colorMode: 'material' bakes each mesh's material color into vertex colors,
-// 'attribute' carries existing vertex colors over, null writes none.
-function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
-  let vCount = 0, iCount = 0;
-  for (const m of meshes) {
-    const g = m.geometry;
-    vCount += g.attributes.position.count;
-    iCount += g.index ? g.index.count : g.attributes.position.count;
-  }
-  const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
-  const uv = withUv ? new Float32Array(vCount * 2) : null;
-  const col = colorMode ? new Float32Array(vCount * 3) : null;
-  const idx = vCount > 65535 ? new Uint32Array(iCount) : new Uint16Array(iCount);
-  const mtx = new THREE.Matrix4(), nmat = new THREE.Matrix3(), v = new THREE.Vector3();
-  let vo = 0, io = 0;
-  for (const m of meshes) {
-    const g = m.geometry, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, C = g.attributes.color;
-    mtx.multiplyMatrices(invSpace, m.matrixWorld);
-    nmat.getNormalMatrix(mtx);
-    const c = m.material.color;
-    for (let i = 0; i < P.count; i++) {
-      const k = (vo + i) * 3;
-      v.fromBufferAttribute(P, i).applyMatrix4(mtx);
-      pos[k] = v.x; pos[k + 1] = v.y; pos[k + 2] = v.z;
-      v.fromBufferAttribute(N, i).applyMatrix3(nmat).normalize();
-      nor[k] = v.x; nor[k + 1] = v.y; nor[k + 2] = v.z;
-      if (uv) { uv[(vo + i) * 2] = U.getX(i); uv[(vo + i) * 2 + 1] = U.getY(i); }
-      if (col && colorMode === 'attribute') { col[k] = C.getX(i); col[k + 1] = C.getY(i); col[k + 2] = C.getZ(i); }
-      else if (col) { col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; }
-    }
-    // a mirrored transform flips triangle winding — swap two corners back
-    const flip = mtx.determinant() < 0;
-    const I = g.index, count = I ? I.count : P.count;
-    for (let i = 0; i + 2 < count; i += 3) {
-      const a = I ? I.getX(i) : i, b = I ? I.getX(i + 1) : i + 1, d = I ? I.getX(i + 2) : i + 2;
-      idx[io++] = vo + a; idx[io++] = vo + (flip ? d : b); idx[io++] = vo + (flip ? b : d);
-    }
-    vo += P.count;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  if (col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  out.setIndex(new THREE.BufferAttribute(idx.subarray(0, io), 1));
-  out.computeBoundingBox();
-  out.computeBoundingSphere();
-  return out;
-}
-
-// Merge the static meshes under `space` (skipping `skip` subtrees and any
-// object flagged userData.noBake). Merged meshes are added to `space`
-// itself. Returns a Map of original mesh → merged mesh.
-function bakeStaticMeshes(space, { skip = null, allowTransparent = false } = {}) {
-  space.updateMatrixWorld(true);
-  const skipped = o => o !== space && ((skip && skip.has(o)) || o.userData.noBake);
-  // Materials used by interactive or skipped meshes keep their identity:
-  // hover glow and per-frame animation write to them directly.
-  const protectedMats = new Set();
-  const protect = o => { if (o.isMesh) [].concat(o.material).forEach(m => protectedMats.add(m)); };
-  scene.traverse(o => { if (o.isMesh && o.userData.key) protect(o); });
-  if (skip) for (const o of skip) if (o && o !== space) o.traverse(protect);
-  space.traverse(o => { if (o.userData.noBake && o !== space) o.traverse(protect); });
-
-  const buckets = new Map();
-  (function walk(o) {
-    if (skipped(o) || !o.visible) return;   // hidden parts may be switched on later
-    if (o.isMesh && o !== space && o.children.length === 0) {
-      const key = bakeKey(o, allowTransparent, protectedMats);
-      if (key) {
-        let list = buckets.get(key);
-        if (!list) buckets.set(key, list = []);
-        list.push(o);
-      }
-    }
-    for (const c of o.children) walk(c);
-  })(space);
-
-  const replaced = new Map();
-  const invSpace = new THREE.Matrix4().copy(space.matrixWorld).invert();
-  for (const [key, meshes] of buckets) {
-    if (meshes.length < 2) continue;
-    const first = meshes[0].material;
-    const textured = BAKE_TEXTURE_SLOTS.some(slot => first[slot]);
-    const recolor = key.startsWith('look|') && meshes.some(m => !m.material.color.equals(first.color));
-    let material = first;
-    if (recolor) {
-      material = first.clone();
-      material.color.setRGB(1, 1, 1);
-      material.vertexColors = true;
-    }
-    // chunk so every merged mesh fits a 16-bit index buffer
-    let chunk = [], verts = 0;
-    const flush = () => {
-      if (!chunk.length) return;
-      const colorMode = recolor ? 'material' : (material.vertexColors ? 'attribute' : null);
-      const merged = new THREE.Mesh(mergeMeshGeometry(chunk, invSpace, textured, colorMode), material);
-      merged.castShadow = chunk[0].castShadow;
-      merged.receiveShadow = chunk[0].receiveShadow;
-      merged.renderOrder = chunk[0].renderOrder;
-      merged.frustumCulled = chunk[0].frustumCulled;
-      merged.matrixAutoUpdate = false;
-      merged.userData.baked = true;
-      space.add(merged);
-      for (const m of chunk) { replaced.set(m, merged); m.parent.remove(m); }
-      chunk = []; verts = 0;
-    };
-    for (const m of meshes) {
-      const n = m.geometry.attributes.position.count;
-      if (verts + n > 65535) flush();
-      chunk.push(m); verts += n;
-    }
-    flush();
-  }
-  return replaced;
-}
-
-// planar UVs picked per vertex from the dominant normal axis (world units / tile)
-function boxProjectUVs(geo, tile) {
-  const P = geo.attributes.position, N = geo.attributes.normal, U = geo.attributes.uv;
-  for (let i = 0; i < P.count; i++) {
-    const nx = Math.abs(N.getX(i)), ny = Math.abs(N.getY(i)), nz = Math.abs(N.getZ(i));
-    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
-    if (ny >= nx && ny >= nz) U.setXY(i, x / tile, z / tile);
-    else if (nx >= nz) U.setXY(i, z / tile, y / tile);
-    else U.setXY(i, x / tile, y / tile);
-  }
-  U.needsUpdate = true;
-}
-
-// snow caps that got merged: swap the originals in `snowCaps` for the merged
-// mesh so the accumulation fade still drives them
-function replaceSnowCaps(replaced) {
-  const merged = new Set();
-  for (let i = snowCaps.length - 1; i >= 0; i--) {
-    const m = replaced.get(snowCaps[i]);
-    if (m) { snowCaps.splice(i, 1); merged.add(m); }
-  }
-  for (const m of merged) snowCaps.push(m);
-}
-
 {
   // everything the code animates, toggles, highlights or re-tints later
   const dynamic = new Set([
@@ -14630,6 +14670,8 @@ function replaceSnowCaps(replaced) {
   bakeStaticMeshes(contactShadows, { allowTransparent: true });
 }
 
+</script>
+<script type="text/x-world-part" data-label="Waking Byte" data-weight="1">
 // ==========================================================
 // BYTE — THE ROBOT GUIDE
 // A small companion in the corner: greets visitors, drops tips and fun facts,
@@ -15343,6 +15385,53 @@ let _lastFrameAt = performance.now();
 let _lightningOpacity = '';
 
 // ==========================================================
+// SHADER WARM-UP
+// ==========================================================
+// The first frame compiles a shader program for every kind of material in
+// view, and that one long freeze would be most of the wait on the loading
+// screen. warmUpShaders(budget) does the same work ahead of time, a slice of
+// materials per call, so BUILD can show progress through it: each call works
+// for about `budget` ms and returns the fraction done. renderer.compile()
+// builds exactly the programs rendering would (same lights, fog and output
+// encoding), so the first frame just reuses them.
+const warmUpShaders = (() => {
+  // Most materials reuse a program another one already compiled, so progress
+  // counts kinds of material (roughly what three keys its programs by), not
+  // materials: each new kind is about one compile.
+  const SLOTS = ['map', 'alphaMap', 'aoMap', 'bumpMap', 'emissiveMap', 'envMap', 'lightMap', 'metalnessMap',
+    'normalMap', 'roughnessMap', 'displacementMap', 'specularMap', 'gradientMap', 'matcap'];
+  const kindOf = (o, m) => [m.type, m.vertexShader, m.fragmentShader, JSON.stringify(m.defines),
+    m.onBeforeCompile.toString(), m.customProgramCacheKey(), ...SLOTS.map(k => !!m[k]), m.vertexColors,
+    m.flatShading, m.side, m.alphaTest > 0, m.fog, m.toneMapped, m.dithering, !!o.isInstancedMesh].join('|');
+  let queue = null, next = 0, kinds = new Set(), total = 0;
+  return budget => {
+    if (!queue) {
+      const seen = new Set(), all = new Set();
+      queue = [];
+      scene.traverseVisible(o => {
+        const m = o.material;
+        if (!m || seen.has(m)) return;
+        seen.add(m);
+        queue.push(o);
+        for (const one of [].concat(m)) all.add(kindOf(o, one));
+      });
+      total = all.size;
+    }
+    // compile() visits the scene with traverse(); hand it this slice instead
+    scene.traverse = visit => {
+      const until = performance.now() + budget;
+      while (next < queue.length && performance.now() < until) {
+        const o = queue[next++];
+        for (const one of [].concat(o.material)) kinds.add(kindOf(o, one));
+        visit(o);
+      }
+    };
+    try { renderer.compile(scene, camera); } finally { delete scene.traverse; }
+    return next < queue.length ? kinds.size / total : 1;
+  };
+})();
+
+// ==========================================================
 // MAIN LOOP
 // ==========================================================
 const startTime = performance.now();
@@ -15977,13 +16066,85 @@ function animate() {
   }
   if (post) post.render(); else renderer.render(scene, camera);
 }
-animate();
-
-// hide loading
-window.addEventListener('load', () => {
-  setTimeout(() => document.getElementById('loading').classList.add('hidden'), 250);
-});
-setTimeout(() => document.getElementById('loading').classList.add('hidden'), 2200); // fallback
+</script>
+<script>
+// ==========================================================
+// BUILD — the world script above is split into parts, inert script blocks
+// of type "text/x-world-part" that run here one at a time, a frame apart, so
+// the loading screen shows real progress instead of freezing through one long
+// build. Each part runs as an ordinary script in the global scope, so later
+// parts see earlier parts' declarations. A part's data-weight is roughly how
+// long it takes to build, relative to the others.
+// ==========================================================
+(async () => {
+  const loading = document.getElementById('loading');
+  const meter = loading.querySelector('.bar'), fill = document.getElementById('load-fill');
+  const stepEl = document.getElementById('load-step'), pctEl = document.getElementById('load-pct');
+  const parts = [...document.querySelectorAll('script[type="text/x-world-part"]')];
+  // shares of the bar for compiling the shaders and drawing the first frame
+  const SHADERS = 150, FIRST_FRAME = 25;
+  const weights = parts.map(p => +p.dataset.weight || 1);
+  const total = weights.reduce((sum, w) => sum + w, SHADERS + FIRST_FRAME);
+  const show = (done, label) => {
+    const pct = Math.round(100 * done / total);
+    fill.style.transform = `scaleX(${done / total})`;
+    pctEl.textContent = pct + '%';
+    meter.setAttribute('aria-valuenow', pct);
+    if (label) stepEl.textContent = label + '…';
+  };
+  // resolves once the browser has painted, so the new progress shows (the
+  // timer covers a tab hidden mid-wait); a hidden tab paints nothing, so it
+  // just carries on
+  const painted = () => document.hidden ? Promise.resolve() : new Promise(resolve => {
+    let fired = false;
+    const go = () => { if (!fired) { fired = true; setTimeout(resolve, 0); } };
+    requestAnimationFrame(go);
+    setTimeout(go, 150);
+  });
+  // Input arriving mid-build would reach handlers whose code hasn't all run
+  // yet, so it's held back until the world is ready (the loading screen
+  // covers the page anyway). The resize handler comes last, so a resize
+  // during the build is replayed once it exists.
+  const HELD = ['keydown', 'keyup', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'mousedown',
+    'mousemove', 'mouseup', 'click', 'touchstart', 'touchmove', 'touchend', 'wheel'];
+  const hold = e => e.stopImmediatePropagation();
+  for (const type of HELD) window.addEventListener(type, hold, { capture: true, passive: true });
+  const sizeAtStart = innerWidth + 'x' + innerHeight;
+  let done = 0;
+  try {
+    for (let i = 0; i < parts.length; i++) {
+      show(done, parts[i].dataset.label);
+      await painted();
+      const run = document.createElement('script');
+      run.textContent = parts[i].textContent + `\n//# sourceURL=world-part-${i + 1}.js`;
+      document.body.appendChild(run);   // runs right away
+      run.remove();
+      parts[i].remove();
+      done += weights[i];
+    }
+    if (innerWidth + 'x' + innerHeight !== sizeAtStart) window.dispatchEvent(new Event('resize'));
+    show(done, 'Warming up the graphics');
+    await painted();
+    try {
+      for (let f = 0; f < 1;) {
+        f = warmUpShaders(100);
+        show(done + SHADERS * f);
+        await painted();
+      }
+    } catch (err) {
+      console.error(err);   // the first frame compiles whatever is left
+    }
+    done += SHADERS;
+    animate();   // the first frame uploads the textures and meshes
+  } finally {
+    show(total);
+    await painted();
+    for (const type of HELD) window.removeEventListener(type, hold, { capture: true });
+    loading.classList.add('hidden');
+    window.worldReady = true;
+    window.dispatchEvent(new Event('world:ready'));
+  }
+})();
 </script>
 
 </body>
