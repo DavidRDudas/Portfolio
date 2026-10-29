@@ -1198,7 +1198,7 @@ const easeK = k => 1 - Math.pow(1 - k, FRAME_SCALE);
 
 // far plane large enough to render the outside scenery (mountains, sun/moon, stars)
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 600);
-camera.position.set(10.3, 10.55, 12.9);
+camera.position.set(10.3, 10.55, 13.4);
 
 // Bloom and the final grade (see POST) render through an antialiased
 // offscreen buffer, which needs WebGL2. When that's available the canvas
@@ -1230,7 +1230,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
-controls.target.set(0, 0.8, -0.5);
+controls.target.set(0, 0.8, 0);   // the middle of the cabin, so it turns about its centre
 controls.minDistance = 5.5;
 controls.maxDistance = 100; // can pull WAY back to see the cabin, cliff, and shoreline together
 controls.minPolarAngle = 0.2;
@@ -1238,8 +1238,8 @@ controls.minPolarAngle = 0.2;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
 // no azimuth limits while zoomed out — can orbit fully around the building
 controls.enablePan = false;
-const HOME_CAM = new THREE.Vector3(10.3, 10.55, 12.9);
-const HOME_TARGET = new THREE.Vector3(0, 0.8, -0.5);
+const HOME_CAM = new THREE.Vector3(10.3, 10.55, 13.4);
+const HOME_TARGET = new THREE.Vector3(0, 0.8, 0);
 
 // -------- RESPONSIVE FRAMING --------
 // The home shot is composed for landscape screens. On a portrait phone the
@@ -12226,6 +12226,10 @@ window.addEventListener('keydown', e => {
 
 // camera fly-home animation state — ignores user drag while active
 let cameraAnim = null;
+// where Byte last flew in to inside the cabin: zoomed back out from there,
+// the view glides back to turning about the middle of the cabin
+let cabinCloseup = null;
+const _recentre = new THREE.Vector3();
 function flyCameraHome() {
   // ignore the call if a fly-home animation is already in progress, OR
   // we're already at the home view. Without this, spamming the door /
@@ -14902,6 +14906,7 @@ const guide = (() => {
       startT: performance.now() - startTime, duration,
       onDone: () => {
         if (!near) controls.minDistance = 5.5;
+        if (inCabin(target.x, target.z) && target.distanceToSquared(HOME_TARGET) > 0.01) cabinCloseup = target.clone();
         if (onDone) onDone();
       }
     };
@@ -15818,6 +15823,15 @@ function animate() {
   updateFP(performance.now());
   if (QUALITY.coarse && FP.state === 'active') fpTouch.update();
   if (FP.state === 'orbit') {
+    if (cameraAnim) cabinCloseup = null;   // any other flight takes over
+    else if (cabinCloseup && camera.position.distanceTo(controls.target) > 9) {
+      controls.minDistance = 5.5;   // the close-up's zoom limit no longer applies
+      _recentre.subVectors(HOME_TARGET, controls.target);
+      if (_recentre.lengthSq() > 4e-4) _recentre.multiplyScalar(easeK(0.06));
+      else cabinCloseup = null;   // there: settle exactly on the centre
+      controls.target.add(_recentre);
+      camera.position.add(_recentre);
+    }
     controls.update();
     // hover highlighting needs a real pointer — touch screens resolve taps
     // directly in the pointerup handler instead of ray-casting every frame
