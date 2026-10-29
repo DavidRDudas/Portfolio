@@ -10650,7 +10650,9 @@ const yardAnimals = [];
   ];
   for (const p of placements) {
     const a = p.make();
-    a.position.set(p.x, 0, p.z);
+    // stand on the rolling ground out here (the deer's spot is 0.6 m up),
+    // sunk a touch so no hoof or paw hangs in the air on a slope
+    a.position.set(p.x, terrainHeight(p.x, p.z) - 0.015, p.z);
     a.rotation.y = p.ry;
     outsideGroup.add(a);
     yardAnimals.push(a);
