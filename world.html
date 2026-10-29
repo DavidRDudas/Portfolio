@@ -75,6 +75,17 @@
   #load-pct:empty { display: none; }
   @media (prefers-reduced-motion: reduce) { #loading::before { animation: none; } #loading .bar::after { display: none; } #loading .bar .fill { transition: none; } }
 
+  /* ---------- CABIN BUILD ---------- */
+  /* the interface waits while the cabin builds itself, then fades in */
+  body.building #info, body.building #env-control, body.building #hint, body.building #dock,
+  body.building #copyright, body.building #ui-toggle, body.building #discovery, body.building #guide,
+  body.building #tooltip, body.building #onboarding-hint { visibility: hidden; }
+  body.built #info, body.built #hint, body.built #dock, body.built #copyright,
+  body.built #ui-toggle, body.built #discovery, body.built #guide { animation: uiIn 0.8s ease; }
+  @keyframes uiIn { from { opacity: 0; } }
+  #build-skip { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 30; pointer-events: none; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); opacity: 0; transition: opacity 0.3s ease; }
+  #build-skip.visible { opacity: 1; transition: opacity 0.6s ease 0.8s; }
+
   /* ---------- TOOLTIP ---------- */
   #tooltip { position: fixed; pointer-events: none; padding: 7px 12px; background: var(--glass-strong); border: 1px solid var(--line-2); color: var(--ink); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 8px; transform: translate(-50%, -150%); white-space: nowrap; opacity: 0; transition: opacity 0.18s ease; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 50; font-weight: 500; box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.7); }
   #tooltip.visible { opacity: 1; }
@@ -528,6 +539,7 @@
   <div class="hint"><span id="load-step">Downloading…</span><span id="load-pct"></span></div>
 </div>
 
+<div id="build-skip" aria-hidden="true"></div>
 <div id="tooltip"><span class="text"></span><span class="arrow"></span></div>
 
 <div id="info" class="ui-panel">
@@ -1422,7 +1434,13 @@ function bakeKey(mesh, allowTransparent, protectedMats) {
 // Merge meshes into one indexed geometry in `space`'s local coordinates.
 // colorMode: 'material' bakes each mesh's material color into vertex colors,
 // 'attribute' carries existing vertex colors over, null writes none.
-function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
+// Every vertex also records where its part stands — aBuild.xyz, the bottom
+// centre of the part's bounds — so CABIN BUILD can drop the cabin in piece
+// by piece. aBuild.w is the part's role until the build gives it a start
+// time: BUILD_STRUCTURE for walls and other masonry, BUILD_AUTO otherwise.
+// Parts merged again keep their record.
+const BUILD_AUTO = -1, BUILD_STRUCTURE = -2;
+function mergeMeshGeometry(meshes, invSpace, withUv, colorMode, buildRole = BUILD_AUTO) {
   let vCount = 0, iCount = 0;
   for (const m of meshes) {
     const g = m.geometry;
@@ -1432,23 +1450,38 @@ function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
   const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
   const uv = withUv ? new Float32Array(vCount * 2) : null;
   const col = colorMode ? new Float32Array(vCount * 3) : null;
+  const bld = new Float32Array(vCount * 4);
   const idx = vCount > 65535 ? new Uint32Array(iCount) : new Uint16Array(iCount);
   const mtx = new THREE.Matrix4(), nmat = new THREE.Matrix3(), v = new THREE.Vector3();
   let vo = 0, io = 0;
   for (const m of meshes) {
     const g = m.geometry, P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv, C = g.attributes.color;
+    const B = g.attributes.aBuild;
     mtx.multiplyMatrices(invSpace, m.matrixWorld);
     nmat.getNormalMatrix(mtx);
     const c = m.material.color;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (let i = 0; i < P.count; i++) {
       const k = (vo + i) * 3;
       v.fromBufferAttribute(P, i).applyMatrix4(mtx);
       pos[k] = v.x; pos[k + 1] = v.y; pos[k + 2] = v.z;
+      if (v.x < x0) x0 = v.x; if (v.x > x1) x1 = v.x;
+      if (v.y < y0) y0 = v.y;
+      if (v.z < z0) z0 = v.z; if (v.z > z1) z1 = v.z;
       v.fromBufferAttribute(N, i).applyMatrix3(nmat).normalize();
       nor[k] = v.x; nor[k + 1] = v.y; nor[k + 2] = v.z;
       if (uv) { uv[(vo + i) * 2] = U.getX(i); uv[(vo + i) * 2 + 1] = U.getY(i); }
       if (col && colorMode === 'attribute') { col[k] = C.getX(i); col[k + 1] = C.getY(i); col[k + 2] = C.getZ(i); }
       else if (col) { col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; }
+    }
+    for (let i = 0; i < P.count; i++) {
+      const k = (vo + i) * 4;
+      if (B) {
+        v.fromBufferAttribute(B, i).applyMatrix4(mtx);
+        bld[k] = v.x; bld[k + 1] = v.y; bld[k + 2] = v.z; bld[k + 3] = B.getW(i);
+      } else {
+        bld[k] = (x0 + x1) / 2; bld[k + 1] = y0; bld[k + 2] = (z0 + z1) / 2; bld[k + 3] = buildRole;
+      }
     }
     // a mirrored transform flips triangle winding — swap two corners back
     const flip = mtx.determinant() < 0;
@@ -1464,6 +1497,7 @@ function mergeMeshGeometry(meshes, invSpace, withUv, colorMode) {
   out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   if (col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setAttribute('aBuild', new THREE.BufferAttribute(bld, 4));
   out.setIndex(new THREE.BufferAttribute(idx.subarray(0, io), 1));
   out.computeBoundingBox();
   out.computeBoundingSphere();
@@ -2672,7 +2706,9 @@ function logGeo(r, len, radial = 12) {
 }
 
 const _kitTones = new Map();
-function cabinKit() {
+// `role` is the parts' role in CABIN BUILD (BUILD_STRUCTURE: built course by
+// course with the walls)
+function cabinKit(role = BUILD_AUTO) {
   const parts = [];
   const tone = color => {
     let m = _kitTones.get(color);
@@ -2706,7 +2742,7 @@ function cabinKit() {
     },
     build(material, { cast = true, receive = true } = {}) {
       if (!parts.length) return null;
-      const mesh = new THREE.Mesh(mergeMeshGeometry(parts, new THREE.Matrix4(), true, 'material'), material);
+      const mesh = new THREE.Mesh(mergeMeshGeometry(parts, new THREE.Matrix4(), true, 'material', role), material);
       mesh.castShadow = cast;
       mesh.receiveShadow = receive;
       return mesh;
@@ -2776,7 +2812,7 @@ const roofParts = [];   // lifted off in X-ray view from above (see updateSeeThr
     _d.set(s, -pitchSlope, 0).normalize();
     _n.set(s * pitchSlope, 1, 0).normalize();
     _zz.crossVectors(_d, _n);
-    const shingles = cabinKit(), trim = cabinKit();
+    const shingles = cabinKit(BUILD_STRUCTURE), trim = cabinKit(BUILD_STRUCTURE);
     // courses from the eave up to the ridge; each tilted so its butt edge
     // stands proud of the course below
     _x2.copy(_d).multiplyScalar(Math.cos(COURSE_TILT)).addScaledVector(_n, Math.sin(COURSE_TILT));
@@ -2920,7 +2956,7 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
   const SIDES = ['front', 'back', 'left', 'right'];
   const W = {};
   // gable logs (above the eaves) are kept apart so they can lift off with the roof
-  for (const side of SIDES) W[side] = { logs: cabinKit(), stones: cabinKit(), gable: cabinKit(), ref: wallRef(side) };
+  for (const side of SIDES) W[side] = { logs: cabinKit(BUILD_STRUCTURE), stones: cabinKit(BUILD_STRUCTURE), gable: cabinKit(BUILD_STRUCTURE), ref: wallRef(side) };
   const AX = WALL_AXIS, toWorld = wallPoint, wbox = wallBox;
   // place a part in a wall's frame; `spin` turns it within the wall's plane
   const put = (kit, side, geo, color, along, y, out, spin = 0, scale = 1) => {
@@ -3068,7 +3104,7 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
     const cx = CABIN_DOOR.at, z0 = HD + LOG_FACE - 0.02, depthC = 0.85;
     const half = 0.85, drop = 0.36, yRidge = CABIN_DOOR.y1 + 0.85;
     const run = Math.hypot(half, drop);
-    const shingles = cabinKit(), snowKit = cabinKit();
+    const shingles = cabinKit(BUILD_STRUCTURE), snowKit = cabinKit(BUILD_STRUCTURE);
     const m = new THREE.Matrix4(), c = new THREE.Vector3();
     const d = new THREE.Vector3(), n = new THREE.Vector3(), zz = new THREE.Vector3();
     const x2 = new THREE.Vector3(), y2 = new THREE.Vector3();
@@ -3111,7 +3147,7 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
   // ---- inside trim: baseboard and ceiling trim along each wall (pushed off
   // the wall plane so they don't z-fight it; the baseboard stops at doors) ----
   for (const side of SIDES) {
-    const kit = cabinKit(), len = AX[side] === 'x' ? ROOM.w : ROOM.d;
+    const kit = cabinKit(BUILD_STRUCTURE), len = AX[side] === 'x' ? ROOM.w : ROOM.d;
     const doors = CABIN_OPENINGS[side].filter(o => o.kind === 'door');
     for (const [h, y, d] of [[0.18, 0.09, 0.05], [0.12, ROOM.h - 0.06, 0.08]]) {
       const spans = y > 1 ? [[-len / 2, len / 2]] : doors.reduce((s, o) => cut(s, o.at - o.w / 2 - 0.14, o.at + o.w / 2 + 0.14), [[-len / 2, len / 2]]);
@@ -3125,7 +3161,7 @@ const pickTone = list => list[(Math.random() * list.length) | 0];
   // ---- log beams across the ceiling (hide with it in X-ray view); one
   // sits over the wall between the back and front rooms ----
   {
-    const kit = cabinKit();
+    const kit = cabinKit(BUILD_STRUCTURE);
     for (const z of [-4.4, -1, 2.3, 5.2]) kit.log('x', 0.15, ROOM.w - 0.02, pickTone(LOG_TONES), 0, ROOM.h - 0.19, z);
     const beams = kit.build(cabinTimberMat, { cast: false });
     root.add(beams);
@@ -3167,7 +3203,7 @@ const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
 {
   const T = PARTITION_T, H = ROOM.h, DW = INNER_DOOR.w, DH = INNER_DOOR.h;
   const TRIM = 0x4a3020, CASE = 0x5d3b22, CAP = 0x3a2618, DOOR = [0x7a4426, 0x6f3e22, 0x804a2a];
-  const full = cabinKit(), fullTrim = cabinKit(), cut = cabinKit(), cutTrim = cabinKit();
+  const full = cabinKit(BUILD_STRUCTURE), fullTrim = cabinKit(BUILD_STRUCTURE), cut = cabinKit(BUILD_STRUCTURE), cutTrim = cabinKit(BUILD_STRUCTURE);
   const spansOf = p => p.doors.reduce((spans, d) => spans.flatMap(([a, b]) =>
     (d + DW / 2 <= a || d - DW / 2 >= b) ? [[a, b]] : [[a, d - DW / 2], [d + DW / 2, b]].filter(([s, e]) => e - s > 0.05)),
     [[p.from, p.to]]);
@@ -3246,7 +3282,7 @@ const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
 {
   const CASE = 0x6b4428, SASH = 0xb8ae96;
   for (const side of ['back', 'front', 'left', 'right']) {
-    const kit = cabinKit(), ax = WALL_AXIS[side];
+    const kit = cabinKit(BUILD_STRUCTURE), ax = WALL_AXIS[side];
     const put = (geo, color, along, y, out) => kit.add(geo, color, ...wallPoint(side, along, y, out));
     for (const o of CABIN_OPENINGS[side]) {
       if (o.kind !== 'window') continue;
@@ -3276,7 +3312,7 @@ const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
 // WOODPILE — split logs stacked against the left wall
 // ==========================================================
 {
-  const kit = cabinKit();
+  const kit = cabinKit(BUILD_STRUCTURE);
   const x = -(ROOM.w / 2 + LOG_FACE + 0.48), z0 = -1.5, z1 = 1.3;
   for (const z of [z0 - 0.08, z1 + 0.08]) {
     kit.add(grainUV(rbox(0.12, 1.25, 0.12, 0.03, 1), 'y'), 0x5d3b22, x, 0.625, z);   // end posts
@@ -3304,7 +3340,7 @@ const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
   const porchCenterZ = -ROOM.d / 2 - porchD / 2;
   const porchFarZ = -ROOM.d / 2 - porchD;     // outer edge of porch
   const DECK = [0x8a5f3c, 0x83593a, 0x916644], BEAM = 0x5d3b22;
-  const kit = cabinKit();
+  const kit = cabinKit(BUILD_STRUCTURE);
 
   // DECK — rows of planks along X with hairline gaps and staggered butt
   // joints, on rim joists (top at y = 0.12)
@@ -3379,7 +3415,7 @@ const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
     const n = new THREE.Vector3(1, 0, 0).cross(d);                              // up out of the roof
     const run = Math.hypot(yEdge - yWall, zEdge - zWall);
     const width = porchW + 0.7;
-    const roofKit = cabinKit(), deckKit = cabinKit();
+    const roofKit = cabinKit(BUILD_STRUCTURE), deckKit = cabinKit(BUILD_STRUCTURE);
     const m = new THREE.Matrix4(), c = new THREE.Vector3(), x2 = new THREE.Vector3(), y2 = new THREE.Vector3();
     const xAxis = new THREE.Vector3(), zAxis = new THREE.Vector3(1, 0, 0);
     // roof deck (planks seen from below)
@@ -3410,7 +3446,7 @@ const partitionFull = [], partitionCut = [];   // swapped by updateSeeThrough()
       trackLike(m, backRef);
     }
     // snow over the shingles
-    const snowKit = cabinKit();
+    const snowKit = cabinKit(BUILD_STRUCTURE);
     c.set(0, yWall, zWall).addScaledVector(d, run / 2).addScaledVector(n, 0.16);
     m.makeBasis(d, n, zAxis).setPosition(c);
     snowKit.addMatrix(rbox(run + 0.02, 0.06, width + 0.02, 0.03, 1), 0xffffff, m);
@@ -11775,7 +11811,7 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
   // ---------- exterior chimney: a fieldstone stack around a mortar core ----------
   // (starts just under the roof, by the cabin ceiling, and rises past the ridge)
   {
-    const kit = cabinKit();
+    const kit = cabinKit(BUILD_STRUCTURE);
     const stackW = 0.7, base = ROOM.h - 0.2, stackH = 3.55, top = base + stackH;
     kit.add(rbox(stackW - 0.08, stackH, stackW - 0.08, 0.03, 1), 0x2a2622, FIRE_X, base + stackH / 2, FIRE_Z);
     for (let y = base, row = 0; y < top - 0.05; row++) {
@@ -11827,7 +11863,7 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
   const massFrontX = FIRE_X - fpD / 2;
   const fbW = fpW - 0.5, fbH = 0.9, fbY0 = 0.15;       // firebox opening
   {
-    const low = cabinKit(), high = cabinKit();
+    const low = cabinKit(BUILD_STRUCTURE), high = cabinKit(BUILD_STRUCTURE);
     for (let y = 0; y < ROOM.h - 0.04;) {
       const h = Math.min(0.16 + Math.random() * 0.08, ROOM.h - y);
       const kit = y + h / 2 < FIRE_CUT ? low : high;
@@ -11865,7 +11901,7 @@ let chimneyStack = null;   // the stack above the roof (it lifts off with the ro
   }
   // mantle — a rough-hewn beam above the firebox, and the log pile inside it
   {
-    const kit = cabinKit();
+    const kit = cabinKit(BUILD_STRUCTURE);
     kit.add(grainUV(rbox(0.32, 0.16, fpW + 0.36, 0.04, 2), 'z'), 0x5a3a22, massFrontX - 0.18, 1.45, FIRE_Z);
     for (let i = 0; i < 3; i++) {
       kit.log('z', 0.055, fbW - 0.12, 0x6a4a30, massFrontX - 0.07 + i * 0.04, 0.21 + (i % 2) * 0.06, FIRE_Z);
@@ -13675,7 +13711,8 @@ function dismissOnboardingHint() {
 function maybeShowOnboardingHint() {
   // wait for the loading screen to clear so the welcome is actually seen
   const loader = document.getElementById('loading');
-  if (loader && !loader.classList.contains('hidden')) { setTimeout(maybeShowOnboardingHint, 400); return; }
+  const building = typeof cabinBuild !== 'undefined' && cabinBuild.active;
+  if ((loader && !loader.classList.contains('hidden')) || building) { setTimeout(maybeShowOnboardingHint, 400); return; }
   guide.greet();
 }
 setTimeout(maybeShowOnboardingHint, 1800);
@@ -14609,7 +14646,7 @@ for (const lp of exteriorLampParts) addLightGlow(lp.light, 0xffc27a, 1.5, 0.5);
 const _glowPos = new THREE.Vector3(), _glowToCam = new THREE.Vector3();
 function updateLightGlows() {
   for (const g of lightGlows) {
-    const k = g.light.visible ? Math.min(1, g.light.intensity * g.gain) : 0;
+    const k = g.light.visible && !cabinBuild.hides(g.light) ? Math.min(1, g.light.intensity * g.gain) : 0;
     g.sprite.visible = k > 0.01;
     if (!g.sprite.visible) continue;
     g.light.getWorldPosition(_glowPos);
@@ -15385,6 +15422,272 @@ let _lastFrameAt = performance.now();
 let _lightningOpacity = '';
 
 // ==========================================================
+// CABIN BUILD — the cabin builds itself as the loading screen fades
+// ==========================================================
+// The logs stack up course by course with the inside walls rising behind
+// them, then the furniture drops in room by room, back rooms first, while the
+// camera eases in to the home view; the projects, the programmer and the
+// dogs pop in last. Merged meshes move piece by piece in their vertex shader:
+// every vertex knows its part's pivot (aBuild, see MESH MERGING) and here
+// each part gets a start time. Separate objects scale up from their base
+// instead. A click, tap or key skips to the end, reduced motion skips it
+// altogether, and once built every piece is exactly where it stood before.
+// ==========================================================
+const cabinBuild = (() => {
+  const DUR = 0.5;       // seconds a piece takes to land
+  const DROP = 0.7;      // metres it falls
+  const time = { value: 1e4 };   // seconds into the build; past the end everything stands
+  const enabled = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const inBuild = p => Math.abs(p.x) < 8.8 && p.z > -10.6 && p.z < 8.9 && p.y < 9;
+  // a stable 0..1 per patch of floor, so neighbouring parts land together
+  const jitter = (x, z) => {
+    const s = Math.sin(Math.floor(x / 0.8) * 12.9898 + Math.floor(z / 0.8) * 78.233) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const ROOM_ORDER = ['office', 'game', 'bedroom', 'kitchen', 'living'];
+  const roomOrder = (x, z) => {
+    if (z < -ROOM.d / 2) return -0.5;                                  // the back porch
+    if (Math.abs(x) > ROOM.w / 2 || z > ROOM.d / 2) return 1.5;        // the woodpile, the front step
+    const i = ROOM_ORDER.findIndex(k => { const r = ROOMS[k]; return x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1; });
+    return i < 0 ? 2 : i;
+  };
+  // when a part starts to drop, from its role and where its pivot stands;
+  // -1 leaves it standing (outside the cabin)
+  const WALL0 = 0.2, WALL_SPAN = 1.25, FURN0 = 1.2;
+  const sweepOf = p => (p.x + p.z) / 28 + 0.5;      // the back-left corner goes first
+  function startOf(role, p) {
+    if (!inBuild(p)) return -1;
+    if (role === BUILD_STRUCTURE) return WALL0 + Math.min(Math.max(p.y, 0), 5.4) / 5 * WALL_SPAN + sweepOf(p) * 0.12;
+    return FURN0 + roomOrder(p.x, p.z) * 0.24 + Math.min(Math.max(p.y, 0), 2.6) * 0.3 + jitter(p.x, p.z) * 0.12;
+  }
+
+  // ---- the shader: each part scales up about its pivot as it drops in ----
+  const GLSL = `
+    if (aBuild.w >= 0.0 && uBuildT < aBuild.w + ${DUR.toFixed(2)}) {
+      float k = clamp((uBuildT - aBuild.w) / ${DUR.toFixed(2)}, 0.0, 1.0), q = k - 1.0;
+      float s = max(0.0, 1.0 + 2.70158 * q * q * q + 1.70158 * q * q);   // eases out, overshooting a touch
+      transformed = aBuild.xyz + (transformed - aBuild.xyz) * s;
+      transformed.y += q * q * ${DROP.toFixed(2)};
+    }`;
+  function inject(material) {
+    if (material.userData.buildInjected) return;
+    const before = material.onBeforeCompile, key = material.customProgramCacheKey();
+    material.onBeforeCompile = function (shader, renderer) {
+      before.call(this, shader, renderer);
+      shader.uniforms.uBuildT = time;
+      shader.vertexShader = 'attribute vec4 aBuild;\nuniform float uBuildT;\n' +
+        shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + GLSL);
+    };
+    material.customProgramCacheKey = () => 'build|' + key;
+    // meshes without the attribute (separate objects sharing the material) stand still
+    material.defaultAttributeValues = Object.assign({}, material.defaultAttributeValues, { aBuild: [0, 0, 0, -1] });
+    material.userData.buildInjected = true;
+  }
+  // the sun's shadows follow the parts as they drop
+  const depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  inject(depthMat);
+
+  // ---- sort the cabin: merged meshes, separate objects, inside wall faces ----
+  const v = new THREE.Vector3(), box = new THREE.Box3();
+  const shaderMeshes = [], units = [], walls = [];
+  const wallMeshes = new Set(wallData.map(w => w.mesh));
+  const balls = dogs.map(d => d.userData.ball).filter(Boolean);
+  const whole = new Set([programmer, deskChairObj, tvObject, doorPivot, ...dogs, ...balls, ...wallMounted].filter(Boolean));
+  const hasKey = o => { let k = false; o.traverse(c => { if (c.userData.key) k = true; }); return k; };
+  scene.updateMatrixWorld(true);
+  function collect(o) {
+    for (const c of o.children) {
+      if (whole.has(c) || flames.includes(c) || c.userData.key || (!c.isMesh && hasKey(c))) units.push(c);
+      else if (c.isMesh && c.geometry.attributes.aBuild) shaderMeshes.push(c);
+      else if (wallMeshes.has(c) && c.geometry.type === 'PlaneGeometry' &&
+               Math.abs(wallData.find(w => w.mesh === c).normal.y) < 0.5) walls.push({ mesh: c });
+      else if (c.isMesh || c.isSprite || c.isPoints || c.isLine) units.push(c);
+      else collect(c);
+    }
+  }
+  if (enabled) { collect(root); collect(contactShadows); }
+
+  // merged meshes: give every part its start time
+  let end = 0;
+  const keep = new Set(), mats = new Set();
+  for (const m of shaderMeshes) {
+    const A = m.geometry.attributes.aBuild, a = A.array;
+    m.updateMatrixWorld(true);
+    let any = false;
+    for (let i = 0; i < A.count; i++) {
+      const k = i * 4;
+      v.set(a[k], a[k + 1], a[k + 2]).applyMatrix4(m.matrixWorld);
+      const t0 = a[k + 3] = startOf(a[k + 3], v);
+      if (t0 >= 0) { any = true; if (t0 > end) end = t0; }
+    }
+    if (!any) continue;
+    keep.add(m.geometry);
+    [].concat(m.material).forEach(mat => mats.add(mat));
+    if (m.castShadow) m.customDepthMaterial = depthMat;
+  }
+  mats.forEach(inject);
+  // nothing else needs the pivots: drop them before they reach the GPU
+  scene.traverse(o => {
+    const g = o.geometry;
+    if (g && g.attributes && g.attributes.aBuild && !keep.has(g)) g.deleteAttribute('aBuild');
+  });
+
+  // separate objects: scale up from the bottom of their bounds
+  const pinned = new Set([...dogs, ...balls]);     // their own code moves them: scale in place
+  const unitList = [];
+  for (const o of units) {
+    box.setFromObject(o);
+    if (box.isEmpty()) continue;
+    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    const base = new THREE.Vector3(c.x, box.min.y, c.z);
+    if (!inBuild(c)) continue;
+    let mode = 'pop', t0;
+    if (flames.includes(o)) { mode = 'show'; t0 = WALL0 + WALL_SPAN * 0.9; }
+    else if (pinned.has(o)) {
+      mode = 'pinned';
+      const d = dogs.includes(o) ? dogs.indexOf(o) : dogs.findIndex(g => g.userData.ball === o);
+      t0 = FURN0 + 1.75 + d * 0.15;
+    }
+    else if (box.max.y < 0.006 && size.x * size.z > 6) { mode = 'floor'; base.copy(c); t0 = size.x * size.z > 100 ? 0 : 0.1; }   // the floor and the kitchen tiles
+    else if (o === doorPivot) t0 = startOf(BUILD_STRUCTURE, base);
+    else if (o === programmer) t0 = FURN0 + 0.9;
+    else t0 = startOf(BUILD_AUTO, base) + 0.15;   // after what it stands on
+    if (t0 > end) end = t0;
+    unitList.push({ o, mode, t0, base: o.parent.worldToLocal(base), center: c,
+      pos0: o.position.clone(), scale0: o.scale.clone(), vis0: o.visible, project: hasKey(o) });
+  }
+  // inside wall faces: reveal from the bottom, just behind their logs
+  for (const w of walls) {
+    const m = w.mesh, P = m.geometry.attributes.position, U = m.geometry.attributes.uv;
+    m.updateMatrixWorld(true);
+    // a one-segment plane: vertices 0 and 1 are the top edge, 2 and 3 the bottom
+    w.y0 = P.getY(2); w.y1 = P.getY(0); w.u0 = U.getY(2); w.u1 = U.getY(0);
+    w.bottom = v.set(0, w.y0, 0).applyMatrix4(m.matrixWorld).y;
+    w.height = w.y1 - w.y0;
+    w.lag = WALL0 + DUR * 0.6 + sweepOf(m.getWorldPosition(v)) * 0.12;
+  }
+  const END = end + DUR + 0.15;
+
+  const easeBack = k => { const q = k - 1; return Math.max(0, 1 + 2.70158 * q * q * q + 1.70158 * q * q); };
+  function applyUnit(u, t) {
+    const k = Math.min(1, Math.max(0, (t - u.t0) / DUR)), o = u.o;
+    if (u.mode === 'show') { o.visible = u.vis0 && k > 0; return; }
+    const s = Math.max(1e-4, easeBack(k));
+    o.scale.copy(u.scale0).multiplyScalar(s);
+    // the projects sparkle as they land
+    if (u.project && !u.sparked && k > 0.55) { u.sparked = true; fxBurst(u.center, 'sparkle', 12); }
+    if (u.mode === 'pinned') return;
+    o.position.copy(u.pos0).sub(u.base).multiplyScalar(s).add(u.base);
+    if (u.mode === 'pop') o.position.y += (1 - k) * (1 - k) * DROP;
+  }
+  function applyWall(w, t) {
+    const rise = (t - w.lag) / WALL_SPAN * 5;
+    const k = Math.min(1, Math.max(0, (rise - w.bottom) / w.height));
+    if (k === w.k) return;
+    w.k = k;
+    const P = w.mesh.geometry.attributes.position, U = w.mesh.geometry.attributes.uv;
+    const y = k === 1 ? w.y1 : w.y0 + w.height * k, u = k === 1 ? w.u1 : w.u0 + (w.u1 - w.u0) * k;
+    P.setY(0, y); P.setY(1, y); U.setY(0, u); U.setY(1, u);
+    P.needsUpdate = U.needsUpdate = true;
+  }
+
+  // ---- input: a click, tap or key skips; nothing else gets through ----
+  const SKIP = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+  const HOLD = ['pointerup', 'pointermove', 'pointercancel', 'mousedown', 'mousemove', 'mouseup', 'click',
+    'dblclick', 'contextmenu', 'touchmove', 'touchend', 'keyup'];
+  const hold = e => e.stopImmediatePropagation();
+  const skip = e => { e.stopImmediatePropagation(); finish(); };
+  const listen = on => {
+    const f = on ? 'addEventListener' : 'removeEventListener';
+    for (const type of SKIP) window[f](type, skip, { capture: true, passive: true });
+    for (const type of HOLD) window[f](type, hold, { capture: true, passive: true });
+  };
+
+  let active = false, t0 = null, paused = null;
+  const skipHint = document.getElementById('build-skip');
+  const home = { pos: null };
+  // before the first frame: everything down, the camera pulled back
+  function prime() {
+    if (!enabled || active) return;
+    active = true;
+    window.introDone = false;
+    document.body.classList.add('building');
+    if (skipHint) skipHint.textContent = (QUALITY.coarse ? 'Tap' : 'Click') + ' to skip';
+    time.value = 0;
+    for (const u of unitList) applyUnit(u, 0);
+    for (const w of walls) applyWall(w, 0);
+    const off = HOME_CAM.clone().sub(HOME_TARGET).multiplyScalar(1.28).applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.25);
+    home.pos = off.add(HOME_TARGET);
+    home.pos.y += 1.2;
+    camera.position.copy(home.pos);
+    controls.target.copy(HOME_TARGET);
+    controls.enabled = false;
+    listen(true);
+    window.addEventListener('world:ready', start, { once: true });
+  }
+  // the loading screen is fading: start the clock and the camera
+  function start() {
+    if (!active) return;
+    t0 = performance.now();
+    cameraAnim = {
+      fromPos: home.pos.clone(), toPos: HOME_CAM.clone(),
+      fromTarget: HOME_TARGET.clone(), toTarget: HOME_TARGET.clone(),
+      startT: t0 - startTime, duration: END * 1000, build: true,
+    };
+    if (skipHint) skipHint.classList.add('visible');
+  }
+  function update(now) {
+    if (!active) return;
+    const t = paused !== null ? paused : t0 === null ? 0 : (now - t0) / 1000;
+    time.value = t;
+    // a resize moves the home view: fly to where it is now
+    if (cameraAnim && cameraAnim.build) cameraAnim.toPos.copy(HOME_CAM);
+    for (const u of unitList) applyUnit(u, t);
+    for (const w of walls) applyWall(w, t);
+    if (paused === null && t >= END) finish();
+  }
+  function finish() {
+    if (!active) return;
+    active = false;
+    paused = null;
+    time.value = 1e4;
+    for (const u of unitList) {
+      u.o.scale.copy(u.scale0);
+      if (u.mode === 'show') u.o.visible = u.vis0;
+      else if (u.mode !== 'pinned') u.o.position.copy(u.pos0);
+    }
+    for (const w of walls) applyWall(w, 1e4);
+    if (cameraAnim && cameraAnim.build) cameraAnim = null;
+    camera.position.copy(HOME_CAM);
+    controls.target.copy(HOME_TARGET);
+    controls.enabled = true;
+    controls.update();
+    document.body.classList.remove('building');
+    document.body.classList.add('built');
+    if (skipHint) skipHint.classList.remove('visible');
+    // the rest of a skipping click or tap is still held for a moment
+    setTimeout(() => listen(false), 400);
+    window.introDone = true;
+    window.dispatchEvent(new Event('world:built'));
+  }
+  return {
+    get active() { return active; },
+    prime, update, finish,
+    // is `o` still waiting to be built? (its glow stays off until then)
+    hides(o) { return active && inBuild(o.getWorldPosition(v)); },
+    // hold the build at `t` seconds, the camera where its flight would be (for stills)
+    seek(t) {
+      if (!active) return;
+      paused = t;
+      if (cameraAnim && cameraAnim.build) cameraAnim = null;
+      camera.position.lerpVectors(home.pos, HOME_CAM, 1 - Math.pow(1 - Math.min(1, t / END), 3));
+      update(performance.now());
+    },
+    get length() { return END; },
+  };
+})();
+
+// ==========================================================
 // SHADER WARM-UP
 // ==========================================================
 // The first frame compiles a shader program for every kind of material in
@@ -15446,6 +15749,7 @@ function animate() {
   FRAME_SCALE = Math.min(4, Math.max(0.25, frameMs / (1000 / 60)));
   adaptiveRes.sample(frameMs);
   const t = frameNow - startTime;
+  cabinBuild.update(frameNow);
   for (let i = 0; i < propTickers.length; i++) propTickers[i](t / 1000);
   tickAutoTime();
   // update indoor/outdoor SFX muffling smoothly as the camera moves
@@ -16050,7 +16354,7 @@ function animate() {
     m.getWorldPosition(icon.position);
     icon.position.y += icon.userData.yOffset + Math.sin(t * 0.003 + icon.userData.bob) * 0.025;
     const isDoor = m.userData.key === 'door';
-    icon.visible = !modalOpen && m !== hovered && (seeThrough || isDoor) && isShown(m);
+    icon.visible = !modalOpen && m !== hovered && (seeThrough || isDoor) && isShown(m) && !cabinBuild.active;
     // shrink markers the camera is right up against (guide close-ups, first person)
     const k = icon.userData.size * Math.min(1, Math.max(0.38, icon.position.distanceTo(camera.position) / 7));
     icon.scale.set(k, k, 1);
@@ -16136,6 +16440,7 @@ function animate() {
       console.error(err);   // the first frame compiles whatever is left
     }
     done += SHADERS;
+    try { cabinBuild.prime(); } catch (err) { console.error(err); }   // the cabin starts as an empty plot
     animate();   // the first frame uploads the textures and meshes
   } finally {
     show(total);
