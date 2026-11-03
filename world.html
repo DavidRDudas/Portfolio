@@ -427,6 +427,29 @@
   #prism-portal.loaded #prism-exit { opacity: 0.92; pointer-events: auto; }
   #prism-exit:hover { background: rgba(10, 11, 16, 0.88); border-color: rgba(255, 255, 255, 0.6); }
 
+  /* ---------- THE BLACK BOOK → the library (a spiral pulls you in) ---------- */
+  #library-portal { position: fixed; inset: 0; z-index: 200; visibility: hidden; pointer-events: none; background: rgba(0, 0, 0, 0); transition: background 1.5s cubic-bezier(.5, 0, .75, .55), visibility 0s linear 0.7s; }
+  #library-portal.active { visibility: visible; pointer-events: auto; background: rgba(0, 0, 0, 1); transition: background 1.5s cubic-bezier(.5, 0, .75, .55), visibility 0s; }
+  #library-portal.closing { background: rgba(0, 0, 0, 0); transition: background 0.7s ease, visibility 0s linear 0.7s; }
+  #library-vortex { position: absolute; left: var(--vx, 50%); top: var(--vy, 50%); width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; pointer-events: none;
+    transform: scale(0.01) rotate(0deg); opacity: 0; }
+  #library-vortex svg { display: block; width: 100%; height: 100%; }
+  #library-portal.active #library-vortex { animation: libraryVortex 1.6s cubic-bezier(.45, 0, .85, .35) forwards; }
+  @keyframes libraryVortex {
+    0%   { opacity: 0;   transform: scale(0.01) rotate(0deg); }
+    15%  { opacity: 1; }
+    100% { opacity: 1;   transform: scale(2.6) rotate(-600deg); }
+  }
+  #library-wait { position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); font-family: var(--mono); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
+    color: rgba(239, 230, 214, 0.55); opacity: 0; transition: opacity 0.6s ease 0.4s; }
+  #library-portal.waiting #library-wait { opacity: 1; }
+  #library-frame { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; border: 0; display: block; background: #000; opacity: 0; transition: opacity 0.6s ease; }
+  #library-portal.loaded #library-frame { opacity: 1; }
+  #library-portal.loaded #library-vortex { visibility: hidden; }   /* the screen is black by then; the library takes over */
+  @media (prefers-reduced-motion: reduce) {
+    #library-portal.active #library-vortex { animation: none; opacity: 0; }
+  }
+
   /* ---------- BYTE — the robot guide ---------- */
   #guide { position: fixed; left: 18px; bottom: 16px; z-index: 16; pointer-events: none; font-family: inherit; }
   #guide > * { pointer-events: auto; }
@@ -866,6 +889,12 @@
   <div id="prism-crt"></div>
   <div id="prism-scan"></div>
   <button id="prism-exit" type="button" aria-label="Exit Painted Crowns">↩ Exit Painted Crowns</button>
+</div>
+
+<!-- the black book on the office bookshelf → the library (spiral in; leave from inside) -->
+<div id="library-portal" aria-hidden="true">
+  <div id="library-vortex"></div>
+  <div id="library-wait">Opening the book</div>
 </div>
 
 <!-- BYTE — the robot guide: tips, a little chat, and guided camera tours -->
@@ -6785,8 +6814,10 @@ const tvAnim = tvScreenTexture();
 }
 
 // ==========================================================
-// BOOKSHELF (office, left wall) — books inc. Charlie & Pip
+// BOOKSHELF (office, left wall) — books inc. Charlie & Pip, and the black
+// book that opens the library (library/index.html)
 // ==========================================================
+let blackBook = null;
 {
   const shelf = new THREE.Group();
   const woodMat = matStandard(COL.woodMid, 0.7);
@@ -6939,6 +6970,19 @@ const tvAnim = tvScreenTexture();
     // sit on the bottom shelf (shelves[0]), centered, facing out of the shelf
     bear.position.set(0, shelves[0] + 0.02, 0.05);
     shelf.add(bear);
+  }
+
+  // THE BLACK BOOK: spine out on the middle shelf, standing a little proud
+  // of the others. It isn't a project, so it gets no "i" and doesn't count
+  // toward the discoveries; clicking it opens the library.
+  {
+    const book = new THREE.Mesh(rbox(0.075, 0.52, 0.34, 0.008, 1), matStandard(0x0d0c0e, 0.5));
+    book.position.set(0.6, shelves[2] + 0.26 + 0.02, 0.06);
+    book.castShadow = true;
+    makeInteractive(book, 'library', 'A black book');
+    book.userData.hoverGlow = 0.1;   // a warm edge on hover; it stays a black book
+    shelf.add(book);
+    blackBook = book;
   }
 
   shelf.position.set(-ROOM.w / 2 + 0.3, 0, -4.6);
@@ -11786,7 +11830,7 @@ function attachInfoIcon(mesh) {
   infoIcons.push(sprite);
 }
 // attach an icon to every interactive once the room is fully constructed
-for (const m of interactives) attachInfoIcon(m);
+for (const m of interactives) if (m.userData.key !== 'library') attachInfoIcon(m);   // the black book isn't a project
 // the Klast cabinet's icon is anchored to its screen, which would park it
 // right on the marquee text — lift it above the cabinet silhouette
 for (const s of infoIcons) {
@@ -12398,6 +12442,7 @@ function fpTargetObject(target) {
   if (target.kind === 'sit')  return target.spot.obj || null;
   if (target.kind === 'owl')  return porchOwl;
   if (target.kind === 'boat') return boatObj;
+  if (target.kind === 'library') return blackBook;
   return null;
 }
 function updateFpHighlight(target, now) {
@@ -12499,6 +12544,7 @@ function updateFpHint() {
     : t.kind === 'owl'       ? 'E — pet the owl'
     : t.kind === 'boat'      ? 'E — board the boat'
     : t.kind === 'tv'        ? 'E — play Painted Crowns'
+    : t.kind === 'library'   ? 'E — open the black book'
     :                          'WASD move · Shift run · F light · ESC exit';
 }
 
@@ -12517,6 +12563,10 @@ function fpPickTarget() {
   const inside = inCabin(cx, cz, 0.1);
   consider({ kind: 'door', x: DOOR_POS.x, z: DOOR_POS.z, range: 2.4 });
   if (inside) consider({ kind: 'tv', x: TV_POS.x, z: TV_POS.z, range: 2.4 });
+  if (inside && blackBook) {
+    blackBook.getWorldPosition(_blackBookAt);
+    consider({ kind: 'library', x: _blackBookAt.x, z: _blackBookAt.z, range: 1.7 });
+  }
   for (const s of SIT_SPOTS) {
     if (s === FP.blockedSpot) continue;     // don't re-offer the chair you just stood from
     if (s.indoor !== inside) continue;      // indoor chairs only inside, outdoor only outside
@@ -12563,8 +12613,125 @@ function fpInteract() {
   else if (t.kind === 'dog') petDog(t.dog);
   else if (t.kind === 'owl') petOwl();
   else if (t.kind === 'tv') playPrism();
+  else if (t.kind === 'library') enterLibrary();
   else if (t.kind === 'boat') boardBoat();
 }
+
+// ---- the black book → the library ----
+// The camera moves in on the book, a black spiral turns out of it and fills
+// the screen, and the library (library/index.html, loaded meanwhile) starts
+// its own spiral down through the floors. It posts 'library-exit' to leave.
+const LIBRARY = { open: false, ready: false, spun: false };
+const _blackBookAt = new THREE.Vector3();
+function libraryVortexSvg() {
+  // seven arms of a logarithmic spiral, each widening as it winds out
+  const arms = 7, turns = 2.6, b = 0.24, n = 110;
+  let paths = '';
+  for (let k = 0; k < arms; k++) {
+    const phi = k / arms * Math.PI * 2, outer = [], inner = [];
+    for (let i = 0; i <= n; i++) {
+      const th = i / n * turns * Math.PI * 2, r = Math.exp(b * th), w = 0.5 * i / n;
+      outer.push((r * Math.cos(th + phi)).toFixed(2) + ' ' + (r * Math.sin(th + phi)).toFixed(2));
+      inner.push((r * Math.cos(th + phi + w)).toFixed(2) + ' ' + (r * Math.sin(th + phi + w)).toFixed(2));
+    }
+    paths += `<path d="M${outer.join('L')}L${inner.reverse().join('L')}Z"/>`;
+  }
+  return `<svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg"><circle r="1.6" fill="#040303"/><g fill="#040303">${paths}</g></svg>`;
+}
+function enterLibrary() {
+  if (FP.portal || LIBRARY.open) return;
+  LIBRARY.open = true; LIBRARY.ready = false; LIBRARY.spun = false;
+  const portal = document.getElementById('library-portal');
+  // start loading it now, out of sight
+  let frame = document.getElementById('library-frame');
+  if (!frame) {
+    frame = document.createElement('iframe');
+    frame.id = 'library-frame';
+    frame.title = 'The library';
+    portal.insertBefore(frame, portal.firstChild);
+  }
+  frame.src = './library/index.html';
+  const target = blackBook ? new THREE.Box3().setFromObject(blackBook).getCenter(new THREE.Vector3()) : HOME_TARGET.clone();
+  if (FP.state === 'orbit') {
+    if (modalBackdrop.classList.contains('visible')) closeModal();
+    setHovered(null);
+    setSeeThrough(true);
+    controls.enabled = false;
+    controls.minDistance = 1.2;   // a close-up; zooming back out restores the limit (cabinCloseup)
+    // the shelf faces +x: come in from the room side, a little above the book
+    const pos = target.clone().add(new THREE.Vector3(1.35, 0.14, 0.32));
+    cameraAnim = {
+      fromPos: camera.position.clone(), toPos: pos, fromTarget: controls.target.clone(), toTarget: target.clone(),
+      startT: performance.now() - startTime, duration: 1150,
+      onDone: () => { cabinCloseup = target.clone(); spiralIntoBook(target); },
+    };
+  } else {
+    // first person: mark the portal open before letting go of the mouse,
+    // or losing the pointer lock reads as Esc and drops out of first person
+    FP.portal = true;
+    if (FP.controls && FP.controls.locked) FP.controls.unlock();
+    const ui = document.getElementById('fp-ui');
+    if (ui) ui.classList.remove('visible');
+    spiralIntoBook(target);
+  }
+}
+function spiralIntoBook(target) {
+  if (!LIBRARY.open) return;
+  const portal = document.getElementById('library-portal');
+  const vortex = document.getElementById('library-vortex');
+  if (!vortex.firstChild) vortex.innerHTML = libraryVortexSvg();
+  const p = target.clone().project(camera);
+  vortex.style.setProperty('--vx', ((p.x + 1) / 2 * 100).toFixed(2) + '%');
+  vortex.style.setProperty('--vy', ((1 - p.y) / 2 * 100).toFixed(2) + '%');
+  portal.classList.remove('closing', 'loaded', 'waiting');
+  void portal.offsetWidth;   // restart the animation
+  portal.classList.add('active');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(() => {
+    if (!LIBRARY.open) return;
+    LIBRARY.spun = true;
+    FP.portal = true;          // the screen is black: pause the cabin
+    showLibraryWhenReady();
+  }, reduce ? 500 : 1600);
+}
+function showLibraryWhenReady() {
+  const portal = document.getElementById('library-portal');
+  if (!LIBRARY.open || !LIBRARY.spun) return;
+  if (!LIBRARY.ready) { portal.classList.add('waiting'); return; }
+  portal.classList.remove('waiting');
+  portal.classList.add('loaded');
+  const frame = document.getElementById('library-frame');
+  try { frame.contentWindow.postMessage({ type: 'library-start' }, '*'); } catch (e) {}
+  try { frame.focus(); } catch (e) {}
+}
+function exitLibrary() {
+  if (!LIBRARY.open) return;
+  LIBRARY.open = false;
+  const portal = document.getElementById('library-portal');
+  portal.classList.remove('loaded', 'waiting');
+  FP.portal = false;           // the cabin carries on under the black
+  setTimeout(() => {
+    if (LIBRARY.open) return;
+    portal.classList.add('closing');
+    portal.classList.remove('active');
+    const frame = document.getElementById('library-frame');
+    if (frame) frame.src = 'about:blank';   // stop it (frees the GPU)
+  }, 650);
+  // back where you were
+  if (FP.state === 'active') {
+    const ui = document.getElementById('fp-ui');
+    if (ui) ui.classList.add('visible');
+    if (FP.controls && !QUALITY.coarse) FP.controls.lock();
+  }
+}
+window.addEventListener('message', (e) => {
+  const d = e && e.data;
+  if (!d || !LIBRARY.open) return;
+  const frame = document.getElementById('library-frame');
+  if (frame && e.source !== frame.contentWindow) return;
+  if (d.type === 'library-ready') { LIBRARY.ready = true; showLibraryWhenReady(); }
+  else if (d.type === 'library-exit') exitLibrary();
+});
 
 // ---- Painted Crowns TV → Infinite Grass game overlay (CRT zoom-in, exit anytime) ----
 function playPrism() {
@@ -12592,7 +12759,7 @@ function playPrism() {
   }, 470);
 }
 function exitPrism() {
-  if (!FP.portal) return;
+  if (!FP.portal || LIBRARY.open) return;
   FP.portal = false;
   playUiSfx('exit_prism');
   const portal = document.getElementById('prism-portal');
@@ -13034,6 +13201,7 @@ function fpActionLabel() {
   if (t.kind === 'owl') return 'Pet the owl';
   if (t.kind === 'boat') return 'Board the boat';
   if (t.kind === 'tv') return 'Play Painted Crowns';
+  if (t.kind === 'library') return 'Open the black book';
   return '';
 }
 const fpTouch = (() => {
@@ -13134,7 +13302,11 @@ if (_fpExitBtn) _fpExitBtn.addEventListener('click', () => {
 // Painted Crowns overlay exit (parent-side button + ESC when the cabin still has focus)
 const _prismExitBtn = document.getElementById('prism-exit');
 if (_prismExitBtn) _prismExitBtn.addEventListener('click', exitPrism);
-window.addEventListener('keydown', e => { if (FP.portal && e.key === 'Escape') exitPrism(); });
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (LIBRARY.open) exitLibrary();
+  else if (FP.portal) exitPrism();
+});
 // if we're in first-person but the pointer isn't captured (e.g. just returned
 // from the Painted Crowns game, after the browser's post-Esc cooldown), a click re-locks it
 renderer.domElement.addEventListener('pointerdown', () => {
@@ -13539,7 +13711,7 @@ function setHovered(mesh) {
   if (hovered) {
     if (hovered.material.emissive) {
       hovered.material.emissive = new THREE.Color(0xffb87a);
-      hovered.material.emissiveIntensity = 0.45;
+      hovered.material.emissiveIntensity = hovered.userData.hoverGlow !== undefined ? hovered.userData.hoverGlow : 0.45;
     }
     hovered.position.y = hovered.userData.basePosY + 0.012;
     document.body.style.cursor = 'pointer';
@@ -13583,7 +13755,7 @@ function totalDiscoverable() {
   const keys = new Set();
   for (const m of interactives) {
     const k = m.userData.key;
-    if (k && k !== 'door' && k !== 'enterFP') keys.add(k);
+    if (k && k !== 'door' && k !== 'enterFP' && k !== 'library') keys.add(k);
   }
   return keys.size;
 }
@@ -13618,7 +13790,7 @@ function populateDiscoveryList() {
   const seen = new Set();
   for (const m of interactives) {
     const k = m.userData.key;
-    if (!k || k === 'door' || k === 'enterFP' || seen.has(k)) continue;
+    if (!k || k === 'door' || k === 'enterFP' || k === 'library' || seen.has(k)) continue;
     seen.add(k);
     keys.push(k);
   }
@@ -13797,7 +13969,7 @@ function resetDiscoveries() {
   }
 }
 function markDiscovered(key) {
-  if (!key || key === 'door' || key === 'enterFP' || discoveredKeys.has(key)) return;
+  if (!key || key === 'door' || key === 'enterFP' || key === 'library' || discoveredKeys.has(key)) return;
   discoveredKeys.add(key);
   muteIconForKey(key);
   updateDiscoveryUI();
@@ -13937,7 +14109,7 @@ renderer.domElement.addEventListener('pointerup', e => {
   // ignore taps while the FP system is active or animating — the pointer is
   // locked or the camera is mid-transition, so a normal click would either
   // open a modal we don't want or open one over the FP view.
-  if (FP.state !== 'orbit') return;
+  if (FP.state !== 'orbit' || LIBRARY.open) return;
   const dt = performance.now() - _tapStart.t;
   if (dt > TAP_MAX_TIME) return;
   // it's a tap — convert position to NDC and run a fresh hover check
@@ -13952,6 +14124,8 @@ renderer.domElement.addEventListener('pointerup', e => {
     flyCameraHome();
   } else if (hit.userData.key === 'enterFP') {
     enterFirstPerson();
+  } else if (hit.userData.key === 'library') {
+    enterLibrary();
   } else {
     // a little juice: the object pops and throws sparkles (confetti for a
     // brand-new find), and the card opens a beat later so you see it
@@ -15001,7 +15175,7 @@ const guide = (() => {
   }
   function showUnfound() {
     const keys = [...new Set(interactives.map(m => m.userData.key))]
-      .filter(k => k && k !== 'door' && k !== 'enterFP' && !discoveredKeys.has(k));
+      .filter(k => k && k !== 'door' && k !== 'enterFP' && k !== 'library' && !discoveredKeys.has(k));
     if (!keys.length) { say('You\'ve found every project already! 🎉'); return; }
     const key = pick(keys);
     show(key);
@@ -15053,6 +15227,7 @@ const guide = (() => {
     () => 'Fun fact: the Hydrogen explorer samples |ψ|² with no rejection — two 1D lookups and a free angle.',
     () => 'Tip: zoom all the way out at sunset. The sun goes down right into the gap between the peaks. 🏔️',
     () => 'Look at the grass — you can see each gust of wind roll across the meadow. 🌾',
+    () => 'There\'s a black book on the office bookshelf. It opens into a library with every book that can be written. 📚',
   ];
   const JOKES = [
     'Why do programmers prefer dark mode? Because light attracts bugs. 🐛',

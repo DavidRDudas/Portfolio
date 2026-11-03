@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Library · David Dudas</title>
+<meta name="description" content="A library with every book that can be written, on floors without end. One of the books lets you out.">
+<link rel="icon" href="../favicon.ico?v=c8c87ced">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #efe6d6; --ink-2: #cdbfa8; --muted: #9a8c7c; --faint: #6f6458;
+    --panel: rgba(16, 12, 9, 0.84); --line: rgba(239, 226, 205, 0.16);
+    --amber: #ffb36b; --amber-2: #f08a3c; --amber-ink: #2a1503;
+    --paper: #ebe2cd; --paper-ink: #2c251d; --paper-line: rgba(44, 37, 29, 0.18);
+    --display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0b0907; color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent; }
+  button { font-family: inherit; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+  #view.pointing { cursor: pointer; }
+  #view.dragging { cursor: grabbing; }
+
+  /* where you are */
+  #hud { position: fixed; top: max(14px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); font-family: var(--mono);
+    font-size: 11.5px; line-height: 1.75; color: var(--ink-2); pointer-events: none; opacity: 0; transition: opacity 0.8s ease;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+  #hud.on { opacity: 1; }
+  #hud .k { display: inline-block; width: 66px; color: var(--muted); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; }
+  #hud .n { color: var(--ink); }
+  #hud .d { color: var(--faint); margin-left: 9px; }
+  #hud .meta { color: var(--muted); margin-top: 3px; }
+
+  .pill { min-height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(14, 11, 9, 0.66);
+    color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .pill:hover { background: rgba(14, 11, 9, 0.88); border-color: rgba(255, 255, 255, 0.55); }
+  .pill:focus-visible, .btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  #leave { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); z-index: 20; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
+  #leave.on { opacity: 0.92; pointer-events: auto; }
+
+  #hint { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px);
+    padding: 7px 14px; border-radius: 999px; background: rgba(14, 11, 9, 0.6); color: var(--ink-2); font-size: 12px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; transition: opacity 0.6s ease; }
+  #hint.on { opacity: 1; }
+  #dot { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: rgba(255, 240, 220, 0.6);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); pointer-events: none; display: none; }
+  body.keys #dot { display: block; }
+  #tip { position: fixed; left: 0; top: 0; padding: 5px 9px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+    font-size: 12px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s ease; }
+  #tip.on { opacity: 1; }
+  #carry { position: fixed; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); max-width: calc(100% - 32px);
+    padding: 9px 13px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; color: var(--ink-2); line-height: 1.5; pointer-events: none; }
+  #carry b { color: var(--ink); font-weight: 600; }
+  #carry .m { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  body.touch #carry { bottom: auto; top: 96px; }
+  #toast { position: fixed; left: 50%; bottom: 70px; transform: translate(-50%, 8px); max-width: min(460px, calc(100% - 32px)); padding: 10px 15px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; color: var(--ink); text-align: center; pointer-events: none;
+    opacity: 0; transition: opacity 0.35s ease, transform 0.35s ease; }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  /* a question with a few answers (the railing, the stairs, the kiosk, a bed, the slot) */
+  #dialog { position: fixed; left: 50%; bottom: max(14%, 90px); transform: translateX(-50%); width: min(420px, calc(100% - 32px)); box-sizing: border-box;
+    padding: 18px 18px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 15; }
+  #dialog p { margin: 0 0 14px; font-size: 14.5px; line-height: 1.5; color: var(--ink); }
+  #dialog-input { width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.06); color: var(--ink); font: inherit; font-size: 15px; outline: none; }
+  #dialog-input:focus { border-color: rgba(255, 179, 107, 0.6); }
+  #dialog-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { min-height: 38px; padding: 0 15px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06); color: var(--ink);
+    font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: rgba(255, 255, 255, 0.12); }
+  .btn.primary { background: linear-gradient(180deg, var(--amber), var(--amber-2)); border-color: transparent; color: var(--amber-ink); }
+  .btn.primary:hover { filter: brightness(1.06); }
+
+  /* the book you're reading */
+  #reader { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(4, 3, 2, 0.6); padding: 12px; box-sizing: border-box; }
+  #reader .book { display: flex; flex-direction: column; max-width: 100%; max-height: 100%; background: var(--paper); color: var(--paper-ink); border-radius: 6px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 0 60px rgba(120, 90, 50, 0.18); overflow: hidden; }
+  #reader .bar { display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 16px; border-bottom: 1px solid var(--paper-line); font-size: 12px; }
+  #reader .bar.bottom { border-bottom: 0; border-top: 1px solid var(--paper-line); flex-wrap: wrap; }
+  #reader-where { flex: 1; font-family: var(--mono); font-size: 11px; color: rgba(44, 37, 29, 0.75); line-height: 1.5; }
+  /* every character as itself: no ligatures (the coding font joins <- and -- otherwise) */
+  #page { margin: 0; padding: 14px 18px; font-family: var(--mono); white-space: pre; line-height: 1.3; overflow: auto; color: var(--paper-ink); min-height: 120px; outline: none;
+    font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+  #page.wait { color: rgba(44, 37, 29, 0.55); white-space: normal; font-family: 'Inter', sans-serif; font-size: 14px; }
+  #reader .pb { min-width: 34px; min-height: 34px; border-radius: 999px; border: 1px solid var(--paper-line); background: transparent; color: var(--paper-ink); font-size: 17px; cursor: pointer; }
+  #reader .pb:hover { background: rgba(44, 37, 29, 0.08); }
+  #reader-close { font-size: 14px !important; }
+  #page-range { flex: 1; min-width: 120px; accent-color: #8a5a2b; }
+  #page-no { font-family: var(--mono); font-size: 11px; min-width: 112px; color: rgba(44, 37, 29, 0.75); }
+  #take { min-height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: #2c251d; color: var(--paper); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  #take:hover { background: #46392b; }
+
+  /* the welcome */
+  #intro { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; box-sizing: border-box; overflow-y: auto;
+    background: radial-gradient(ellipse at center, rgba(8, 6, 4, 0.55), rgba(5, 4, 3, 0.9)); opacity: 0; transition: opacity 0.7s ease; }
+  #intro.on { opacity: 1; }
+  #intro .card { max-width: 600px; padding: 26px 26px 20px; border-radius: 18px; background: rgba(16, 12, 9, 0.78); border: 1px solid var(--line);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
+  #intro h1 { margin: 0 0 14px; font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: -0.02em; color: #fff3e2; }
+  #intro p { margin: 0 0 13px; font-size: 14.5px; line-height: 1.62; color: var(--ink-2); }
+  #intro sup { font-size: 0.7em; line-height: 0; }
+  #intro .actions { display: flex; gap: 10px; margin: 18px 0 14px; }
+  #intro .credit { margin: 0; font-size: 12px; color: var(--faint); }
+
+  /* thumbstick (touch) */
+  #stick { position: fixed; left: 0; top: 0; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 1.5px solid rgba(255, 240, 220, 0.3);
+    background: rgba(20, 16, 12, 0.22); pointer-events: none; display: none; }
+  #stick.on { display: block; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255, 240, 220, 0.35); }
+
+  #fade { position: fixed; inset: 0; z-index: 40; background: #000; opacity: 1; pointer-events: none; transition: opacity 1s ease; }
+  #fade.white { background: #fff8ec; }
+
+  @media (max-width: 560px) {
+    #intro .card { padding: 20px 18px 16px; }
+    #intro h1 { font-size: 25px; }
+    #intro p { font-size: 13.5px; line-height: 1.55; }
+    #hud { font-size: 10.5px; }
+    #hud .k { width: 58px; }
+    #hud .d { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="view" tabindex="-1" aria-label="The library: galleries of bookshelves across a chasm, floors above and below"></canvas>
+
+<div id="hud" aria-hidden="true">
+  <div><span class="k">Floor</span><span class="n" id="hud-floor"></span><span class="d" id="hud-floor-d"></span></div>
+  <div><span class="k">Section</span><span class="n" id="hud-section"></span><span class="d" id="hud-section-d"></span></div>
+  <div class="meta" id="hud-meta"></div>
+</div>
+<button id="leave" class="pill" type="button">Leave the library</button>
+<div id="hint"></div>
+<div id="dot"></div>
+<div id="tip"></div>
+<div id="carry" hidden></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="dialog" hidden>
+  <p id="dialog-text"></p>
+  <form id="dialog-form" hidden><input id="dialog-input" type="text" maxlength="60" autocomplete="off" spellcheck="false" aria-label="Your answer"></form>
+  <div id="dialog-buttons"></div>
+</div>
+
+<div id="reader" hidden>
+  <div class="book" role="dialog" aria-modal="true" aria-label="A book from the shelves">
+    <div class="bar">
+      <div id="reader-where"></div>
+      <button id="reader-close" class="pb" type="button" aria-label="Close the book">✕</button>
+    </div>
+    <pre id="page" tabindex="0"></pre>
+    <div class="bar bottom">
+      <button id="prev" class="pb" type="button" aria-label="Previous page">‹</button>
+      <input id="page-range" type="range" min="1" max="410" value="1" aria-label="Page">
+      <button id="next" class="pb" type="button" aria-label="Next page">›</button>
+      <span id="page-no"></span>
+      <button id="take" type="button">Take this book</button>
+    </div>
+  </div>
+</div>
+
+<div id="intro" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+    <h1 id="intro-title">The library</h1>
+    <p>Every book that can be written is on these shelves: 410 pages, 40 lines to a page, 80 characters to a line, from the 95 characters a keyboard can type. That makes 95<sup>1,312,000</sup> books, a number 2,594,774 digits long. Almost all of them are noise.</p>
+    <p>One of them lets you out. Its place was worked out from its text, the same way every book's is, and it's on your side of the chasm. Put it through the slot at any rest area.</p>
+    <p>How hard is it to find? Put an electron at one edge of the observable universe and move it the width of a proton. Wait for the universe to reach heat death, about 10<sup>100</sup> years, then move it again. When it gets to the other edge, start on the next electron, until all 10<sup>80</sup> have crossed. If you read a book every second for all that time, you'd get through about 10<sup>229</sup> books. That's 0.000…0007% of the library, with another 2,594,536 zeros where the dots are.</p>
+    <div class="actions">
+      <button id="start" class="btn primary" type="button">Start</button>
+      <button id="intro-leave" class="btn" type="button">Leave</button>
+    </div>
+    <p class="credit">After Steven L. Peck's <i>A Short Stay in Hell</i> and Jorge Luis Borges's <i>The Library of Babel</i>.</p>
+  </div>
+</div>
+
+<div id="stick"><div id="knob"></div></div>
+<div id="fade"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="babel.js"></script>
+<script src="library.js"></script>
+</body>
+</html>
