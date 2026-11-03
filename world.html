@@ -6980,7 +6980,7 @@ let blackBook = null;
     book.position.set(0.6, shelves[2] + 0.26 + 0.02, 0.06);
     book.castShadow = true;
     makeInteractive(book, 'library', 'A black book');
-    book.userData.hoverGlow = 0.1;   // a warm edge on hover; it stays a black book
+    book.userData.hoverGlow = 0.025;   // only a warm hint on hover: it stays a black book
     shelf.add(book);
     blackBook = book;
   }
@@ -16012,7 +16012,8 @@ function animate() {
     controls.update();
     // hover highlighting needs a real pointer — touch screens resolve taps
     // directly in the pointerup handler instead of ray-casting every frame
-    if (QUALITY.canHover) { if (pointerOnCanvas && !modalBackdrop.classList.contains('visible')) checkHover(); else setHovered(null); }
+    // (no hovering while the black book pulls you in)
+    if (QUALITY.canHover) { if (pointerOnCanvas && !modalBackdrop.classList.contains('visible') && !LIBRARY.open) checkHover(); else setHovered(null); }
     // re-evaluate which walls block the camera's view of the room
     updateSeeThrough();
   }
