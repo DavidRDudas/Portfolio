@@ -249,7 +249,11 @@
     }
     vec3 finish(vec3 albedo, vec3 N, float emit) {
       vec3 c = albedo * (lighting(vW, N) * uLight + emit * max(uLight, 0.25));
-      float f = 1.0 - exp(-vDepth * vDepth * uFogD * uFogD);
+      // the dark comes in faster up and down than along a gallery, so the
+      // floors fade out well before the last one drawn
+      vec3 dv = vW - cameraPosition;
+      float d = length(vec3(dv.x, dv.y * 1.6, dv.z));
+      float f = 1.0 - exp(-d * d * uFogD * uFogD);
       return mix(c, uFog, clamp(f, 0.0, 1.0));
     }
   `;
@@ -537,7 +541,9 @@
         gl_Position = projectionMatrix * mv;
         float d = max(-mv.z, 0.1);
         gl_PointSize = min(aSize * uScale / d, 160.0);
-        vA = exp(-d * d * uFogD * uFogD) * smoothstep(0.4, 1.6, d);
+        vec3 dv = (modelMatrix * vec4(position, 1.0)).xyz - cameraPosition;
+        float fd = length(vec3(dv.x, dv.y * 1.6, dv.z));
+        vA = exp(-fd * fd * uFogD * uFogD) * smoothstep(0.4, 1.6, d);
       }`,
     fragmentShader: `
       uniform float uLight;
@@ -785,7 +791,8 @@
     dialogKeepsMode = !!opts.keepMode;
     if (!dialogKeepsMode && mode !== 'dialog') { modeBeforeDialog = mode; mode = 'dialog'; }
     clearKeys();
-    setTimeout(() => { if (!dialogEl.hidden) (opts.input ? dialogInput : dialogButtons.firstChild).focus({ preventScroll: true }); }, 30);
+    // (a dialog that leaves you moving doesn't take the keys away)
+    if (!dialogKeepsMode) setTimeout(() => { if (!dialogEl.hidden) (opts.input ? dialogInput : dialogButtons.firstChild).focus({ preventScroll: true }); }, 30);
   }
   function closeDialog() {
     if (dialogEl.hidden) return;
@@ -922,7 +929,7 @@
     ]);
   }
   function askStairs(again) {
-    dialog(again ? `Floor …${pad6(fDec)}.` : 'Spiral stairs. One full turn takes you to the next floor.', [
+    dialog(again ? `Floor …${pad6(fDec)}.` : 'Spiral stairs, one full turn to each floor. Walk round them yourself, or:', [
       { label: 'Up a floor', primary: true, run: () => climb(1) },
       { label: 'Down a floor', run: () => climb(-1) },
       { label: 'Done', run: closeDialog },
@@ -1040,7 +1047,8 @@
     return LABELS[hit.kind];
   }
   function act(hit) {
-    if (!hit || mode !== 'walk') return;
+    if (!hit || mode !== 'walk' || !body.ground) return;
+    if (body.stairs && hit.kind !== 'stairs') return;
     hideTip();
     if (hit.kind === 'book') pullBook(hit);
     else if (hit.kind === 'railing') askRailing();
@@ -1053,7 +1061,7 @@
   let hoverPt = null, hoverAt = 0;
   function hideTip() { tipEl.classList.remove('on'); canvas.classList.remove('pointing'); U.uHover.value.w = 0; }
   function updateHover(now) {
-    if (!hoverPt || mode !== 'walk' || dragging) { if (mode !== 'walk') hideTip(); return; }
+    if (!hoverPt || mode !== 'walk' || dragging || !body.ground || body.stairs) { if (mode !== 'walk' || !body.ground || body.stairs) hideTip(); return; }
     if (now - hoverAt < 90) return;
     hoverAt = now;
     const hit = pickAt(hoverPt.x / innerWidth * 2 - 1, -(hoverPt.y / innerHeight) * 2 + 1);
@@ -1084,13 +1092,16 @@
       else if (e.code === 'ArrowLeft' || e.code === 'PageUp') { turn(-1); e.preventDefault(); }
       return;
     }
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) return;
+    // typing in the kiosk, or using a dialog's buttons from the keyboard
+    const inPanel = e.target && e.target.closest && e.target.closest('#dialog:not([hidden]), #intro:not([hidden])');
+    if (e.target && (e.target.tagName === 'INPUT' || (inPanel && !dialogKeepsMode))) return;
     if (mode === 'intro' && (e.code === 'Enter' || e.code === 'Space')) { startWalking(); e.preventDefault(); return; }
     if (mode === 'descent' && (e.code === 'Enter' || e.code === 'Space')) { skipDescent(); e.preventDefault(); return; }
     if (mode !== 'walk') return;
     const k = KEYMAP[e.code];
     if (k) { keys[k] = 1; document.body.classList.add('keys'); e.preventDefault(); }
     if ((e.code === 'KeyE' || e.code === 'Enter') && !e.repeat) act(pickAt(0, 0));
+    if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpUp(); }
   });
   window.addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = 0; });
   window.addEventListener('blur', clearKeys);
@@ -1100,7 +1111,7 @@
   const stick = { id: null, cx: 0, cy: 0, dx: 0, dy: 0 };
   const pointers = new Map();
   let dragging = false;
-  const canLook = () => mode === 'walk' || mode === 'fall';
+  const canLook = () => mode === 'walk' || mode === 'vault';
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1154,42 +1165,219 @@
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   // ==========================================================
-  // GETTING AROUND
+  // GETTING AROUND. You have a body: feet some height above your floor and
+  // a speed up or down. The railing only stops you below its top, so a jump
+  // with a step toward it takes you over, and the chasm has no bottom.
   // ==========================================================
-  function blocked(x, z) {
-    if (z > -RADIUS - 0.07) return true;                        // the railing
-    if (z >= FRONT + RADIUS) return false;                      // the gallery
+  const G = 9.8;                         // m/s²
+  const JUMP_V = 4.9;                    // a jump peaks about 1.2 m up: enough to clear the railing
+  const TERMINAL = 55;                   // a person falls no faster than this
+  const RAIL_H = 1.06;                   // the top of the railing
+  const RAIL_IN = -0.07 - RADIUS, RAIL_OUT = -0.05 + RADIUS;   // where a body touches the railing
+  const HEADROOM = CEIL - EYE - 0.14;    // feet any higher and your head is in the floor above
+  const HARD = 13.5;                     // landing faster than this (two floors' drop or so) kills you
+  const FAR_SIDE = CHASM - 1.5;          // nobody gets across
+  const STAIR_R0 = 0.32, STAIR_R1 = 1.08;   // where you can stand on the stair treads
+  const body = { feet: 0, vy: 0, vx: 0, vz: 0, ground: true, stairs: false, cx: 0, r: 0, phi: 0, air: 0, fallen: 0, asked: false };
+  function settle() {
+    body.feet = 0; body.vy = body.vx = body.vz = 0; body.ground = true; body.stairs = false;
+    body.air = 0; body.fallen = 0; body.asked = false;
+  }
+  const wrapPi = a => posMod(a + Math.PI, Math.PI * 2) - Math.PI;
+
+  // would a body at (x, z) with its feet at `feet` be inside something?
+  function solid(x, z, feet) {
+    if (z > FAR_SIDE) return true;
+    if (z > RAIL_IN && z < RAIL_OUT) return feet < RAIL_H || (z < 0.1 && feet > HEADROOM);   // the railing, unless you're above it
+    if (z >= RAIL_OUT) return false;                                                      // the open chasm
+    if (feet > HEADROOM) return true;                                                     // under the floor above
+    if (z >= FRONT + RADIUS) return false;                                                // the walkway
     const xm = x - Math.floor(x / MOD) * MOD;
-    if (xm < RUN + RADIUS || xm > MOD - RADIUS) return true;    // bookcases, or a rest area's side walls
-    if (z < BACK + RADIUS) return true;                         // its back wall
-    if (Math.hypot(xm - WELL_X, z - WELL_Z) < WELL_R + 0.1 + RADIUS) return true;   // the stairwell
+    if (xm < RUN + RADIUS || xm > MOD - RADIUS) return true;                              // bookcases, or a rest area's side walls
+    if (z < BACK + RADIUS) return true;                                                   // its back wall
+    if (Math.hypot(xm - WELL_X, z - WELL_Z) < WELL_R + 0.1 + RADIUS) return true;         // the stairwell
     if (xm < RUN + 2.05 + RADIUS && z > BEDS_Z[3] - 0.47 - RADIUS && z < BEDS_Z[0] + 0.47 + RADIUS) return true;   // the beds
     if (xm > KIOSK_X0 - 0.05 - RADIUS && xm < KIOSK_X1 + 0.05 + RADIUS && z < BACK + 0.66 + RADIUS) return true;  // the kiosk
     return false;
   }
   let bob = 0;
-  function walk(dt) {
+  // where the keys (or the stick) want to go, in m/s
+  function wanted() {
     let f = keys.f - keys.b - stick.dy, s = keys.r - keys.l + stick.dx;
     const len = Math.hypot(f, s);
     if (len > 1) { f /= len; s /= len; }
-    const speed = (keys.run || Math.hypot(stick.dx, stick.dy) > 0.95 ? 3.6 : 1.8) * dt;
-    const dx = (-Math.sin(yaw) * f + Math.cos(yaw) * s) * speed, dz = (-Math.cos(yaw) * f - Math.sin(yaw) * s) * speed;
-    if (dx || dz) {
-      if (!blocked(pos.x + dx, pos.z)) pos.x += dx;
-      if (!blocked(pos.x, pos.z + dz)) pos.z += dz;
-      bob += Math.hypot(dx, dz) * 5.2;
+    const speed = keys.run || Math.hypot(stick.dx, stick.dy) > 0.95 ? 3.6 : 1.8;
+    return [(-Math.sin(yaw) * f + Math.cos(yaw) * s) * speed, (-Math.cos(yaw) * f - Math.sin(yaw) * s) * speed];
+  }
+  function jumpUp() {
+    if (mode !== 'walk' || !body.ground || body.stairs) return;
+    [body.vx, body.vz] = wanted();   // a jump carries you the way you're going
+    body.ground = false; body.vy = JUMP_V; body.air = 0; body.fallen = 0;
+    hideTip();
+  }
+  function step(dt) {
+    const [wx, wz] = wanted();
+    if (body.stairs) { stairsStep(wx * dt, wz * dt); return; }
+    if (body.ground) { body.vx = wx; body.vz = wz; }
+    else {   // in the air you can only lean a little
+      const k = Math.min(1, dt * 1.6);
+      body.vx += (wx * 0.6 - body.vx) * k; body.vz += (wz * 0.6 - body.vz) * k;
     }
+    const dx = body.vx * dt, dz = body.vz * dt;
+    if (dx || dz) {
+      if (body.ground && enterStairs(pos.x + dx, pos.z + dz)) return;
+      // (in the air, pressing against the railing keeps your push for when you're above it)
+      if (!solid(pos.x + dx, pos.z, body.feet)) pos.x += dx; else if (body.ground) body.vx = 0;
+      if (!solid(pos.x, pos.z + dz, body.feet)) pos.z += dz; else if (body.ground) body.vz = 0;
+      if (body.ground) bob += Math.hypot(dx, dz) * 5.2;
+    }
+    if (!body.ground) fly(dt);
+    if (mode !== 'walk') return;   // a hard landing takes over
     if (pos.x >= MOD) { pos.x -= MOD; walkedModules(1); }
     else if (pos.x < 0) { pos.x += MOD; walkedModules(-1); }
-    pos.y = EYE + Math.sin(bob) * 0.025;
+    pos.y = EYE + body.feet + (body.ground ? Math.sin(bob) * 0.025 : 0);
+  }
+  // are the keys (or the stick) asking to go toward our side of the chasm?
+  function reaching() { return wanted()[1] < -0.5; }
+  const FALL_TEXT = 'There is no bottom. You can fall for as long as you like.';
+  function fly(dt) {
+    // exact for steady gravity, so a jump is as high at any frame rate
+    const before = body.feet, vy0 = body.vy;
+    body.vy = Math.max(-TERMINAL, vy0 - G * dt);
+    body.feet += (vy0 + body.vy) * 0.5 * dt;
+    // coming down onto the railing: off whichever side you're more over
+    if (pos.z > RAIL_IN && pos.z < RAIL_OUT && body.feet < RAIL_H && before >= RAIL_H)
+      pos.z = pos.z < -0.06 ? RAIL_IN - 0.001 : RAIL_OUT + 0.001;
+    // your head against the floor above
+    if (pos.z < 0.1 && body.feet > HEADROOM) { body.feet = HEADROOM; body.vy = Math.min(body.vy, 0); }
+    if (pos.z <= 0 && body.feet <= 0) { land(); return; }
+    // down past a floor: in the chasm the floor number goes on falling
+    let top = before;
+    while (body.feet < 0) { body.feet += FLOOR_H; top += FLOOR_H; body.fallen++; changedFloors(-1); }
+    // falling past a gallery's opening (between its railing and the floor
+    // above), close to it and reaching for it: you catch the railing and
+    // drop in. Too fast and you go straight past.
+    if (pos.z >= RAIL_OUT && pos.z < RAIL_OUT + 0.6 && reaching() && body.vy > -TERMINAL * 0.6 &&
+        top > RAIL_H && body.feet < HEADROOM) {
+      body.feet = clamp(body.feet, RAIL_H, HEADROOM);
+      pos.z = RAIL_IN - 0.01;
+      body.vz = 0;
+    }
+    if (pos.z > 0) {
+      body.air += dt;
+      if (!body.asked && body.air > 2.4) {
+        body.asked = true;
+        dialog(FALL_TEXT, [{ label: 'Wake up', primary: true, run: wake }], { keepMode: true });
+      }
+      if (body.asked && !dialogEl.hidden) dialogText.textContent = `${FALL_TEXT} ${commas(body.fallen)} ${body.fallen === 1 ? 'floor' : 'floors'} so far.`;
+    }
+  }
+  function land() {
+    const speed = -body.vy, fallen = body.fallen, asked = body.asked;
+    settle();
+    if (asked) closeDialog();
+    if (speed > HARD) {
+      mode = 'sleep';
+      fadeTo(1, 250).then(() => wakeUp(`You fell ${commas(fallen)} ${fallen === 1 ? 'floor' : 'floors'} and hit a gallery floor.`));
+      return;
+    }
+    if (fallen > 0) toast(`Down ${commas(fallen)} ${fallen === 1 ? 'floor' : 'floors'}.`, 2600);
+  }
+  // "Wake up" while falling
+  function wake() {
+    const fallen = body.fallen;
+    closeDialog();
+    mode = 'sleep';
+    fadeTo(1, 700).then(() => wakeUp(`You fell ${commas(fallen)} ${fallen === 1 ? 'floor' : 'floors'}.`));
+  }
+  function wakeUp(what) {
+    settle();
+    day++;
+    // the nearest rest area, beside the first bed
+    pos.set(RUN + 2.55, EYE, BEDS_Z[0]);
+    yaw = Math.PI; pitch = 0;
+    updateHud();
+    return wait(700).then(() => {
+      mode = 'walk';
+      toast(`${what} You wake up in a rest area on that floor. Day ${day}.`, 6000);
+      return fadeTo(0, 1100);
+    });
+  }
+  // "Climb over the railing?" → Jump: up onto it and over
+  let vaulting = null;
+  function jump() {
+    closeDialog();
+    clearKeys();
+    hideTip();
+    vaulting = { t: 0, z0: pos.z, pitch0: pitch };
+    mode = 'vault';
+  }
+  function vaultUpdate(dt) {
+    const v = vaulting;
+    v.t += dt;
+    const k = Math.min(1, v.t / 0.55);
+    pos.z = v.z0 + (RAIL_OUT + 0.05 - v.z0) * ease(k);
+    body.feet = (RAIL_H + 0.25) * Math.sin(k * Math.PI / 2);
+    pos.y = EYE + body.feet;
+    pitch = v.pitch0 + (-0.55 - v.pitch0) * ease(k);
+    if (k >= 1) {
+      vaulting = null;
+      body.ground = false; body.stairs = false; body.vy = 0.6; body.vx = 0; body.vz = 1.1;
+      body.air = 0; body.fallen = 0; body.asked = false;
+      mode = 'walk';
+    }
   }
 
-  // ---------- the stairs ----------
+  // ---------- walking the spiral stairs ----------
+  // Round and round the column: anticlockwise goes up, clockwise down, a
+  // floor to every turn, for as long as you keep going. The opening in the
+  // railing round the well is where the stair meets each floor.
+  function enterStairs(nx, nz) {
+    if (body.feet > 0.4) return false;
+    const m = Math.floor(nx / MOD), cx = m * MOD + WELL_X;
+    const d = Math.hypot(nx - cx, nz - WELL_Z);
+    if (d >= WELL_R + 0.1 + RADIUS) return false;
+    const da = wrapPi(Math.atan2(nz - WELL_Z, nx - cx) - STAIR_A0);
+    if (Math.abs(da) > STEP_A * 0.95) return false;   // only through the opening
+    body.stairs = true; body.ground = true; body.cx = cx; body.phi = da; body.r = clamp(d, STAIR_R0, STAIR_R1);
+    hideTip();
+    placeOnStairs();
+    return true;
+  }
+  function placeOnStairs() {
+    const a = STAIR_A0 + body.phi;
+    pos.x = body.cx + body.r * Math.cos(a);
+    pos.z = WELL_Z + body.r * Math.sin(a);
+    body.feet = FLOOR_H * body.phi / (Math.PI * 2);
+    pos.y = EYE + body.feet + Math.sin(bob) * 0.02;
+  }
+  function stairsStep(dx, dz) {
+    if (!dx && !dz) { placeOnStairs(); return; }
+    const nx = pos.x + dx, nz = pos.z + dz;
+    const r = Math.hypot(nx - body.cx, nz - WELL_Z);
+    body.phi += wrapPi(Math.atan2(nz - WELL_Z, nx - body.cx) - (STAIR_A0 + body.phi));
+    bob += Math.hypot(dx, dz) * 5.2;
+    // off at a floor, through the opening
+    if (r > STAIR_R1 && Math.abs(body.phi) < STEP_A * 0.9) {
+      const a = STAIR_A0 + body.phi, out = WELL_R + 0.13 + RADIUS;
+      settle();
+      pos.x = body.cx + out * Math.cos(a); pos.z = WELL_Z + out * Math.sin(a); pos.y = EYE;
+      return;
+    }
+    body.r = clamp(r, STAIR_R0, STAIR_R1);
+    // half a turn past a floor, you're on the next floor's flight
+    if (body.phi >= Math.PI) { body.phi -= Math.PI * 2; changedFloors(1); }
+    else if (body.phi < -Math.PI) { body.phi += Math.PI * 2; changedFloors(-1); }
+    placeOnStairs();
+  }
+
+  // ---------- the stairs, done for you (click them) ----------
   let stair = null;
   const yawToward = (dx, dz) => Math.atan2(-dx, -dz);
   const angleLerp = (a, b, t) => a + (posMod(b - a + Math.PI, Math.PI * 2) - Math.PI) * t;
   function climb(dir) {
     closeDialog();
+    body.stairs = false;
     const m = Math.floor(pos.x / MOD);
     const cx = m * MOD + WELL_X, cz = WELL_Z;
     const entry = new THREE.Vector3(cx + (WELL_R + 0.3) * Math.cos(STAIR_A0), EYE, cz + (WELL_R + 0.3) * Math.sin(STAIR_A0));
@@ -1231,6 +1419,7 @@
         pos.set(x, onPath(pathY, s.track), z);
         yaw = lookYaw; pitch = lookPitch;
         stair = null;
+        settle();
         mode = 'walk';
         if (reduceMotion) fadeTo(0, 300);
         askStairs(true);
@@ -1239,56 +1428,6 @@
     }
     pos.set(x, onPath(pathY, s.track), z);
     yaw = lookYaw; pitch = lookPitch;
-  }
-
-  // ---------- the chasm ----------
-  let fall = null;
-  function jump() {
-    closeDialog();
-    mode = 'fall';
-    clearKeys();
-    hideTip();
-    fall = { t: 0, v: 0, y: pos.y, from: pos.clone(), fallen: 0, track: { applied: 0 }, asked: false, start: fDec, startLen: 0 };
-  }
-  function fallUpdate(dt) {
-    const f = fall;
-    f.t += dt;
-    if (f.t < 0.9) {
-      // over the railing
-      const k = ease(f.t / 0.9);
-      pos.x = f.from.x; pos.z = f.from.z + (1.3 - f.from.z) * k;
-      pos.y = onPath(f.y + 0.55 * Math.sin(k * Math.PI * 0.9), f.track);
-      pitch = pitch + (-0.75 - pitch) * Math.min(1, dt * 2.5);
-      return;
-    }
-    f.v = Math.min(55, f.v + 9.8 * dt);           // a person falls no faster than this
-    f.y -= f.v * dt;
-    pos.y = onPath(f.y, f.track);
-    f.fallen = -f.track.applied;
-    if (f.t < 2.2) pitch = pitch + (-0.75 - pitch) * Math.min(1, dt * 2);
-    if (!f.asked && f.t > 2.4) {
-      f.asked = true;
-      dialog('There is no bottom. You can fall for as long as you like.', [{ label: 'Wake up', primary: true, run: wake }], { keepMode: true });
-    }
-  }
-  function wake() {
-    closeDialog();
-    if (!fall) return;
-    const fallen = fall.fallen;
-    mode = 'sleep';
-    fadeTo(1, 700).then(() => {
-      fall = null;
-      day++;
-      // the nearest rest area, beside the first bed
-      pos.set(RUN + 2.55, EYE, BEDS_Z[0]);
-      yaw = Math.PI; pitch = 0;
-      updateHud();
-      return wait(700);
-    }).then(() => {
-      mode = 'walk';
-      toast(`You fell ${commas(fallen)} ${fallen === 1 ? 'floor' : 'floors'}, and wake up in a rest area on that floor. Day ${day}.`, 6000);
-      return fadeTo(0, 1100);
-    });
   }
 
   // ---------- coming in: down the chasm in a spiral ----------
@@ -1322,10 +1461,11 @@
   }
   function landed() {
     descent = null;
+    settle();
     mode = 'intro';
     introEl.hidden = false;
     requestAnimationFrame(() => introEl.classList.add('on'));
-    setTimeout(() => $('start').focus({ preventScroll: true }), 60);
+    setTimeout(() => { if (mode === 'intro') $('start').focus({ preventScroll: true }); }, 60);
   }
   function startWalking() {
     if (mode !== 'intro') return;
@@ -1334,9 +1474,10 @@
     mode = 'walk';
     canvas.focus({ preventScroll: true });
     hint(coarse ? 'Left thumb to walk · drag to look · tap a book to read it'
-      : 'WASD or arrow keys to walk · drag to look · click a book to read it');
+      : 'WASD to walk · Space to jump · drag to look · click a book to read it');
   }
   $('start').addEventListener('click', startWalking);
+  $('jump').addEventListener('pointerdown', e => { e.preventDefault(); jumpUp(); });
   $('intro-leave').addEventListener('click', () => leave(false));
   leaveBtn.addEventListener('click', () => leave(false));
 
@@ -1379,10 +1520,10 @@
     requestAnimationFrame(frame);
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
-    if (mode === 'walk') walk(dt);
+    if (mode === 'walk') step(dt);
     else if (mode === 'descent') descentUpdate(dt);
     else if (mode === 'stairs') stairUpdate(dt);
-    else if (mode === 'fall') fallUpdate(dt);
+    else if (mode === 'vault') vaultUpdate(dt);
     else if (mode === 'exit' && rise) riseUpdate(dt);
     if (bookMesh.visible) {
       bookOut += (bookOutTarget - bookOut) * Math.min(1, dt * 9);
@@ -1393,8 +1534,11 @@
     camera.rotation.set(pitch, yaw, 0);
     updateHover(now);
     updateHud();
+    const canJump = mode === 'walk' && body.ground && !body.stairs;
+    if (canJump !== jumpShown) { jumpShown = canJump; document.body.classList.toggle('can-jump', canJump); }
     renderer.render(scene, camera);
   }
+  let jumpShown = false;
   function resize() {
     renderer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight;
@@ -1455,7 +1599,8 @@
     pose(x, y, z, yw, pt) { mode = 'still'; pos.set(x, y, z); yaw = yw; pitch = pt; },
     walkMode() { mode = 'walk'; },
     descentAt(t) { if (descent) { descent.t = t; descentUpdate(0); } },
-    state: () => ({ mode, pos: pos.toArray().map(v => +v.toFixed(3)), yaw: +yaw.toFixed(3), pitch: +pitch.toFixed(3), floor: fDec, section: sectionAt(pos.x),
+    body,
+    state: () => ({ mode, feet: +body.feet.toFixed(3), ground: body.ground, stairs: body.stairs, pos: pos.toArray().map(v => +v.toFixed(3)), yaw: +yaw.toFixed(3), pitch: +pitch.toFixed(3), floor: fDec, section: sectionAt(pos.x),
       day, booksOpened, carrying: !!carried, reading: !!reading, dialog: !dialogEl.hidden, reader: !readerEl.hidden, intro: !introEl.hidden }),
     // put the book that lets you out in front of you (tests only)
     standAtExit() {
@@ -1470,6 +1615,7 @@
       yaw = 0; pitch = -0.25 + (Math.floor(slot / 19) - 2) * 0.12;
       if (reading) { reading = null; bookMesh.visible = false; }
       carried = null; refreshBooks(); updateCarry();
+      settle();
       return { bay, slot, shelf: Math.floor(slot / 19) + 1, volume: slot % 19 + 1 };
     },
   };

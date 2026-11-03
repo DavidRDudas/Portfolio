@@ -116,6 +116,13 @@
   #stick.on { display: block; }
   #knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255, 240, 220, 0.35); }
 
+  /* jump (touch) */
+  #jump { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); width: 68px; height: 68px; border-radius: 50%;
+    border: 1.5px solid rgba(255, 240, 220, 0.35); background: rgba(20, 16, 12, 0.42); color: var(--ink); font: 600 12px 'Inter', sans-serif; letter-spacing: 0.04em;
+    display: none; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #jump:active { background: rgba(255, 179, 107, 0.35); }
+  body.touch.can-jump #jump { display: block; }
+
   #fade { position: fixed; inset: 0; z-index: 40; background: #000; opacity: 1; pointer-events: none; transition: opacity 1s ease; }
   #fade.white { background: #fff8ec; }
 
@@ -182,6 +189,7 @@
 </div>
 
 <div id="stick"><div id="knob"></div></div>
+<button id="jump" type="button" aria-label="Jump">Jump</button>
 <div id="fade"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
