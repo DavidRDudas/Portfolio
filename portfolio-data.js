@@ -102,8 +102,11 @@ const PORTFOLIO_SECTIONS = [
   },
   {
     title: "Writing",
-    blurb: "Published books across fable, philosophy, and children's literature.",
+    blurb: "Books across fiction, fable, philosophy, and children's literature.",
     items: [
+      { title:"Permanent Set", cat:"Novel", img:"permanentset.jpg",
+        desc:"A novel about a bridge engineer in central Illinois who finally gets to build his bridge, in the same two years he loses his mother and nearly loses his own voice to the AI everyone wears. Coming soon to Amazon.",
+        tech:["Writing","Publishing","Fiction"] },
       { title:"The Wheel", cat:"Satire · Fable", img:"thewheel.png",
         desc:"A Kafkaesque fable about compliance, manufactured purpose, and the animals who keep running. Available on Amazon.",
         tech:["Writing","Publishing","Satire"], link:"https://www.amazon.com/dp/B0GWYSGDX9" },
