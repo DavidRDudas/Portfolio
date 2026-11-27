@@ -14,7 +14,7 @@
     ["ventures", "Ventures"],
     ["applications", "Applications"],
     ["writing", "Writing"],
-    ["photography", "Photography"],
+    ["photography", "Photography & art"],
     ["research", "Research"]
   ];
   const total = sections.reduce((sum, section) => sum + section.items.length, 0);
@@ -75,13 +75,15 @@
       ["rigid", "Languages & compilers", "A text-first, content-addressed language kernel.", "sm"],
       ["Code Constellation", "Simulations & art", "A static analyser that renders itself as a night sky.", "sm"],
       ["Raster Tide", "Creative tools", "Turn images and video into animated ASCII art, right in your browser.", "md"],
-      ["Ant Colony Optimization", "Simulations & art", "Real-time 3D ecosystem of competing ant colonies.", "xl"]
+      ["Ant Colony Optimization", "Simulations & art", "Real-time 3D ecosystem of competing ant colonies.", "xl"],
+      // (a fifth entry keeps that part of the picture in view when the card crops it)
+      ["Art by Dudas", "AI art", "AI-generated paintings, released in numbered collections. The first is The Burden of Being: ten meditations on the human condition.", "wide", "72% 30%"]
     ];
-    featured.innerHTML = picks.map(([title, category, summary, size], i) => {
+    featured.innerHTML = picks.map(([title, category, summary, size, focus], i) => {
       const project = projects.find(item => item.title === title);
       if (!project) return "";
       return `<article class="bento-card size-${size}" data-reveal style="--reveal-delay:${(i % 3) * 0.08}s">
-        <div class="bento-media"><img src="images/${esc(project.img)}" alt="" loading="lazy" decoding="async"></div>
+        <div class="bento-media"><img src="images/${esc(project.img)}" alt="" loading="lazy" decoding="async"${focus ? ` style="object-position:${esc(focus)}"` : ""}></div>
         <div class="bento-body">
           <p class="p-kicker">${esc(category)}</p>
           <h3 class="bento-title">${titleLink(project)}</h3>

@@ -1063,6 +1063,15 @@ const PROJECTS = {
     image: "./images/permanentset.jpg",
     imageFit: "contain"              // the whole cover, title to author
   },
+  artDudas: {
+    title: "Art by Dudas",
+    category: "AI Art",
+    desc: "AI-generated paintings, released in numbered collections. The first, The Burden of Being, is ten meditations on the human condition.",
+    details: "Each painting starts as a written idea. Many versions are generated and most are thrown away; the one that's kept is the one that fits the idea best. Each collection has its own theme and palette: The Burden of Being is painted in the style of black ink and oil on linen. The one on the bedroom wall is The Last Audience.",
+    tech: ["AI Art", "Generative AI", "Astro"],
+    image: "./images/artbydudas.jpg",
+    link: "https://davidrdudas.github.io/art-by-dudas/"
+  },
   bearUrsavus: {
     title: "Ursavus",
     category: "Video Game Studio",
@@ -2102,6 +2111,28 @@ function permanentSetCover() {
   const vg = ctx.createRadialGradient(W / 2, H / 2, 140, W / 2, H / 2, 360);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(60,45,30,0.16)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+// A stand-in for the Art by Dudas painting where the image can't be used as
+// a texture (file://): dark umber, a pale figure in the light at the right,
+// a press of shapes reaching toward her from the left
+function paintingStandInTexture() {
+  const c = document.createElement('canvas'); c.width = 320; c.height = 200;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 320, 200);
+  g.addColorStop(0, '#2a2018'); g.addColorStop(0.6, '#4a3a2a'); g.addColorStop(1, '#1c1510');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 320, 200);
+  const glow = ctx.createRadialGradient(232, 60, 4, 232, 60, 120);
+  glow.addColorStop(0, 'rgba(240, 214, 170, 0.55)'); glow.addColorStop(1, 'rgba(240, 214, 170, 0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, 320, 200);
+  ctx.fillStyle = 'rgba(232, 214, 186, 0.85)';
+  ctx.beginPath(); ctx.ellipse(236, 52, 14, 18, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(240, 118, 26, 50, -0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(30, 22, 16, 0.9)';
+  for (let i = 0; i < 14; i++) { ctx.beginPath(); ctx.ellipse(20 + i * 14, 150 + Math.sin(i * 1.7) * 20, 16, 22, 0, 0, Math.PI * 2); ctx.fill(); }
   const tex = new THREE.CanvasTexture(c);
   tex.encoding = THREE.sRGBEncoding;
   return tex;
@@ -7654,6 +7685,29 @@ function pictureFrame(w, h, border, depth, mat) {
   grp.rotation.y = 0;
   root.add(grp);
   mountOnWall(grp, 'back');
+}
+
+// ==========================================================
+// FRAMED PAINTING — Art by Dudas (bedroom, left wall, between the book shelf
+// and the window over the bed): The Last Audience, the cover of the first
+// collection
+// ==========================================================
+{
+  const grp = new THREE.Group();
+  const W = 1.12, H = 0.7;
+  // (4 cm deep, so the frame's face sits just behind the picture at z 0.022)
+  grp.add(pictureFrame(W, H, 0.06, 0.04, matStandard(0x2a1c12, 0.55)));
+  const artMat = new THREE.MeshStandardMaterial({ map: paintingStandInTexture(), roughness: 0.8 });
+  const art = new THREE.Mesh(new THREE.PlaneGeometry(W, H), artMat);
+  art.position.z = 0.022;
+  grp.add(art);
+  // a painted stand-in keeps file:// previews working; the site loads the painting itself
+  tryUpgradeImageTexture('./images/artbydudas.jpg', artMat);
+  makeInteractive(art, 'artDudas', 'Framed Painting · Art by Dudas');
+  grp.position.set(-ROOM.w / 2 + 0.14, 2.25, 2.35);
+  grp.rotation.y = Math.PI / 2;
+  root.add(grp);
+  mountOnWall(grp, 'left');
 }
 
 // ==========================================================
@@ -15118,6 +15172,7 @@ const guide = (() => {
     laptop: [-5.25, 2.25, -4.35], rigid: [-0.95, 1.95, -3.95], orbital: [-2.05, 1.8, -4.05],
     klast: [4.05, 2.15, -4.05], shatterwing: [3.0, 3.0, -3.5], tv: [3.0, 2.1, -3.7],
     bookCharlie: [-3.85, 1.85, -3.65], bookCognitive: [-3.85, 1.85, -3.65], bookWheel: [-3.85, 2.2, -3.75], bookPermanent: [-3.85, 2.2, -3.95],
+    artDudas: [-4.6, 2.25, 2.35],
     whiteboard: [-3.45, 2.9, -1.65], monitor: [-3.8, 1.95, -1.95], lavaLamp: [-3.85, 2.1, -4.2],
     poster: [-2.4, 2.6, -3.3], rasterTide: [-3.2, 3.25, -4.1], blueprint: [-5.0, 2.75, -3.5], notebook: [-5.95, 2.05, -4.35],
   };
@@ -15269,7 +15324,7 @@ const guide = (() => {
     { words: ['language', 'compiler', 'rust'], label: 'languages', keys: ['rigid'] },
     { words: ['web', 'app', 'software', 'platform', 'enterprise', 'ios', 'business', 'startup', 'saas'], label: 'software & apps', keys: ['laptop', 'rasterTide', 'phone', 'notebook', 'clipboard', 'neutralhq', 'blueprint'] },
     { words: ['book', 'writ', 'author', 'read', 'novel', 'story', 'fiction'], label: 'books', keys: ['bookPermanent', 'bookCharlie', 'bookCognitive', 'bookWheel'] },
-    { words: ['photo', 'camera', 'picture'], label: 'photography', keys: ['camera'] },
+    { words: ['photo', 'camera', 'picture', 'artwork', 'visual'], label: 'photography and art', keys: ['camera', 'artDudas'] },
     { words: ['research', 'paper', ' ai', 'deep learning', 'alignment', 'neuro'], label: 'research', keys: ['whiteboard'] },
   ];
   const ALIASES = {
@@ -15277,6 +15332,7 @@ const guide = (() => {
     'dream weaver': 'poster', 'color wave': 'vinyl', 'colour wave': 'vinyl', opin: 'notebook', compresslite: 'phone',
     cognitive: 'bookCognitive', charlie: 'bookCharlie', pip: 'bookCharlie', wheel: 'bookWheel', limitshift: 'gameCase',
     'permanent set': 'bookPermanent', permanent: 'bookPermanent',
+    'art by dudas': 'artDudas', 'ai art': 'artDudas', 'burden of being': 'artDudas', painting: 'artDudas', ' art ': 'artDudas',
     'dudas engineering': 'blueprint', engineering: 'blueprint', neutral: 'neutralhq', 'resource management': 'clipboard',
     'naive': 'cipher', cryptograph: 'cipher', hydrogen: 'orbital', orbital: 'orbital', 'particle physics': 'lavaLamp',
     'painted crowns': 'tv', 'raster tide': 'rasterTide', ursavus: 'bearUrsavus', rigid: 'rigid', hokku: 'laptop',
@@ -15299,6 +15355,7 @@ const guide = (() => {
     () => 'Look at the grass — you can see each gust of wind roll across the meadow. 🌾',
     () => 'There\'s a black book on the office bookshelf. It opens into a library with every book that can be written. 📚',
     () => 'New on the office bookshelf: Permanent Set, David\'s novel. It\'s coming soon to Amazon.',
+    () => 'David makes AI paintings too. There\'s one from his first collection on the bedroom wall. 🖼️',
   ];
   const JOKES = [
     'Why do programmers prefer dark mode? Because light attracts bugs. 🐛',

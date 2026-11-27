@@ -659,7 +659,7 @@
     const ids = [
       ['systems', 'Systems & enterprise'], ['languages', 'Languages & compilers'],
       ['simulations', 'Simulations & art'], ['games', 'Games'], ['ventures', 'Ventures'],
-      ['applications', 'Applications'], ['writing', 'Writing'], ['photography', 'Photography'],
+      ['applications', 'Applications'], ['writing', 'Writing'], ['photography', 'Photography & art'],
       ['research', 'Research']
     ];
     list.innerHTML = PORTFOLIO_SECTIONS.map((section, i) => {

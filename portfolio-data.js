@@ -119,9 +119,12 @@ const PORTFOLIO_SECTIONS = [
     ]
   },
   {
-    title: "Photography",
+    title: "Photography & Art",
     blurb: "Personal visual work.",
     items: [
+      { title:"Art by Dudas", cat:"AI Art", img:"artbydudas.jpg",
+        desc:"AI-generated paintings, released in numbered collections. The first, The Burden of Being, is ten meditations on the human condition.",
+        tech:["AI Art","Generative AI","Astro"], link:"https://davidrdudas.github.io/art-by-dudas/" },
       { title:"Photography", cat:"Personal Portfolio", img:"photography.png",
         desc:"Personal photography portfolio.",
         tech:["Photography","Web Design"], link:"https://dudas.photography" },
