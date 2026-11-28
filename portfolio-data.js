@@ -104,6 +104,9 @@ const PORTFOLIO_SECTIONS = [
     title: "Writing",
     blurb: "Books across fiction, fable, philosophy, and children's literature.",
     items: [
+      { title:"The Obsolete Human", cat:"Philosophy · AI", img:"theobsoletehuman.jpg",
+        desc:"A book of philosophy about what becomes of people when machines reduce our need for one another, in thinking, making, earning, caring, governing and even companionship. Coming soon to Amazon.",
+        tech:["Writing","Publishing","Philosophy"] },
       { title:"Permanent Set", cat:"Novel", img:"permanentset.jpg",
         desc:"A novel about a bridge engineer in central Illinois who finally gets to build his bridge, in the same two years he loses his mother and nearly loses his own voice to the AI everyone wears. Coming soon to Amazon.",
         tech:["Writing","Publishing","Fiction"] },
